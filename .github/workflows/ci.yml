@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run evidence policy tests
+        run: node tests/evidence_policy.test.js
+
+      - name: Run microtutoring repair episode tests
+        run: node tests/microtutoring_repair_episode.test.js
+
+      - name: Check app.js syntax
+        run: node --check app.js
+
+      - name: Run the legacy app self-test
+        run: python app_legacy.py --self-test
+
+      - name: Compile the legacy app
+        run: python -m py_compile app_legacy.py
+
+      - name: Check embedded JavaScript parity
+        run: python tools/check_parity.py
+
