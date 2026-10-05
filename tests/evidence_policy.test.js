@@ -132,6 +132,21 @@ async function submitThroughUI(goal, question, phase, role, response) {
     assert.equal(JSON.stringify(goal), before);
     expectCode(() => policy.applyResult(goal, 'n1', 'REVIEW', 'x', { ...assessment(), _attempt_id: 'incomplete-review' }), 'INVALID_RESULT');
     assert.equal(JSON.stringify(goal), before);
+    expectCode(() => policy.applyResult(goal, 'n1', 'UNRECOGNIZED', 'x', { ...assessment(), _activity: activity, _attempt_id: 'invalid-phase' }), 'INVALID_PHASE');
+    assert.equal(JSON.stringify(goal), before);
+  }
+  {
+    const goal = attach(goalWithDimensions(['memory']));
+    goal.session.mode = 'REVIEW';
+    goal.reviews = [{ id: 'n1', due: 0, step: 0, question: { prompt: 'Recuerda X', kind: 'recall' }, history: [] }];
+    const activity = policy.activityContract(goal.reviews[0].question, 'n1', 'spaced_review');
+    const result = { ...assessment(), _activity: activity, _attempt_id: 'valid-review' };
+    assert.equal(policy.applyResult(goal, 'n1', 'REVIEW', 'X', result), true);
+    assert.equal(goal.reviews[0].step, 1);
+    assert.equal(goal.reviews[0].history.length, 1);
+    expectCode(() => policy.applyResult(goal, 'n1', 'REVIEW', 'X', result), 'DUPLICATE_ATTEMPT');
+    assert.equal(goal.reviews[0].step, 1);
+    assert.equal(goal.reviews[0].history.length, 1);
   }
 
   // 5. La evidencia derivada tiene prioridad sobre level y expone discrepancias.
@@ -157,6 +172,8 @@ async function submitThroughUI(goal, question, phase, role, response) {
     assert.equal(policy.derivedStartMode(complete, 'n1'), 'DIAGNOSTIC');
     assert.equal(policy.verified(complete, 'n1'), true);
     assert.equal(policy.progressDiscrepancy(complete, 'n1').inconsistent, true);
+    assert.equal(policy.nextNode(complete), null);
+    assert.equal(policy.masteredCount(complete), 1);
   }
 
   // 6 y 7. Duplicados, colisiones y correcciones relacionadas.
