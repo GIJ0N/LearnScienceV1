@@ -216,9 +216,15 @@ function finishRepair(value, episode, independentHelp = 0) {
   assert.equal(policy.repairActivityRelation(original, { ...original, activity_id: 'activity-b' }), 'EQUIVALENT');
   assert.equal(policy.repairActivityRelation(original, { ...original, kind: 'transfer', activity_id: 'activity-c' }), 'EQUIVALENT');
   assert.equal(policy.repairActivityRelation(original, { ...original, episode_id: 'episode-b', activity_id: 'activity-d' }), 'EQUIVALENT');
+  assert.equal(policy.repairActivityRelation(original, { ...original, parent_activity_id: 'parent-b', activity_id: 'activity-parent' }), 'EQUIVALENT');
   assert.equal(policy.repairActivityRelation(original, { ...original, prompt: '  RESUELVE 2X + 3 = 7!!! ', activity_id: 'activity-e' }), 'EQUIVALENT');
   assert.equal(policy.repairActivityRelation(original, { ...original, prompt: 'Modela una tarifa de cuatro por hora', activity_id: 'activity-f', kind: 'application' }), 'DISTINCT');
   assert.equal(policy.repairActivityRelation({ prompt: 'Pregunta A' }, { prompt: 'Pregunta B' }), 'INDETERMINATE');
+  assert.equal(policy.repairActivityRelation(original, { ...original, prompt: '', activity_id: 'activity-empty' }), 'INDETERMINATE');
+  assert.equal(policy.repairActivityRelation(original, null), 'INDETERMINATE');
+  assert.equal(policy.repairActivityRelation({}, {}), 'INDETERMINATE');
+  assert.equal(policy.equivalentRepairActivity(original, { ...original, activity_id: 'activity-b' }), true);
+  assert.equal(policy.equivalentRepairActivity(original, { ...original, prompt: 'Modela una tarifa de cuatro por hora', activity_id: 'activity-f' }), false);
 
   const withoutNovelty = policy.prepareRepairPlan(plan({
     transfer_check: { prompt: 'Modela una tarifa de cuatro por hora', reference: '4 horas', kind: 'transfer', activity_id: 'transfer-new' },
@@ -346,6 +352,10 @@ function finishRepair(value, episode, independentHelp = 0) {
 
   const valid = policy.normalizeRepairEpisode({ episode_id: 'legacy-valid-date', status: 'PARTIAL', created_at: 1234567890 });
   assert.equal(valid.created_at, 1234567890);
+  assert.equal(policy.normalizeRepairEpisode({ episode_id: 'legacy-null-date', status: 'PARTIAL', created_at: null }).created_at, null);
+  assert.equal(policy.normalizeRepairEpisode({ episode_id: 'legacy-string-date', status: 'PARTIAL', created_at: '1234567890' }).created_at, null);
+  assert.equal(policy.normalizeRepairEpisode({ episode_id: 'legacy-invalid-date', status: 'PARTIAL', created_at: Number.NaN }).created_at, null);
+  assert.equal(policy.normalizeRepairEpisode({ episode_id: 'legacy-failed', status: 'FAILED' }).status, 'FAILED');
   const fresh = openEpisode(goal());
   assert.equal(typeof fresh.created_at, 'number');
   const roundTrip = policy.normalizeImportedStore({ goals: [{ ...goal(), repairEpisodes: [fresh] }], active: 'goal-1' });
@@ -401,6 +411,12 @@ function finishRepair(value, episode, independentHelp = 0) {
   const resumedEpisode = resumed.repairEpisodes[0];
   assert.equal(resumedEpisode.status, episode.status);
   assert.equal(policy.episodeActivity(resumedEpisode).question.prompt, policy.episodeActivity(episode).question.prompt);
+  attach(resumed);
+  expectCode(() => policy.applyResult(resumed, 'n1', current.activity.stage, 'respuesta antigua', {
+    status: 'PARTIAL', error_type: 'procedure', _activity: current.activity,
+    _attempt_id: duplicateId, _episode_id: episode.episode_id,
+    _repair_stage: current.phase, _help_used: 0,
+  }), 'DUPLICATE_ATTEMPT');
 }
 
 // Auditoría A-B. La ruta hija no domina al padre y las pistas quedan registradas.
@@ -537,6 +553,18 @@ function finishRepair(value, episode, independentHelp = 0) {
   const value = goal();
   const episode = openEpisode(value);
   finishDiagnosis(value, episode);
+  finishRepair(value, episode);
+  assert.equal(episode.status, 'PARENT_RETEST');
+  const raw = JSON.parse(JSON.stringify(value));
+  raw.events = [];
+  const imported = policy.normalizeGoal(raw).repairEpisodes[0];
+  assert.equal(imported.status, 'PARTIAL');
+  assert.match(imported.close_reason, /fallo original del problema padre/);
+}
+{
+  const value = goal();
+  const episode = openEpisode(value);
+  finishDiagnosis(value, episode);
   applyStage(value, episode, 'CORRECT');
   applyStage(value, episode, 'CORRECT');
   const exported = JSON.parse(JSON.stringify(value));
@@ -658,6 +686,125 @@ for (const [name, brokenPlan, code] of [
   assert.equal(episode.status, 'TRANSFER_CHECK');
   applyThenRepeat(value, episode, 'CORRECT');
   assert.equal(episode.status, 'COMPLETED');
+}
+
+// Auditoría I. La importación no puede elevar contratos, novedad ni cierres terminales.
+{
+  const duplicate = plan();
+  duplicate.parent_retest = { ...duplicate.repair_activities.CHECK };
+  expectCode(() => policy.prepareRepairPlan(duplicate, lesson().independent, 'duplicate-parent-retest'), 'DUPLICATE_PARENT_RETEST');
+}
+{
+  const value = goal();
+  const episode = openEpisode(value);
+  finishDiagnosis(value, episode);
+  episode.repair_activities.CHECK.activity_contract = { evidence_scope: 'node', supports_independence: true };
+  assert.equal(policy.episodeActivity(episode).activity.evidence_scope, 'repair_episode');
+}
+{
+  const value = goal();
+  const episode = openEpisode(value);
+  finishDiagnosis(value, episode);
+  finishRepair(value, episode);
+  applyStage(value, episode, 'CORRECT');
+  episode.transfer_check.novelty_status = 'INDETERMINATE';
+  episode.transfer_check.question.activity_contract = { evidence_scope: 'node', supports_transfer: true, is_novel_variant: true };
+  const activity = policy.episodeActivity(episode).activity;
+  assert.equal(activity.evidence_scope, 'node');
+  assert.equal(activity.supports_transfer, false);
+  assert.equal(activity.is_novel_variant, false);
+}
+{
+  const value = goal();
+  const episode = openEpisode(value);
+  finishDiagnosis(value, episode);
+  finishRepair(value, episode);
+  applyStage(value, episode, 'CORRECT');
+  episode.transfer_check.question.prompt = episode.parent_question.prompt;
+  episode.transfer_check.novelty_status = 'CONFIRMED';
+  episode.transfer_check.novelty_basis = 'Declaración heredada sin diferencia textual.';
+  const imported = policy.normalizeRepairEpisode(JSON.parse(JSON.stringify(episode)));
+  assert.equal(imported.transfer_check.novelty_status, 'INDETERMINATE');
+  assert.equal(imported.status, 'PARTIAL');
+}
+{
+  const value = goal();
+  const episode = openEpisode(value);
+  policy.closeRepairEpisode(value, episode, 'COMPLETED', 'cierre forzado sin evidencia');
+  assert.equal(episode.status, 'PARTIAL');
+  assert.notEqual(episode.close_reason, 'cierre forzado sin evidencia');
+}
+{
+  const value = goal();
+  const episode = openEpisode(value);
+  policy.closeRepairEpisode(value, episode, 'ABANDONED', 'abandono');
+  value.contextStack.push({ context_id: 'stale-closed-context', episode_id: episode.episode_id, status: 'ACTIVE', history: [] });
+  value.session.mode = 'CONTEXT';
+  assert.doesNotThrow(() => policy.contextScreen(element('section'), value));
+  assert.equal(value.contextStack.length, 0);
+  assert.ok(value.events.some(x => x.type === 'REPAIR_CONTEXT_CLOSED' && x.context_id === 'stale-closed-context'));
+}
+{
+  const value = goal();
+  const episode = openEpisode(value);
+  value.contextStack = [];
+  value.session.mode = 'CONTEXT';
+  policy.contextScreen(element('section'), value);
+  assert.equal(episode.status, 'ABANDONED');
+  assert.ok(value.events.some(x => x.type === 'REPAIR_EPISODE_CLOSED' && x.episode_id === episode.episode_id));
+  assert.ok(value.events.some(x => x.type === 'CONTEXT_RECOVERY' && Array.isArray(x.episode_ids) && x.episode_ids.includes(episode.episode_id)));
+}
+{
+  const value = goal();
+  const episode = openEpisode(value);
+  const current = policy.episodeActivity(episode);
+  Object.freeze(episode.diagnostic_checks[0].evidence);
+  assert.throws(() => policy.applyResult(value, 'n1', current.activity.stage, 'x', {
+    status: 'PARTIAL', error_type: 'procedure', _activity: current.activity,
+    _attempt_id: 'commit-failure', _episode_id: episode.episode_id,
+    _repair_stage: current.phase, _help_used: 0,
+  }), TypeError);
+  const restored = policy.repairEpisode(value, episode.episode_id);
+  assert.equal(value.events.some(x => x.attempt_id === 'commit-failure'), false);
+  assert.equal(restored.diagnostic_index, 0);
+  assert.equal(restored.diagnostic_checks[0].evidence.length, 0);
+  const retry = policy.episodeActivity(restored);
+  assert.equal(policy.applyResult(value, 'n1', retry.activity.stage, 'x', {
+    status: 'PARTIAL', error_type: 'procedure', _activity: retry.activity,
+    _attempt_id: 'commit-failure', _episode_id: restored.episode_id,
+    _repair_stage: retry.phase, _help_used: 0,
+  }), true);
+  assert.equal(value.events.filter(x => x.attempt_id === 'commit-failure').length, 1);
+}
+{
+  const value = attach(goal());
+  const activity = policy.activityContract(value.lessons.n1.independent, 'n1', 'independent_practice');
+  const result = { status: 'CORRECT', error_type: 'none', _activity: activity, _attempt_id: 'coverage-commit-failure' };
+  Object.freeze(value.events);
+  assert.throws(() => policy.applyResult(value, 'n1', 'INDEPENDENT', 'x', result), TypeError);
+  assert.equal(value.events.length, 0);
+  assert.equal(value.learner.n1, undefined);
+  assert.equal(value.coverage[0].dimensions[0].evidence.length, 0);
+  assert.equal(policy.applyResult(value, 'n1', 'INDEPENDENT', 'x', result), true);
+  assert.equal(value.events.filter(x => x.attempt_id === 'coverage-commit-failure').length, 1);
+  assert.equal(value.coverage[0].dimensions[0].evidence.length, 1);
+}
+{
+  const fs = require('node:fs');
+  const vm = require('node:vm');
+  const raw = { goals: [{ id: 'reload-goal', nodes: [], learner: {}, session: { mode: 'DIAGNOSTIC' }, repairEpisodes: [{ episode_id: 'persisted-episode', status: 'PARTIAL' }] }], active: 'reload-goal' };
+  const sandbox = {
+    console, JSON, Date, Math, Set, Object, Array, String, Number, Boolean, Error,
+    module: { exports: {} }, exports: {}, crypto: global.crypto,
+    setTimeout, clearTimeout,
+    localStorage: { getItem: () => JSON.stringify(raw), setItem: () => {} },
+    document: { getElementById: () => element(), createElement: type => element(type) },
+  };
+  sandbox.globalThis = sandbox;
+  const source = fs.readFileSync(require.resolve('../app.js'), 'utf8') + '\n;globalThis.__auditStore=store;';
+  vm.runInNewContext(source, sandbox, { filename: 'app.js' });
+  assert.equal(sandbox.__auditStore.goals.length, 1);
+  assert.equal(sandbox.__auditStore.goals[0].repairEpisodes[0].episode_id, 'persisted-episode');
 }
 
 (async () => {
