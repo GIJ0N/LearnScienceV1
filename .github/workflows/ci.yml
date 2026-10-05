@@ -44,3 +44,6 @@ jobs:
       - name: Check embedded JavaScript parity
         run: python tools/check_parity.py
 
+      - name: Run parity checker regression tests
+        run: python tests/check_parity.test.py
+
