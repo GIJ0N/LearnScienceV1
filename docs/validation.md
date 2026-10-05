@@ -21,9 +21,14 @@ node --check app.js
 python app_legacy.py --self-test
 python -m py_compile app_legacy.py
 python tools/check_parity.py
+python tests/check_parity.test.py
 ```
 
-`python tools/check_parity.py` extrae el valor de `HTML` con el parser AST de Python, toma el contenido entre `<script>` y `</script>` y lo compara byte a byte con `app.js`. Un desajuste termina con código distinto de cero y señala ambos tamaños y el primer byte distinto.
+`python tools/check_parity.py` extrae el valor de `HTML` con el parser AST de Python y exige una única pareja `<script>...</script>`. Compara `app.js` con ese bloque en una representación canónica LF: convierte únicamente `CRLF` y `CR` aislados en `LF`, sin ignorar espacios, tabulaciones, comillas, etiquetas ni ningún otro byte.
+
+Git almacena los archivos de este repositorio con LF, pero un checkout de Windows con `core.autocrlf=true` puede materializar `app.js` con CRLF. La canonicalización evita que ese detalle del checkout produzca un falso fallo de paridad. Una diferencia de contenido, incluso de un solo carácter, sigue terminando con código distinto de cero e informa las longitudes canónicas, el primer byte distinto y su contexto.
+
+`python tests/check_parity.test.py` verifica los casos LF/CRLF, diferencias reales de caracteres o longitud, etiquetas ausentes o ambiguas y escapes UTF-8 decodificados por el literal Python.
 
 La misma secuencia se ejecuta en `.github/workflows/ci.yml`. Si falta una suite, falla un comando o no se puede usar la versión fijada de Node.js/Python, el paso correspondiente termina con error y el job falla. No se silencian errores ni se convierten en advertencias.
 
