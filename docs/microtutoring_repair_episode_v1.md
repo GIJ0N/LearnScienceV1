@@ -22,7 +22,7 @@ Un episodio conserva, como mínimo:
 - `status`, `stage`, `created_at`, `closed_at` y `close_reason`;
 - `context_history`, `limits` y `policy_version`.
 
-La respuesta y evaluación originales del padre permanecen inmutables dentro del episodio. El reintento usa otra actividad y cada envío usa un `attempt_id` nuevo. Una importación no genera identificadores ausentes para actividades históricas: un episodio incompleto permanece conservador y no puede aparecer como completo.
+La respuesta y evaluación originales del padre permanecen inmutables dentro del episodio. El reintento usa otra actividad y cada envío usa un `attempt_id` nuevo. Un episodio creado por `createRepairEpisode()` recibe `created_at` en ese momento; `normalizeRepairEpisode()` conserva una fecha numérica válida y deja `created_at=null` cuando el dato legacy no la tenía. La importación no genera `created_at`, `legacy_imported_at`, identificadores ni evidencia histórica: un episodio incompleto permanece conservador y no puede aparecer como completo.
 
 Cada hipótesis diagnóstica contiene `gap_id`, concepto, razón, evidencia motivadora, confianza y uno de estos estados:
 
@@ -67,7 +67,7 @@ Cuando no hay una hipótesis confirmada, el episodio selecciona como prioridad u
 
 ## Reparación y evidencia
 
-CHECK, GUIDED e INDEPENDENT deben tener preguntas distintas entre sí y distintas del padre. El sistema compara `activity_id`, pregunta normalizada, `kind` y episodio antes de aceptar el plan.
+CHECK, GUIDED e INDEPENDENT deben tener preguntas distintas entre sí y distintas del padre. `repairActivityRelation()` devuelve `EQUIVALENT`, `DISTINCT` o `INDETERMINATE`: un `activity_id` compartido o una pregunta normalizada compartida siempre significan repetición, aunque cambien `kind`, `episode_id`, `context_id` o `parent_activity_id`; un cambio aislado en cualquiera de esos campos nunca demuestra novedad. `equivalentRepairActivity()` es verdadero únicamente para `EQUIVALENT`; `prepareRepairPlan()` rechaza tanto `EQUIVALENT` como `INDETERMINATE` cuando necesita demostrar que dos actividades son distintas. Si falta una pregunta o un `kind` utilizable, la relación queda `INDETERMINATE` y la transferencia queda conservadora. Una pregunta textual distinta puede ser `DISTINCT`, pero solo una transferencia con `transfer_novelty_status=CONFIRMED`, fundamento no vacío y todas las relaciones `DISTINCT` puede llegar a ejecutarse como variante novedosa.
 
 Todas las respuestas pasan por:
 
@@ -103,7 +103,7 @@ La transferencia no se concede por el nombre de la etapa. Requiere:
 - contrato que observe transferencia;
 - respuesta correcta, independiente y sin ayuda.
 
-Si esas condiciones de novedad no pueden demostrarse, `transfer_check` queda `INDETERMINATE`; no se ejecuta como prueba de transferencia y el episodio termina `PARTIAL` con la razón registrada. Una pregunta con el mismo texto normalizado se considera copia aunque cambien `activity_id`, `kind`, mayúsculas o puntuación.
+Si esas condiciones de novedad no pueden demostrarse, `transfer_check` queda `INDETERMINATE`; no se ejecuta como prueba de transferencia y el episodio termina `PARTIAL` con la razón registrada. Una pregunta con el mismo texto normalizado se considera copia aunque cambien `activity_id`, `kind`, `episode_id`, `parent_activity_id`, mayúsculas, espacios o puntuación. Cambiar solo el contexto de reparación o el tipo de actividad no concede novedad.
 
 ## Límites
 
@@ -117,9 +117,9 @@ Los límites locales son:
 | Reintentos del padre | 2 |
 | Pruebas de transferencia | 1 |
 
-Al alcanzar un límite durante un episodio, este cierra como `PARTIAL` o `ABANDONED` y conserva el motivo. Un plan inicial que ya excede tres hipótesis o comprobaciones se rechaza antes de crear el episodio. No se marca dominio automáticamente.
+Al alcanzar un límite durante un episodio, este cierra como `PARTIAL` y conserva el motivo; `ABANDONED` se reserva para el abandono explícito o la recuperación de un contexto inválido. Un plan inicial que ya excede tres hipótesis o comprobaciones se rechaza antes de crear el episodio. No se marca dominio automáticamente.
 
-No se abre dos veces el mismo `gap_id` dentro del episodio. Si no existe un detector semántico confiable, la equivalencia mínima usa identificador de actividad, pregunta normalizada, tipo de actividad y episodio padre.
+No se abre dos veces el mismo `gap_id` dentro del episodio. No se usa un detector semántico: la política compara identificador de actividad y pregunta normalizada; `kind`, episodio, contexto y `parent_activity_id` solo aportan contexto y nunca convierten por sí solos una actividad en novedosa. Si falta una pregunta o un `kind` utilizable para una comparación textual distinta, la relación es `INDETERMINATE`.
 
 ## Cierre, abandono y persistencia
 
@@ -133,7 +133,7 @@ Un episodio `COMPLETED` requiere:
 - resultado correcto e independiente del reintento padre;
 - resultado correcto de una variante independiente con novedad confirmada.
 
-Al importar, la misma regla se vuelve a comprobar. Un `COMPLETED` sin las tres evidencias se degrada a `PARTIAL`; un estado activo que salte diagnóstico, reparación independiente o reintento padre se devuelve a la primera etapa obligatoria ausente. Esta reconciliación no crea evidencia ni timestamps históricos.
+Al importar, la misma regla se vuelve a comprobar. Un `COMPLETED` sin las tres evidencias se degrada a `PARTIAL`; un estado activo que salte diagnóstico, reparación independiente o reintento padre se devuelve a la primera etapa obligatoria ausente. Esta reconciliación no crea evidencia ni fechas de creación: un episodio legacy sin `created_at` conserva `created_at=null`.
 
 Si la variante no puede construirse con novedad demostrable, el episodio conserva una razón explícita y termina `PARTIAL`, no `COMPLETED`.
 

@@ -209,6 +209,28 @@ function finishRepair(value, episode, independentHelp = 0) {
   assert.equal(value.coverage[0].dimensions[0].evidence.length, 1, 'La evidencia hija no debe actualizar cobertura del padre');
 }
 
+// C1. La equivalencia es textual y conservadora; los identificadores y el contexto no fabrican novedad.
+{
+  const original = { ...lesson().independent, activity_id: 'activity-a', episode_id: 'episode-a', parent_activity_id: 'parent-a' };
+  assert.equal(policy.repairActivityRelation(original, { ...original }), 'EQUIVALENT');
+  assert.equal(policy.repairActivityRelation(original, { ...original, activity_id: 'activity-b' }), 'EQUIVALENT');
+  assert.equal(policy.repairActivityRelation(original, { ...original, kind: 'transfer', activity_id: 'activity-c' }), 'EQUIVALENT');
+  assert.equal(policy.repairActivityRelation(original, { ...original, episode_id: 'episode-b', activity_id: 'activity-d' }), 'EQUIVALENT');
+  assert.equal(policy.repairActivityRelation(original, { ...original, prompt: '  RESUELVE 2X + 3 = 7!!! ', activity_id: 'activity-e' }), 'EQUIVALENT');
+  assert.equal(policy.repairActivityRelation(original, { ...original, prompt: 'Modela una tarifa de cuatro por hora', activity_id: 'activity-f', kind: 'application' }), 'DISTINCT');
+  assert.equal(policy.repairActivityRelation({ prompt: 'Pregunta A' }, { prompt: 'Pregunta B' }), 'INDETERMINATE');
+
+  const withoutNovelty = policy.prepareRepairPlan(plan({
+    transfer_check: { prompt: 'Modela una tarifa de cuatro por hora', reference: '4 horas', kind: 'transfer', activity_id: 'transfer-new' },
+    transfer_novelty_status: 'INDETERMINATE', transfer_novelty_basis: '',
+  }), original, 'episode-equivalence');
+  assert.equal(withoutNovelty.transfer_check.novelty_status, 'INDETERMINATE');
+
+  const withNovelty = policy.prepareRepairPlan(plan(), original, 'episode-equivalence');
+  assert.equal(withNovelty.transfer_check.novelty_status, 'CONFIRMED');
+  assert.equal(withNovelty.transfer_check.attempts.length, 0);
+}
+
 // D. El hijo no domina al padre; el reintento conserva el original y usa ids nuevos.
 {
   const value = goal();
@@ -300,6 +322,34 @@ function finishRepair(value, episode, independentHelp = 0) {
 
   const legacy = policy.normalizeImportedStore({ goals: [{ id: 'legacy', nodes: [node()], learner: {}, session: {} }], active: 'legacy' });
   assert.deepEqual(legacy.goals[0].repairEpisodes, []);
+}
+
+// G1. Las importaciones no inventan created_at; solo un episodio nuevo recibe fecha de creación.
+{
+  const legacyGoal = {
+    id: 'legacy-dates', nodes: [], learner: {}, coverage: [], events: [], lessons: {},
+    session: {}, repairEpisodes: [{ episode_id: 'legacy-no-date', status: 'PARTIAL' }],
+  };
+  const originalNow = Date.now;
+  Date.now = () => 9999999999999;
+  try {
+    const imported = policy.normalizeImportedStore({ goals: [legacyGoal], active: legacyGoal.id });
+    const legacyEpisode = imported.goals[0].repairEpisodes[0];
+    assert.equal(legacyEpisode.created_at, null);
+    assert.equal(Object.prototype.hasOwnProperty.call(legacyEpisode, 'legacy_imported_at'), false);
+    assert.deepEqual(legacyEpisode.repair_evidence, []);
+    const repeated = policy.normalizeImportedStore(imported);
+    assert.equal(repeated.goals[0].repairEpisodes[0].created_at, null);
+  } finally {
+    Date.now = originalNow;
+  }
+
+  const valid = policy.normalizeRepairEpisode({ episode_id: 'legacy-valid-date', status: 'PARTIAL', created_at: 1234567890 });
+  assert.equal(valid.created_at, 1234567890);
+  const fresh = openEpisode(goal());
+  assert.equal(typeof fresh.created_at, 'number');
+  const roundTrip = policy.normalizeImportedStore({ goals: [{ ...goal(), repairEpisodes: [fresh] }], active: 'goal-1' });
+  assert.equal(roundTrip.goals[0].repairEpisodes[0].created_at, fresh.created_at);
 }
 
 // H. Recorridos: reparación fallida, padre fallido, variante fallida, doble clic y reanudación.
