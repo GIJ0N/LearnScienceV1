@@ -807,6 +807,23 @@ for (const [name, brokenPlan, code] of [
   assert.equal(sandbox.__auditStore.goals[0].repairEpisodes[0].episode_id, 'persisted-episode');
 }
 
+// I. La navegación inicial vuelve directamente a una reparación válida y deja la recuperación al contextoScreen.
+{
+  const value = goal();
+  value.session.mode = 'CONTEXT';
+  value.contextStack = [{ context_id: 'reload-context', episode_id: 'reload-episode', status: 'ACTIVE', history: [] }];
+  value.repairEpisodes = [{ episode_id: 'reload-episode', status: 'REPAIRING', stage: 'CHECK', closed_at: null }];
+  policy.setStoreForTests({ goals: [value], active: value.id });
+  assert.deepEqual(policy.resolveInitialNavigation(), { page: 'session', context: 'active' });
+
+  value.contextStack = [];
+  assert.deepEqual(policy.resolveInitialNavigation(), { page: 'session', context: 'recover' });
+
+  value.session.mode = 'DIAGNOSTIC';
+  value.repairEpisodes = [];
+  assert.deepEqual(policy.resolveInitialNavigation(), { page: 'home', context: 'none' });
+}
+
 (async () => {
   // Una pista devuelta tras un fallo se conserva para el siguiente intento de la misma etapa.
   const value = goal();
