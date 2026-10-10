@@ -60,7 +60,22 @@ Los contratos actuales son conservadores:
 | Microtutoría guiada | aplicación directa | no | no |
 | Microtutoría independiente | aplicación directa | sí | no |
 
+Cuatro dimensiones usan familias canónicas de actividad, sin aliases implícitos:
+
+| Familia | `kind` canónico | Única dimensión observable | Roles autorizados |
+|---|---|---|---|
+| Identificación de variables | `variable_identification` | `variables` | diagnóstico, práctica guiada, práctica independiente, repaso, diagnóstico de reparación y reintento padre |
+| Uso de unidades | `units` | `units` | los mismos seis roles |
+| Manipulación de ecuaciones | `equation_manipulation` | `equation_manipulation` | los mismos seis roles |
+| Selección de método | `method_selection` | `method_selection` | los mismos seis roles |
+
+Cuando una de estas dimensiones requerida todavía no tiene evidencia suficiente, el frontend la envía como `target_dimension` al generador de la microlección. El backend exige que GUIDED e INDEPENDENT devuelvan el `kind` canónico y `observable_dimensions` con exactamente esa dimensión; una respuesta incompatible se rechaza y no se guarda. La interfaz conserva la dimensión y ofrece un reintento explícito; cada clic realiza una sola solicitud y un rechazo no crea actividad, intento ni evidencia. El contrato frontend vuelve a intersectar dimensión solicitada, familia y rol. Por ello, identificar una variable no acredita manipulación de ecuaciones, y seleccionar un método no acredita su ejecución.
+
+Las preguntas anteriores que no contienen `observable_dimensions` conservan la inferencia por su `kind`; no reciben metadata ni evidencia retrospectiva durante la carga. Un `kind` desconocido, una familia incompatible o un rol sin permiso produce una lista observable vacía.
+
 El rol fija los permisos máximos. Un contrato puede desactivar independencia o transferencia, pero nunca activarlas cuando el rol las prohíbe. La novedad declarada tampoco supera esa capacidad. Un contrato desconocido utiliza un fallback conservador: no observa dimensiones ni acredita independencia o transferencia. Reconocimiento no acredita procedimiento y una integración de reconocimiento no acredita automáticamente aplicación contextual o interpretación.
+
+`required=true` significa que la dimensión debe alcanzar evidencia suficiente para que el nodo quede dominado; no implica por sí mismo que esa evidencia deba ser independiente. La exigencia de independencia la determina la política de suficiencia según la dimensión. Evidence Policy v1 no permite configurar ese requisito por meta.
 
 ## Contradicciones temporales
 

@@ -29,6 +29,9 @@ jobs:
       - name: Run evidence policy tests
         run: node tests/evidence_policy.test.js
 
+      - name: Run reachable dimension integration tests
+        run: python tests/reachable_dimensions.test.py
+
       - name: Run microtutoring repair episode tests
         run: node tests/microtutoring_repair_episode.test.js
 
