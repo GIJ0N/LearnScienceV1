@@ -17,6 +17,8 @@ Desde la raíz del repositorio:
 ```text
 node tests/evidence_policy.test.js
 python tests/reachable_dimensions.test.py
+python tests/durable_memory.test.py
+node tests/durable_memory_frontend.test.js
 node tests/microtutoring_repair_episode.test.js
 node --check app.js
 python app_legacy.py --self-test
@@ -33,11 +35,13 @@ Git almacena los archivos de este repositorio con LF, pero un checkout de Window
 
 `python tests/reachable_dimensions.test.py` simula sin red el generador activo, normaliza mapa y microlección en el backend y entrega las preguntas a `app.js`. Verifica para `variables`, `units`, `equation_manipulation` y `method_selection` el recorrido contrato → evaluación simulada → evento → evidencia → cobertura, además de los casos negativos de familia, rol, ayuda, `UNKNOWN`, idempotencia, reparación hija y datos legacy. También fuerza contratos dirigidos incompatibles y comprueba que el rechazo deja la cobertura intacta, conserva `target_dimension` y ofrece un reintento explícito de una sola solicitud.
 
+`python tests/durable_memory.test.py` usa una base SQLite temporal. Verifica persistencia tras reinicio, aislamiento de perfiles, respuesta y evaluación completas, conflicto de revisión sin sobreescritura, importación idempotente sin evidencia inventada, exportación/restauración y contexto de memoria acotado con procedencia. `node tests/durable_memory_frontend.test.js` verifica el error visible de escritura, su recuperación, la asociación de perfil y la pausa de una sesión breve sin escribir el progreso completo en `localStorage`.
+
 La misma secuencia se ejecuta en `.github/workflows/ci.yml`. Si falta una suite, falla un comando o no se puede usar la versión fijada de Node.js/Python, el paso correspondiente termina con error y el job falla. No se silencian errores ni se convierten en advertencias.
 
 ## Respuestas simuladas y Gemini
 
-Las dos suites JavaScript usan respuestas locales simuladas. `python app_legacy.py --self-test` también sustituye la llamada de red y la clave de Gemini dentro de la prueba; no necesita `GEMINI_API_KEY` y no evalúa respuestas reales. La CI no configura, imprime ni envía ninguna clave y no inicia servicios externos.
+Las suites automatizadas usan respuestas locales simuladas. `python app_legacy.py --self-test` también sustituye la llamada de red y la clave de Gemini dentro de la prueba; no necesita `GEMINI_API_KEY` y no evalúa respuestas reales. La CI no configura, imprime ni envía ninguna clave y no inicia servicios externos.
 
 Una validación `BLOCKED` significa que una prueba no se pudo ejecutar por falta de navegador, permisos, credenciales o un servicio externo. Debe informarse como `BLOCKED`, nunca como `PASS`. Las pruebas de navegador completo, recarga real, consola y Gemini real no forman parte de esta CI.
 
@@ -51,7 +55,7 @@ Una validación `BLOCKED` significa que una prueba no se pudo ejecutar por falta
 
 ## Lista previa a un merge
 
-Un PR debe mostrar las tres suites, `node --check`, el self-test y la compilación de `app_legacy.py` en PASS, además de la comprobación de paridad. También debe demostrar que no cambió la aplicación fuera de su alcance, que no añadió secretos ni dependencias innecesarias y que la documentación describe las limitaciones como `BLOCKED` cuando corresponde. La revisión humana debe comprobar los contratos de evidencia, la idempotencia, la persistencia legacy y las rutas de RepairEpisode; esta CI no sustituye esas revisiones.
+Un PR debe mostrar todas las suites, `node --check`, el self-test y la compilación de `app_legacy.py` en PASS, además de la comprobación de paridad. También debe demostrar que no cambió la aplicación fuera de su alcance, que no añadió secretos ni dependencias innecesarias y que la documentación describe las limitaciones como `BLOCKED` cuando corresponde. La revisión humana debe comprobar los contratos de evidencia, la idempotencia, la persistencia legacy y las rutas de RepairEpisode; esta CI no sustituye esas revisiones.
 
 ## Prueba manual de una dimensión dirigida
 

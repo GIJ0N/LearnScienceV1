@@ -32,6 +32,12 @@ jobs:
       - name: Run reachable dimension integration tests
         run: python tests/reachable_dimensions.test.py
 
+      - name: Run durable memory tests
+        run: python tests/durable_memory.test.py
+
+      - name: Run durable frontend tests
+        run: node tests/durable_memory_frontend.test.js
+
       - name: Run microtutoring repair episode tests
         run: node tests/microtutoring_repair_episode.test.js
 
