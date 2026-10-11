@@ -803,8 +803,8 @@ for (const [name, brokenPlan, code] of [
   sandbox.globalThis = sandbox;
   const source = fs.readFileSync(require.resolve('../app.js'), 'utf8') + '\n;globalThis.__auditStore=store;';
   vm.runInNewContext(source, sandbox, { filename: 'app.js' });
-  assert.equal(sandbox.__auditStore.goals.length, 1);
-  assert.equal(sandbox.__auditStore.goals[0].repairEpisodes[0].episode_id, 'persisted-episode');
+  assert.equal(sandbox.__auditStore.goals.length, 0, 'los datos v4 no se migran sin una acción explícita');
+  assert.equal(JSON.parse(sandbox.localStorage.getItem()).goals[0].repairEpisodes[0].episode_id, 'persisted-episode', 'la fuente legacy permanece intacta');
 }
 
 // I. La navegación inicial vuelve directamente a una reparación válida y deja la recuperación al contextoScreen.
