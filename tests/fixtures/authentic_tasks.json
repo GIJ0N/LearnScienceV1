@@ -1,0 +1,384 @@
+{
+  "engineering": {
+    "task_id": "task-38ea273c927645569b8e9f1079117286",
+    "version": "authentic_task_v1",
+    "node_id": "n1",
+    "objective": "Conversión de unidades",
+    "family": "quantitative",
+    "rubric": [
+      {
+        "id": "method",
+        "dimension": "method_selection",
+        "requirement": "Selecciona relaciones y explica cómo conectan los datos con la incógnita."
+      },
+      {
+        "id": "calculation",
+        "dimension": "direct_application",
+        "requirement": "Ejecuta los cálculos coherentemente con las relaciones seleccionadas."
+      },
+      {
+        "id": "units",
+        "dimension": "units",
+        "requirement": "Mantiene coherencia dimensional y expresa el resultado en la unidad solicitada."
+      },
+      {
+        "id": "interpretation",
+        "dimension": "interpretation",
+        "requirement": "Explica qué significa el resultado y comprueba la restricción del caso."
+      }
+    ],
+    "purpose": "application",
+    "conditions": {
+      "allowed_tools": [
+        "lector de pantalla",
+        "dictado",
+        "ampliación",
+        "calculadora aritmética"
+      ],
+      "independence": "Sin pistas que revelen el método, solución o razonamiento; declara cualquier ayuda."
+    },
+    "source_task_id": null,
+    "relation": {
+      "status": "APPLICATION",
+      "policy_version": "near_transfer_registry_v1",
+      "same_concept": "Conversión de unidades",
+      "source_task_id": null,
+      "changed_demands": [],
+      "basis": "No se solicita transferencia."
+    },
+    "blueprint": "length_conversion_v1",
+    "parameters": {
+      "total_m": 7
+    },
+    "provenance": "local_blueprint",
+    "prompt": "Caso ficticio: compras un cable de 7 m. El formulario exige longitud en cm. Selecciona el factor, muestra el cálculo, escribe el resultado en cm y explica cómo evitarías un pedido de longitud equivocada.",
+    "known_data": [
+      "Longitud: 7 m",
+      "Relación disponible: 1 m = 100 cm"
+    ],
+    "demands": [
+      "apply_single_conversion",
+      "interpret_requested_unit"
+    ],
+    "constraints": [
+      "Datos ficticios exactos; no son mediciones de una instalación real.",
+      "Resultado solicitado en cm."
+    ],
+    "observable_dimensions": [
+      "contextual_application",
+      "direct_application",
+      "interpretation",
+      "method_selection",
+      "units"
+    ]
+  },
+  "diagnosis": {
+    "task_id": "task-49d8aa2651bc443ea1baa0cfac844d47",
+    "version": "authentic_task_v1",
+    "node_id": "n1",
+    "objective": "Diagnóstico de caudal",
+    "family": "diagnosis",
+    "rubric": [
+      {
+        "id": "information",
+        "dimension": "interpretation",
+        "requirement": "Separa hechos disponibles, datos faltantes e incertidumbres sin inventar mediciones."
+      },
+      {
+        "id": "hypotheses",
+        "dimension": "conceptual",
+        "requirement": "Propone al menos dos causas compatibles con los datos sin confundir asociación con causalidad."
+      },
+      {
+        "id": "test",
+        "dimension": "method_selection",
+        "requirement": "Propone una comprobación que discrimine hipótesis e indica qué resultado favorecería cada una."
+      },
+      {
+        "id": "decision",
+        "dimension": "self_explanation",
+        "requirement": "Justifica la prioridad de la comprobación y condiciona la decisión a su resultado."
+      }
+    ],
+    "purpose": "application",
+    "conditions": {
+      "allowed_tools": [
+        "lector de pantalla",
+        "dictado",
+        "ampliación",
+        "calculadora aritmética"
+      ],
+      "independence": "Sin pistas que revelen el método, solución o razonamiento; declara cualquier ayuda."
+    },
+    "source_task_id": null,
+    "relation": {
+      "status": "APPLICATION",
+      "policy_version": "near_transfer_registry_v1",
+      "same_concept": "Diagnóstico de caudal",
+      "source_task_id": null,
+      "changed_demands": [],
+      "basis": "No se solicita transferencia."
+    },
+    "blueprint": "pump_diagnosis_v1",
+    "parameters": {
+      "reading": 52
+    },
+    "provenance": "local_blueprint",
+    "prompt": "Simulación educativa de diagnóstico: una bomba entrega menos caudal según el registro. Distingue hechos y datos faltantes, plantea dos hipótesis y propone una comprobación no invasiva con resultados que permitan distinguirlas. Justifica qué información pedirías primero. No indiques ajustes, desmontajes ni límites operativos de una instalación real.",
+    "known_data": [
+      "Registro ficticio: indicador de caudal pasó de 100 a 52 unidades relativas.",
+      "El cambio coincidió con un cambio de turno. No hay registro de posición de válvulas ni calibración del sensor.",
+      "No se dispone de medición independiente de caudal ni de presión."
+    ],
+    "demands": [
+      "separate_observation_from_cause",
+      "compare_hypotheses",
+      "design_discriminating_check"
+    ],
+    "constraints": [
+      "Caso ficticio autocontenido. No inventes mediciones ni fuentes adicionales."
+    ],
+    "observable_dimensions": [
+      "conceptual",
+      "contextual_application",
+      "interpretation",
+      "method_selection",
+      "self_explanation"
+    ]
+  },
+  "history": {
+    "task_id": "task-9e95754ec6c444d78be70f1993c57b6f",
+    "version": "authentic_task_v1",
+    "node_id": "n1",
+    "objective": "Argumentación histórica",
+    "family": "argumentation",
+    "rubric": [
+      {
+        "id": "claim",
+        "dimension": "conceptual",
+        "requirement": "Formula una conclusión delimitada que responda a la afirmación."
+      },
+      {
+        "id": "support",
+        "dimension": "interpretation",
+        "requirement": "Identifica evidencia concreta del material y explica su pertinencia, sin fabricar fuentes."
+      },
+      {
+        "id": "reasoning",
+        "dimension": "self_explanation",
+        "requirement": "Explica el vínculo entre evidencia y conclusión y distingue causalidad de asociación cuando corresponda."
+      },
+      {
+        "id": "limitations",
+        "dimension": "method_selection",
+        "requirement": "Considera una explicación alternativa o evidencia contraria y ajusta el alcance de la conclusión."
+      }
+    ],
+    "purpose": "application",
+    "conditions": {
+      "allowed_tools": [
+        "lector de pantalla",
+        "dictado",
+        "ampliación",
+        "calculadora aritmética"
+      ],
+      "independence": "Sin pistas que revelen el método, solución o razonamiento; declara cualquier ayuda."
+    },
+    "source_task_id": null,
+    "relation": {
+      "status": "APPLICATION",
+      "policy_version": "near_transfer_registry_v1",
+      "same_concept": "Argumentación histórica",
+      "source_task_id": null,
+      "changed_demands": [],
+      "basis": "No se solicita transferencia."
+    },
+    "blueprint": "historical_argument_v1",
+    "parameters": {
+      "visits": 112
+    },
+    "provenance": "local_blueprint",
+    "prompt": "Archivo histórico ficticio: un concejal afirma que abrir una biblioteca nocturna mejoró la alfabetización. Evalúa qué puede concluirse usando los tres documentos siguientes. Cita evidencias por identificador, considera una explicación alternativa y señala qué dato adicional haría falta.",
+    "known_data": [
+      "D1, registro administrativo sintético: las visitas mensuales pasaron de 80 a 112 después de la apertura.",
+      "D2, acta sintética: en el mismo mes se amplió el horario del transporte al barrio.",
+      "D3, carta sintética del concejal promotor: «La biblioteca ya ha mejorado la alfabetización». No incluye mediciones de lectura.",
+      "Todos los documentos y personajes son inventados para esta tarea; no son fuentes históricas reales."
+    ],
+    "demands": [
+      "evaluate_source_support",
+      "distinguish_usage_from_learning",
+      "consider_alternative_explanation"
+    ],
+    "constraints": [
+      "Caso ficticio autocontenido. No inventes mediciones ni fuentes adicionales."
+    ],
+    "observable_dimensions": [
+      "conceptual",
+      "contextual_application",
+      "interpretation",
+      "method_selection",
+      "self_explanation"
+    ]
+  },
+  "transfer": {
+    "task_id": "task-c2c02d0874ef43c5b358f9380e7b3ea5",
+    "version": "authentic_task_v1",
+    "node_id": "n1",
+    "objective": "Conversión de unidades",
+    "family": "quantitative",
+    "rubric": [
+      {
+        "id": "method",
+        "dimension": "method_selection",
+        "requirement": "Selecciona relaciones y explica cómo conectan los datos con la incógnita."
+      },
+      {
+        "id": "calculation",
+        "dimension": "direct_application",
+        "requirement": "Ejecuta los cálculos coherentemente con las relaciones seleccionadas."
+      },
+      {
+        "id": "units",
+        "dimension": "units",
+        "requirement": "Mantiene coherencia dimensional y expresa el resultado en la unidad solicitada."
+      },
+      {
+        "id": "interpretation",
+        "dimension": "interpretation",
+        "requirement": "Explica qué significa el resultado y comprueba la restricción del caso."
+      }
+    ],
+    "purpose": "transfer",
+    "conditions": {
+      "allowed_tools": [
+        "lector de pantalla",
+        "dictado",
+        "ampliación",
+        "calculadora aritmética"
+      ],
+      "independence": "Sin pistas que revelen el método, solución o razonamiento; declara cualquier ayuda."
+    },
+    "source_task_id": "task-38ea273c927645569b8e9f1079117286",
+    "relation": {
+      "status": "VERIFIED_NEAR_TRANSFER",
+      "policy_version": "near_transfer_registry_v1",
+      "same_concept": "Conversión de unidades",
+      "source_task_id": "task-38ea273c927645569b8e9f1079117286",
+      "changed_demands": [
+        "combine_measurements",
+        "compare_constraint",
+        "select_common_unit"
+      ],
+      "basis": "Par local v1: de una conversión explícita a unificar representaciones, combinar medidas y comprobar una restricción. Alcance: longitudes en estos dos casos sintéticos."
+    },
+    "blueprint": "length_planning_v1",
+    "parameters": {
+      "total_m": 7,
+      "used_mm": 102,
+      "minimum_cm": 52
+    },
+    "provenance": "local_blueprint",
+    "prompt": "Caso ficticio: un plano registra 7 m de cable disponible y una orden registra 102 mm ya utilizados. Un montaje nuevo requiere al menos 52 cm del sobrante. Decide si alcanza. Selecciona una representación común, calcula el sobrante en cm, justifica la decisión y comprueba que el resultado sea físicamente posible.",
+    "known_data": [
+      "Total: 7 m",
+      "Consumido: 102 mm",
+      "Mínimo requerido: 52 cm",
+      "1 m = 100 cm; 1 cm = 10 mm"
+    ],
+    "demands": [
+      "select_common_unit",
+      "combine_measurements",
+      "compare_constraint"
+    ],
+    "constraints": [
+      "Datos ficticios exactos; no son mediciones de una instalación real.",
+      "Resultado solicitado en cm."
+    ],
+    "observable_dimensions": [
+      "contextual_application",
+      "direct_application",
+      "interpretation",
+      "method_selection",
+      "units"
+    ]
+  },
+  "superficial": {
+    "task_id": "task-a38951b76cc042d88f317c17a7c75629",
+    "version": "authentic_task_v1",
+    "node_id": "n1",
+    "objective": "Conversión de unidades",
+    "family": "quantitative",
+    "rubric": [
+      {
+        "id": "method",
+        "dimension": "method_selection",
+        "requirement": "Selecciona relaciones y explica cómo conectan los datos con la incógnita."
+      },
+      {
+        "id": "calculation",
+        "dimension": "direct_application",
+        "requirement": "Ejecuta los cálculos coherentemente con las relaciones seleccionadas."
+      },
+      {
+        "id": "units",
+        "dimension": "units",
+        "requirement": "Mantiene coherencia dimensional y expresa el resultado en la unidad solicitada."
+      },
+      {
+        "id": "interpretation",
+        "dimension": "interpretation",
+        "requirement": "Explica qué significa el resultado y comprueba la restricción del caso."
+      }
+    ],
+    "purpose": "transfer",
+    "conditions": {
+      "allowed_tools": [
+        "lector de pantalla",
+        "dictado",
+        "ampliación",
+        "calculadora aritmética"
+      ],
+      "independence": "Sin pistas que revelen el método, solución o razonamiento; declara cualquier ayuda."
+    },
+    "source_task_id": "task-c2c02d0874ef43c5b358f9380e7b3ea5",
+    "relation": {
+      "status": "PRACTICE",
+      "policy_version": "near_transfer_registry_v1",
+      "same_concept": "Conversión de unidades",
+      "source_task_id": "task-c2c02d0874ef43c5b358f9380e7b3ea5",
+      "changed_demands": [],
+      "basis": "Misma estructura de tarea; cambiar datos o redacción no verifica transferencia."
+    },
+    "blueprint": "length_planning_v1",
+    "parameters": {
+      "total_m": 7,
+      "used_mm": 102,
+      "minimum_cm": 52
+    },
+    "provenance": "local_blueprint",
+    "prompt": "Caso ficticio: un plano registra 7 m de cable disponible y una orden registra 102 mm ya utilizados. Un montaje nuevo requiere al menos 52 cm del sobrante. Decide si alcanza. Selecciona una representación común, calcula el sobrante en cm, justifica la decisión y comprueba que el resultado sea físicamente posible.",
+    "known_data": [
+      "Total: 7 m",
+      "Consumido: 102 mm",
+      "Mínimo requerido: 52 cm",
+      "1 m = 100 cm; 1 cm = 10 mm"
+    ],
+    "demands": [
+      "select_common_unit",
+      "combine_measurements",
+      "compare_constraint"
+    ],
+    "constraints": [
+      "Datos ficticios exactos; no son mediciones de una instalación real.",
+      "Resultado solicitado en cm."
+    ],
+    "observable_dimensions": [
+      "contextual_application",
+      "direct_application",
+      "interpretation",
+      "method_selection",
+      "units"
+    ]
+  }
+}
