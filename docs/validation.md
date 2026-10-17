@@ -18,6 +18,7 @@ Desde la raíz del repositorio:
 node tests/evidence_policy.test.js
 node tests/evidence_sufficiency.test.js
 python tests/evidence_confirmation.test.py
+python tests/adaptive_lesson.test.py
 python tests/reachable_dimensions.test.py
 python tests/durable_memory.test.py
 node tests/durable_memory_frontend.test.js
@@ -76,3 +77,7 @@ correcciones, demora mínima de memoria, visita limitada y continuación provisi
 El recorrido HTTP usa la ruta activa `/api/confirmation` y SQLite temporal; comprueba
 recarga, exportación y restauración de la sesión pendiente. La generación y evaluación
 del proveedor siguen simuladas; estas pruebas no validan aprendizaje humano ni novedad semántica.
+
+## Microlecciones adaptadas según evidencia durable
+
+Cuando un usuario solicita volver a aprender, se genera una microlección nueva usando hasta cinco intentos recientes almacenados en SQLite para el nodo y, si existe, la dimensión objetivo. Un error reciente elige refuerzo, una respuesta asistida elige apoyo gradual, un acierto independiente elige consolidación y la evidencia ausente o legacy incompleta conserva enseñanza inicial. Esta adaptación solo modifica el contenido y muestra su razón: no acredita dominio ni sustituye los contratos de evidencia v2. El proveedor real todavía requiere prueba manual.
