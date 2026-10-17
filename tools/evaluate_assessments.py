@@ -19,6 +19,11 @@ def main():
         # a fresh, validated 8 m contract so the command is deterministic.
         import copy
         reproduced=copy.deepcopy(tasks['engineering'])
+        # Rebuild contract-owned fields so the diagnostic command also works
+        # with a pre-PR fixture copied from an older local checkout.
+        reproduced['family']='quantitative'
+        reproduced['rubric']=assessment.rubric('quantitative')
+        reproduced['observable_dimensions']=sorted({r['dimension'] for r in reproduced['rubric']} | {'contextual_application'})
         reproduced['parameters']['total_m']=8
         reproduced['prompt'],reproduced['known_data'],reproduced['demands']=assessment.quantitative_content(reproduced['blueprint'],reproduced['parameters'])
         tasks['engineering']=reproduced
