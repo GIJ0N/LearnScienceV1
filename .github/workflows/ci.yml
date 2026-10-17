@@ -35,6 +35,9 @@ jobs:
       - name: Run active confirmation endpoint and persistence tests
         run: python tests/evidence_confirmation.test.py
 
+      - name: Test evidence-aware lesson adaptation
+        run: python tests/adaptive_lesson.test.py
+
       - name: Run reachable dimension integration tests
         run: python tests/reachable_dimensions.test.py
 
