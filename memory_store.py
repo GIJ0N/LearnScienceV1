@@ -9,6 +9,7 @@ import sqlite3
 import threading
 import time
 import uuid
+from assessment_service import validate_task, EVALUATION_VERSION
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -114,6 +115,26 @@ def validate_store(raw, profile_id):
                 if evidence_id in evidence_ids:
                     raise ValueError("El respaldo contiene evidence_id duplicados.")
                 evidence_ids.add(evidence_id)
+        tasks = goal.get("authentic_tasks", [])
+        assessments = goal.get("authentic_attempts", [])
+        if not isinstance(tasks, list) or not isinstance(assessments, list):
+            raise ValueError("Tareas o evaluaciones auténticas inválidas.")
+        task_ids = set()
+        for task in tasks:
+            validate_task(task)
+            if task["task_id"] in task_ids or task["node_id"] not in allowed_nodes:
+                raise ValueError("Identidad o habilidad de tarea inválida.")
+            task_ids.add(task["task_id"])
+        if any(t.get("source_task_id") and t["source_task_id"] not in task_ids for t in tasks):
+            raise ValueError("La tarea perdió su referencia de origen.")
+        assessment_ids = set()
+        for attempt in assessments:
+            if not isinstance(attempt, dict) or not attempt.get("attempt_id") or attempt["attempt_id"] in assessment_ids or attempt.get("task_id") not in task_ids:
+                raise ValueError("Identidad de evaluación auténtica inválida.")
+            evaluation = attempt.get("evaluation", {})
+            if evaluation.get("version") != EVALUATION_VERSION or evaluation.get("attempt_id") != attempt["attempt_id"] or evaluation.get("task_id") != attempt["task_id"]:
+                raise ValueError("La evaluación no corresponde a su tarea e intento.")
+            assessment_ids.add(attempt["attempt_id"])
         episodes = goal.get("repairEpisodes", [])
         if not isinstance(episodes, list):
             raise ValueError("Los episodios de reparación son inválidos.")

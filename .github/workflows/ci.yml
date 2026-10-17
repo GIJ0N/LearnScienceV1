@@ -26,6 +26,12 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Test authentic assessment, rubric safeguards and durable repair
+        run: |
+          node tests/authentic_assessment.test.js
+          python tests/authentic_assessment.test.py
+          python tools/evaluate_assessments.py
+
       - name: Test adaptive tutoring cycle and durable decisions
         run: |
           node tests/adaptive_cycle.test.js
@@ -62,7 +68,7 @@ jobs:
         run: python app_legacy.py --self-test
 
       - name: Compile the legacy app
-        run: python -m py_compile app_legacy.py
+        run: python -m py_compile app_legacy.py assessment_service.py memory_store.py
 
       - name: Check embedded JavaScript parity
         run: python tools/check_parity.py
