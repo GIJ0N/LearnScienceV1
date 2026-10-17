@@ -94,7 +94,7 @@ class ReachableDimensionsTests(unittest.TestCase):
         results = json.loads(completed.stdout)
         for dimension, result in results.items():
             self.assertEqual(result["observed"], [dimension])
-            self.assertEqual(result["evidence"], 1)
+            self.assertEqual(result["evidence"], 2)
             self.assertEqual(result["status"], "MASTERED")
 
     def test_backend_rejects_mismatched_target_metadata(self):

@@ -26,7 +26,7 @@ function goalFor(dimension, question) {
     nodes: [{ id: 'n1', name: 'Nodo', outcome: 'Resolver', level: 0, prerequisites: [], kind: 'procedure', probe: { prompt: 'Probe', reference: 'Criterio', kind: 'explanation' } }],
     coverage: [{ id: 'n1', name: 'Nodo', status: 'UNKNOWN', confidence: 0, dimensions: [{ id: dimension, name: dimension, required: true, status: 'UNKNOWN', evidence: [] }] }],
     learner: {}, events: [], reviews: [], repairEpisodes: [], contextStack: [],
-    lessons: { n1: { explanation: 'Explicación', example: 'Ejemplo', common_error: 'Error', check: { prompt: 'Comprende', reference: 'Criterio', kind: 'explanation' }, guided: question, independent: question, integration: { prompt: 'Integra', reference: 'Criterio', kind: 'context_case' } } },
+    lessons: { n1: { target_dimension: dimension, explanation: 'Explicación', example: 'Ejemplo', common_error: 'Error', check: { prompt: 'Comprende', reference: 'Criterio', kind: 'explanation' }, guided: question, independent: question, integration: { prompt: 'Integra', reference: 'Criterio', kind: 'context_case' } } },
     session: { mode: 'INDEPENDENT', node: 'n1', stack: [], tries: 0, hints: 0 },
   };
 }
@@ -43,10 +43,14 @@ function positivePath(dimension, question) {
   const event = goal.events.find(x => x.type === 'EVIDENCE' && x.attempt_id === result._attempt_id);
   assert.deepEqual(event.observed_dimensions, [dimension]);
   assert.equal(goal.coverage[0].dimensions[0].evidence.length, 1);
-  assert.equal(goal.coverage[0].dimensions[0].status, 'MASTERED');
+  assert.equal(goal.coverage[0].dimensions[0].status, 'PARTIALLY_UNDERSTOOD');
   assert.throws(() => policy.applyResult(goal, 'n1', 'INDEPENDENT', 'respuesta', result), error => error.code === 'DUPLICATE_ATTEMPT');
   assert.equal(goal.coverage[0].dimensions[0].evidence.length, 1);
-  return { kind: question.kind, observed: event.observed_dimensions, evidence: 1, status: 'MASTERED' };
+  const additional = policy.acceptConfirmation(goal, 'n1', { ...question, prompt: `Justifica una situación distinta para ${dimension}` }, dimension);
+  const confirmation = policy.activityContract(additional, 'n1', 'evidence_confirmation');
+  policy.record(goal, 'n1', 'CONFIRMATION', 'respuesta adicional', { status: 'CORRECT' }, 0, confirmation, `confirmation-${dimension}`);
+  assert.equal(goal.coverage[0].dimensions[0].status, 'MASTERED');
+  return { kind: question.kind, observed: event.observed_dimensions, evidence: 2, status: 'MASTERED' };
 }
 
 function negativePaths(families) {

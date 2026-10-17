@@ -1,4 +1,4 @@
-# Evidence Policy v1
+# Evidence Policy v2 — suficiencia inicial y comprobación independiente
 
 ## Propósito
 
@@ -75,31 +75,44 @@ Las preguntas anteriores que no contienen `observable_dimensions` conservan la i
 
 El rol fija los permisos máximos. Un contrato puede desactivar independencia o transferencia, pero nunca activarlas cuando el rol las prohíbe. La novedad declarada tampoco supera esa capacidad. Un contrato desconocido utiliza un fallback conservador: no observa dimensiones ni acredita independencia o transferencia. Reconocimiento no acredita procedimiento y una integración de reconocimiento no acredita automáticamente aplicación contextual o interpretación.
 
-`required=true` significa que la dimensión debe alcanzar evidencia suficiente para que el nodo quede dominado; no implica por sí mismo que esa evidencia deba ser independiente. La exigencia de independencia la determina la política de suficiencia según la dimensión. Evidence Policy v1 no permite configurar ese requisito por meta.
+`required=true` exige suficiencia de esa dimensión para acreditar el nodo. La política v2 exige independencia en todas las dimensiones; continuar curricularmente con pendientes no satisface ese requisito.
 
-## Contradicciones temporales
+## Suficiencia inicial v2
 
-La evidencia es append-only. No se borra un acierto cuando aparece un fallo.
+La política activa es `evidence_policy_v2`. `MASTERED` se conserva como valor interno
+compatible; significa **evidencia inicial suficiente**, no expertise ni certificación.
+El mínimo de dos es un default conservador de ingeniería, no un umbral científico universal.
 
-Para cada dimensión, el fallo relevante más reciente abre una nueva ventana de evidencia. La dimensión vuelve a ser suficiente solamente cuando, después de ese fallo, aparece evidencia positiva que satisface sus requisitos:
+Cada dimensión requiere **dos aciertos independientes en preguntas distintas** posteriores
+a la última contradicción efectiva. Deben conservar `attempt_id`, pregunta,
+`is_independent=true`, cero ayuda y la dimensión observada. No cuentan como segunda
+señal el mismo intento, actividad o texto normalizado; cambiar IDs no acredita novedad.
+La ayuda, las correcciones manuales positivas y la evidencia hija no acreditan independencia.
+La corrección sustituye al juicio original en la derivación sin borrarlo del historial.
 
-- dimensión conceptual u otra dimensión simple: un resultado correcto observado;
-- procedimiento o aplicación directa: un resultado correcto independiente;
-- transferencia: un resultado correcto, independiente y con novedad declarada;
-- memoria: un resultado correcto e independiente durante repaso.
+Transferencia exige además dos eventos con novedad autorizada por su contrato. El nuevo
+endpoint de comprobación nunca concede transferencia. Memoria requiere además un repaso
+independiente al menos 24 horas después de otra observación independiente válida.
+Este mínimo temporal no acredita retención prolongada ni modela toda exposición intermedia.
 
-Una respuesta correcta asistida después de un fallo puede mostrar progreso, pero no restablece una dimensión que requiere independencia.
+## Comprobaciones y avance
 
-## Dominio y progreso
+Al completar INTEGRATE con evidencia pendiente se pasa a CONFIRMATION, en lugar de
+repetir la misma microlección. `/api/confirmation` genera una sola pregunta para la
+primera dimensión pendiente compatible. Backend y frontend validan familia y dimensión;
+se rechazan preguntas repetidas, sin reintentos automáticos. El contrato fija independencia
+y prohíbe transferencia. Las respuestas usan la evaluación y el registro de evidencia existentes.
 
-Una dimensión es `MASTERED` cuando su evidencia es suficiente. Un nodo está dominado cuando todas sus dimensiones requeridas están dominadas. La misma derivación alimenta:
+Hay como máximo tres intentos por visita. Siempre se puede volver a enseñanza o
+**continuar con pendientes visibles**. Esta decisión registra `CURRICULUM_CONTINUED`,
+programa repaso y permite seguir la ruta y sus prerrequisitos; no crea evidencia positiva
+ni modifica la cobertura. El dashboard ofrece volver a comprobar cada habilidad pendiente.
+La continuación es una elección curricular explícita, no una declaración de competencia.
+Los errores de comprobación se registran y ofrecen enseñanza; los episodios de reparación
+existentes conservan su propia máquina de estados y no se interrumpen para abrir comprobaciones.
 
-- `verified()`;
-- `nextNode()`;
-- el número de habilidades demostradas en el dashboard;
-- el estado de cobertura mostrado al usuario.
-
-`level` continúa almacenándose para compatibilidad con sesiones existentes y como resumen histórico. No decide por sí mismo la siguiente transición. La evidencia derivada elige si hace falta enseñanza, comprobación o práctica. Las discrepancias entre `level` y la cobertura producen un evento `PROGRESS_DISCREPANCY` diagnosticable y nunca inventan evidencia.
+Memoria con una primera observación queda para el repaso diferido; transferencia pendiente
+queda visible para su evaluación específica. Ninguna bloquea indefinidamente toda la ruta.
 
 ## Compatibilidad con datos legacy
 
@@ -109,6 +122,18 @@ Cuando falta un contrato, la política no infiere retrospectivamente independenc
 
 Esta decisión puede reducir el dominio mostrado en algunos datos antiguos. Es deliberadamente conservadora: ausencia de evidencia estructurada no se convierte en evidencia positiva. Las nuevas respuestas pueden completar las dimensiones pendientes sin perder el historial anterior.
 
+## Compatibilidad operativa y reversión
+
+No cambia SQLite ni el esquema de respaldo. Los campos nuevos son JSON aditivos en
+sesión y eventos. La carga no reescribe evidencia ni fabrica metadata ausente. Algunos
+estados antes suficientes aparecen pendientes al recalcularse: sus intentos se conservan.
+Para volver a una versión anterior, primero salir de CONFIRMATION mediante continuar,
+guardar y exportar respaldo; el frontend anterior no reconoce esa fase nueva. Conservar
+siempre la base actual antes de una restauración.
+
 ## Alcance pendiente
 
-Esta versión agrega contratos para futuras evidencias de microtutoría y prueba que el retorno al flujo padre se conserva, pero no cambia la ruta de dominio separada, su secuencia, profundidad ni generación. Esa ruta permanece como deuda explícita fuera del alcance. También quedan fuera de alcance la persistencia en servidor, evaluadores deterministas por dominio y una migración modular completa.
+No hay verificación semántica de paráfrasis, calibración científica del umbral de dos,
+evaluadores deterministas especializados ni certificación de expertise. Se conserva la
+persistencia SQLite y la arquitectura legacy. El comparador textual rechaza copias exactas
+normalizadas, no demuestra diversidad cognitiva ni transferencia.

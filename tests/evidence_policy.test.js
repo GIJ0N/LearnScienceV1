@@ -162,13 +162,16 @@ async function submitThroughUI(goal, question, phase, role, response) {
 
     const partial = goalWithDimensions(['conceptual', 'direct_application']);
     partial.learner.n1 = { level: 5, confidence: 'verified', evidence: [], errors: [], last: null };
-    const conceptual = policy.activityContract({ kind: 'explanation' }, 'n1', 'comprehension_check');
+    const conceptual = policy.activityContract({ prompt: 'Comprende un principio', kind: 'explanation' }, 'n1', 'diagnostic_probe');
     policy.record(partial, 'n1', 'COMPREHENSION', 'x', assessment(), 0, conceptual, 'conceptual-progress');
+    const confirmation = policy.activityContract({ prompt: 'Predice y justifica otro resultado', kind: 'explanation' }, 'n1', 'evidence_confirmation');
+    policy.record(partial, 'n1', 'CONFIRMATION', 'x', assessment(), 0, confirmation, 'conceptual-confirmation');
     assert.equal(policy.derivedStartMode(partial, 'n1'), 'GUIDED');
 
     const complete = goalWithDimensions(['conceptual']);
     complete.learner.n1 = { level: 0, confidence: 'unverified', evidence: [], errors: [], last: null };
     policy.record(complete, 'n1', 'COMPREHENSION', 'x', assessment(), 0, conceptual, 'complete-low-level');
+    policy.record(complete, 'n1', 'CONFIRMATION', 'x', assessment(), 0, confirmation, 'complete-confirmation');
     assert.equal(policy.derivedStartMode(complete, 'n1'), 'DIAGNOSTIC');
     assert.equal(policy.verified(complete, 'n1'), true);
     assert.equal(policy.progressDiscrepancy(complete, 'n1').inconsistent, true);
@@ -253,7 +256,7 @@ async function submitThroughUI(goal, question, phase, role, response) {
     const { buttons } = await submitThroughUI(goal, goal.lessons.n1.check, 'COMPREHENSION', 'comprehension_check', assessment('CORRECT'));
     assert.equal(buttons.length, 2);
     assert.equal(buttons[0].onclick(), true);
-    assert.equal(goal.coverage[0].dimensions[0].status, 'MASTERED');
+    assert.equal(goal.coverage[0].dimensions[0].status, 'PARTIALLY_UNDERSTOOD');
     assert.equal(goal.events.filter(x => x.type === 'EVIDENCE').length, 1);
     assert.equal(goal.session.mode, 'GUIDED');
     assert.equal(buttons[0].onclick(), false);

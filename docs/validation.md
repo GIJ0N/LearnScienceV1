@@ -16,6 +16,8 @@ Desde la raíz del repositorio:
 
 ```text
 node tests/evidence_policy.test.js
+node tests/evidence_sufficiency.test.js
+python tests/evidence_confirmation.test.py
 python tests/reachable_dimensions.test.py
 python tests/durable_memory.test.py
 node tests/durable_memory_frontend.test.js
@@ -66,3 +68,11 @@ Un PR debe mostrar todas las suites, `node --check`, el self-test y la compilaci
 5. En las herramientas del navegador comprueba que `/api/lesson` recibió `target_dimension` y devolvió el `kind` canónico con una única `observable_dimensions`.
 6. Tras un resultado independiente correcto, confirma que solo esa dimensión recibe evidencia y cambia de estado. Una respuesta `UNKNOWN` o una familia incompatible debe dejarla sin evidencia positiva.
 
+
+## Suficiencia v2
+
+Las pruebas nuevas cubren dos preguntas independientes, exclusión de ayuda/duplicados,
+correcciones, demora mínima de memoria, visita limitada y continuación provisional.
+El recorrido HTTP usa la ruta activa `/api/confirmation` y SQLite temporal; comprueba
+recarga, exportación y restauración de la sesión pendiente. La generación y evaluación
+del proveedor siguen simuladas; estas pruebas no validan aprendizaje humano ni novedad semántica.
