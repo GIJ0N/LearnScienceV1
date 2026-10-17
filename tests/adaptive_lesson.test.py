@@ -21,7 +21,8 @@ def lesson():
 
 
 def attempt(result='CORRECT', independent=False, helped=0, dimensions=None, corrected=False):
-    return {'result': result, 'help_used': helped, 'event': {
+    return {'attempt_id': 'test-attempt', 'phase': 'INDEPENDENT', 'response_text': 'Respuesta',
+            'result': result, 'help_used': helped, 'event': {
         'observed_dimensions': dimensions if dimensions is not None else ['units'],
         'is_independent': independent, 'corrected': corrected}}
 
@@ -80,7 +81,7 @@ class AdaptiveLessonTests(unittest.TestCase):
                       'initial', 'Microlección desde nivel cero')
 
     def test_missing_legacy_metadata_is_conservative(self):
-        self.run_case([{'result': 'CORRECT', 'help_used': 0, 'event': None}],
+        self.run_case([{'attempt_id': 'old', 'phase': 'INDEPENDENT', 'response_text': '', 'result': 'CORRECT', 'help_used': 0, 'event': None}],
                       'initial', 'Microlección desde nivel cero')
 
 
