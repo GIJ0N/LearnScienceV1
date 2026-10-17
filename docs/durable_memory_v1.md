@@ -8,7 +8,7 @@ Un perfil local separa su documento de progreso, preferencias explícitas e inte
 
 Los datos v4 de `localStorage` no se leen ni se migran automáticamente. La persona debe crear un perfil vacío y elegir **Importar datos v4 de este navegador**. Antes de escribir, el servidor valida IDs, relaciones, referencias y duplicados. La importación copia el documento, añade asociación de perfil y registra un hash; repetir exactamente la misma importación es un no-op. El original de `localStorage` no se borra ni se modifica.
 
-Los campos ausentes en datos legacy se interpretan de forma conservadora. En particular, eventos sin dimensiones observadas y coberturas sin evidencia no reciben evidencia positiva. La política de evidencia, `sufficient()` y los umbrales de dominio no cambian.
+Los campos ausentes en datos legacy se interpretan de forma conservadora. En particular, eventos sin dimensiones observadas y coberturas sin evidencia no reciben evidencia positiva. La importación no reescribe evidencia. La suficiencia se recalcula con la política activa descrita en `docs/evidence_policy_v1.md`; un estado anteriormente suficiente puede quedar pendiente sin perder intentos.
 
 ## Respaldo y restauración
 

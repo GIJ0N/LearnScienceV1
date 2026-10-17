@@ -29,6 +29,12 @@ jobs:
       - name: Run evidence policy tests
         run: node tests/evidence_policy.test.js
 
+      - name: Run evidence sufficiency and confirmation flow tests
+        run: node tests/evidence_sufficiency.test.js
+
+      - name: Run active confirmation endpoint and persistence tests
+        run: python tests/evidence_confirmation.test.py
+
       - name: Run reachable dimension integration tests
         run: python tests/reachable_dimensions.test.py
 
