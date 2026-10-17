@@ -158,5 +158,32 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   assert.equal(rejected.events.length, 0);
   assert.ok(find(roots.app, 'Reintentar comprobación'));
   assert.ok(find(roots.app, 'Continuar la ruta con pendientes visibles'));
+  // Explicit "relearn" must fetch a fresh lesson informed by durable attempts,
+  // rather than displaying the cached initial explanation again.
+  const relearn = attach(goal());
+  relearn.session.node = 'n1';
+  relearn.session.mode = 'CONFIRMATION';
+  relearn.session.confirmation = { node_id: 'n1', attempts: 3, question: null, target_dimension: 'units' };
+  let adaptedCalls = 0;
+  global.fetch = async (route) => {
+    assert.equal(route, '/api/lesson');
+    adaptedCalls++;
+    return { ok: true, json: async () => ({
+      ...goal().lessons.n1, target_dimension: 'units',
+      explanation: 'Explicación ajustada al historial',
+      adaptation_mode: 'repair',
+      adaptation_reason: 'La última respuesta requiere refuerzo.'
+    }) };
+  };
+  await policy.session();
+  const relearnButton = find(roots.app, 'Volver a aprender esta habilidad');
+  assert.ok(relearnButton);
+  relearnButton.onclick();
+  assert.equal(relearn.session.mode, 'TEACH');
+  assert.equal(relearn.lessons.n1, undefined, 'the old lesson must be invalidated');
+  await settle(); await settle();
+  assert.equal(adaptedCalls, 1);
+  assert.equal(relearn.lessons.n1.explanation, 'Explicación ajustada al historial');
+  assert.equal(relearn.lessons.n1.adaptation_mode, 'repair');
   console.log('OK: sufficiency v2, independent confirmation, bounded continuation and legacy compatibility');
 })().catch(error => { console.error(error); process.exitCode = 1; });
