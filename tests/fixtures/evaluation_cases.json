@@ -1,0 +1,281 @@
+{
+  "version": "assessment_reference_v1",
+  "note": "Criterios de referencia para revisión humana y evaluación del proveedor; los mocks no miden exactitud semántica. UNCERTAIN es conservador y se informa por separado. Ayudas, correcciones y falsa transferencia se prueban en authentic_assessment.test.js.",
+  "cases": [
+    {
+      "id": "alternative_method",
+      "task": "engineering",
+      "submission": {
+        "answer": "Cada metro son diez decímetros y cada decímetro diez centímetros: 7 × 10 × 10 = 700 cm. El pedido conserva los siete metros de cable.",
+        "final_value": "700",
+        "final_unit": "cm"
+      },
+      "expected": {
+        "method": [
+          "MET"
+        ],
+        "calculation": [
+          "MET"
+        ],
+        "units": [
+          "MET"
+        ],
+        "interpretation": [
+          "MET"
+        ]
+      },
+      "uncertainty_permitted": true
+    },
+    {
+      "id": "right_number_wrong_reason",
+      "task": "engineering",
+      "submission": {
+        "answer": "Divido siete entre cien porque un centímetro es mayor que un metro. Mi resultado es 700 cm.",
+        "final_value": "700",
+        "final_unit": "cm"
+      },
+      "expected": {
+        "method": [
+          "NOT_DEMONSTRATED"
+        ],
+        "calculation": [
+          "PARTIAL",
+          "NOT_DEMONSTRATED"
+        ],
+        "units": [
+          "PARTIAL",
+          "NOT_DEMONSTRATED"
+        ]
+      },
+      "uncertainty_permitted": true
+    },
+    {
+      "id": "right_procedure_wrong_unit",
+      "task": "engineering",
+      "submission": {
+        "answer": "Multiplico 7 por 100 para conservar la longitud: son 700 m en el formulario.",
+        "final_value": "700",
+        "final_unit": "m"
+      },
+      "expected": {
+        "units": [
+          "NOT_DEMONSTRATED"
+        ]
+      },
+      "uncertainty_permitted": true,
+      "deterministic_veto": [
+        "units"
+      ]
+    },
+    {
+      "id": "wrong_number",
+      "task": "engineering",
+      "submission": {
+        "answer": "Multiplico por cien y compruebo la longitud: son 701 cm.",
+        "final_value": "701",
+        "final_unit": "cm"
+      },
+      "expected": {
+        "calculation": [
+          "NOT_DEMONSTRATED"
+        ]
+      },
+      "uncertainty_permitted": true,
+      "deterministic_veto": [
+        "calculation"
+      ]
+    },
+    {
+      "id": "partially_valid",
+      "task": "engineering",
+      "submission": {
+        "answer": "Un metro equivale a cien centímetros. Multiplico 7 por 100.",
+        "final_value": "700",
+        "final_unit": "cm"
+      },
+      "expected": {
+        "method": [
+          "MET",
+          "PARTIAL"
+        ],
+        "interpretation": [
+          "PARTIAL",
+          "NOT_DEMONSTRATED"
+        ]
+      },
+      "uncertainty_permitted": true
+    },
+    {
+      "id": "unsupported_condition",
+      "task": "diagnosis",
+      "submission": {
+        "answer": "El sensor está perfectamente calibrado, por lo que la bomba ha fallado. Hay que sustituirla."
+      },
+      "expected": {
+        "information": [
+          "NOT_DEMONSTRATED",
+          "PARTIAL"
+        ],
+        "hypotheses": [
+          "NOT_DEMONSTRATED"
+        ],
+        "test": [
+          "NOT_DEMONSTRATED"
+        ],
+        "decision": [
+          "NOT_DEMONSTRATED",
+          "PARTIAL"
+        ]
+      },
+      "uncertainty_permitted": true
+    },
+    {
+      "id": "correlation_not_cause",
+      "task": "diagnosis",
+      "submission": {
+        "answer": "El cambio de turno causó el caudal bajo porque sucedieron a la vez."
+      },
+      "expected": {
+        "hypotheses": [
+          "NOT_DEMONSTRATED"
+        ],
+        "test": [
+          "NOT_DEMONSTRATED"
+        ],
+        "decision": [
+          "NOT_DEMONSTRATED"
+        ]
+      },
+      "uncertainty_permitted": true
+    },
+    {
+      "id": "discriminating_diagnosis",
+      "task": "diagnosis",
+      "submission": {
+        "answer": "Solo conocemos la lectura y la coincidencia temporal; faltan calibración y mediciones independientes. Puede haber un error del sensor o una reducción real del caudal. Pediría una medición independiente no invasiva ya autorizada: si sigue normal favorece el sensor; si también baja favorece una reducción real, cuya causa aún falta localizar. Priorizaría ese dato antes de atribuirlo al turno o intervenir."
+      },
+      "expected": {
+        "information": [
+          "MET"
+        ],
+        "hypotheses": [
+          "MET"
+        ],
+        "test": [
+          "MET"
+        ],
+        "decision": [
+          "MET"
+        ]
+      },
+      "uncertainty_permitted": true
+    },
+    {
+      "id": "evidence_argument",
+      "task": "history",
+      "submission": {
+        "answer": "D1 muestra más visitas, no mide lectura. D3 es una afirmación del promotor sin mediciones; no prueba alfabetización. D2 permite que el transporte explique parte del aumento. Los documentos apoyan un aumento de uso, pero no permiten atribuir una mejora de alfabetización a la biblioteca. Pediría medidas comparables de lectura antes y después y un grupo comparable."
+      },
+      "expected": {
+        "claim": [
+          "MET"
+        ],
+        "support": [
+          "MET"
+        ],
+        "reasoning": [
+          "MET"
+        ],
+        "limitations": [
+          "MET"
+        ]
+      },
+      "uncertainty_permitted": true
+    },
+    {
+      "id": "good_evidence_wrong_conclusion",
+      "task": "history",
+      "submission": {
+        "answer": "D1 mide visitas, D2 muestra un cambio de transporte y D3 no presenta medidas de lectura. El transporte es una alternativa que debemos considerar. Por tanto está demostrado que la biblioteca mejoró la alfabetización."
+      },
+      "expected": {
+        "claim": [
+          "NOT_DEMONSTRATED",
+          "PARTIAL"
+        ],
+        "support": [
+          "MET",
+          "PARTIAL"
+        ],
+        "reasoning": [
+          "NOT_DEMONSTRATED",
+          "PARTIAL"
+        ],
+        "limitations": [
+          "PARTIAL",
+          "NOT_DEMONSTRATED"
+        ]
+      },
+      "uncertainty_permitted": true
+    },
+    {
+      "id": "superficial_repetition",
+      "task": "history",
+      "submission": {
+        "answer": "La biblioteca nocturna mejoró la alfabetización porque mejoró la alfabetización."
+      },
+      "expected": {
+        "support": [
+          "NOT_DEMONSTRATED"
+        ],
+        "reasoning": [
+          "NOT_DEMONSTRATED"
+        ],
+        "limitations": [
+          "NOT_DEMONSTRATED"
+        ]
+      },
+      "uncertainty_permitted": true
+    },
+    {
+      "id": "ambiguous_response",
+      "task": "history",
+      "submission": {
+        "answer": "Puede que sí, depende."
+      },
+      "expected": {
+        "support": [
+          "NOT_DEMONSTRATED"
+        ],
+        "reasoning": [
+          "NOT_DEMONSTRATED"
+        ]
+      },
+      "uncertainty_permitted": true
+    },
+    {
+      "id": "new_representation",
+      "task": "transfer",
+      "submission": {
+        "answer": "Convierto a cm: 7 m son 700 cm y 102 mm son 10,2 cm. Quedan 689,8 cm, más que los 52 cm requeridos: alcanza. El sobrante es positivo y menor que los 700 cm originales.",
+        "final_value": "689.8",
+        "final_unit": "cm"
+      },
+      "expected": {
+        "method": [
+          "MET"
+        ],
+        "calculation": [
+          "MET"
+        ],
+        "units": [
+          "MET"
+        ],
+        "interpretation": [
+          "MET"
+        ]
+      },
+      "uncertainty_permitted": true
+    }
+  ]
+}

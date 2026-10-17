@@ -61,9 +61,11 @@ async function submit(g,answer='Respuesta'){const phase=g.session.mode,question=
  assert.equal(episode.stage,'PARENT_RETEST');assert.equal(p.verified(repairing,'a'),false);assert.equal(repairing.coverage[0].dimensions[0].evidence.filter(e=>e.evidence_scope==='repair_episode').length,0);
  const paused=p.normalizeGoal(JSON.parse(JSON.stringify(repairing)));assert.equal(p.selectTutorAction(paused,Date.now()).action,'RESUME_REPAIR');assert.equal(p.episodeActivity(paused.repairEpisodes[0]).phase,'PARENT_RETEST');global.fetch=normalFetch;
  // Sufficient evidence permits a harder task; it cannot grant transfer permission.
- const advanced=attach(goal());record(advanced);record(advanced);p.chooseNext(advanced,{focus:'a',reselect:true});await settle();
- assert.equal(advanced.session.confirmation.purpose,'challenge');assert.equal(calls.at(-1).body.difficulty,'challenge');assert.equal(p.activityContract(advanced.session.confirmation.question,'a','evidence_confirmation').supports_transfer,false);
- await submit(advanced);assert.ok(find('Desafío terminado. Puedes continuar; este intento no certifica transferencia ni expertise.'));
+ const advanced=attach(goal());record(advanced);record(advanced);
+ assert.equal(p.selectTutorAction(advanced,Date.now(),{focus:'a',reselect:true}).action,'AUTHENTIC','sufficient evidence now recommends a complete rubric task');
+ // Legacy challenge contracts remain usable in sessions already persisted by PR10.
+ const legacyChallenge=q('Reto anterior '+(++serial));legacyChallenge.activity_id='legacy-challenge';advanced.session.mode='CONFIRMATION';advanced.session.node='a';advanced.session.confirmation={node_id:'a',purpose:'challenge',attempts:0,target_dimension:'units',question:legacyChallenge};
+ assert.equal(p.activityContract(legacyChallenge,'a','evidence_confirmation').supports_transfer,false);await submit(advanced);assert.ok(find('Desafío terminado. Puedes continuar; este intento no certifica transferencia ni expertise.'));
  // Revisitable pending evidence and a persistent six-attempt cap, not an automatic reset on reload.
  const pending=attach(goal());record(pending);pending.session.adaptive={node_id:'a',attempts:6,reviews:0};
  assert.equal(p.selectTutorAction(pending,Date.now(),{reselect:true}).action,'CONTINUE');p.chooseNext(pending,{reselect:true});await settle();assert.ok(p.readyToAdvance(pending,'a'));assert.equal(p.verified(pending,'a'),false);
