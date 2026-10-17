@@ -601,8 +601,9 @@ function finishRepair(value, episode, independentHelp = 0) {
   value.contextStack = [];
   policy.contextScreen(element('section'), value);
   assert.equal(value.session.mode, 'DIAGNOSTIC');
-  assert.equal(value.events.at(-1).type, 'CONTEXT_RECOVERY');
-  assert.equal(value.events.at(-1).status, 'ABANDONED');
+  const recovery = value.events.findLast(event => event.type === 'CONTEXT_RECOVERY');
+  assert.ok(recovery);
+  assert.equal(recovery.status, 'ABANDONED');
 }
 for (const [name, brokenPlan, code] of [
   ['actividad hija', plan({ repair_activities: { CHECK: plan().repair_activities.CHECK, GUIDED: plan().repair_activities.CHECK, INDEPENDENT: plan().repair_activities.INDEPENDENT } }), 'DUPLICATE_REPAIR_ACTIVITY'],

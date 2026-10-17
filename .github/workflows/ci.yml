@@ -26,6 +26,11 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Test adaptive tutoring cycle and durable decisions
+        run: |
+          node tests/adaptive_cycle.test.js
+          python tests/adaptive_cycle.test.py
+
       - name: Run evidence policy tests
         run: node tests/evidence_policy.test.js
 
