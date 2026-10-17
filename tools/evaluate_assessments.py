@@ -15,8 +15,13 @@ def main():
     tasks=json.loads((ROOT/'tests/fixtures/authentic_tasks.json').read_text())
     cases=json.loads((ROOT/'tests/fixtures/evaluation_cases.json').read_text())['cases']
     if args.reproduce:
-        task=tasks['engineering'];task['parameters']['total_m']=8
-        task['prompt'],task['known_data'],task['demands']=assessment.quantitative_content(task['blueprint'],task['parameters'])
+        # Keep the checked-in fixture immutable. The four cases intentionally use
+        # a fresh, validated 8 m contract so the command is deterministic.
+        import copy
+        reproduced=copy.deepcopy(tasks['engineering'])
+        reproduced['parameters']['total_m']=8
+        reproduced['prompt'],reproduced['known_data'],reproduced['demands']=assessment.quantitative_content(reproduced['blueprint'],reproduced['parameters'])
+        tasks['engineering']=reproduced
         expression='8 m × 100 cm/m = 800 cm'
         cases=[{'id':'expression_8m','task':'engineering','submission':{'answer':expression,'final_value':'800','final_unit':'cm'},
                 'expected':{'method':['MET'],'calculation':['MET'],'units':['MET'],'interpretation':['PARTIAL','NOT_DEMONSTRATED']}},
