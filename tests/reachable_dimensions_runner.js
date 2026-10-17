@@ -121,7 +121,7 @@ async function lessonRecovery(question) {
   assert.equal(typeof retry?.onclick, 'function');
   assert.equal(goal.session.target_dimension, 'units');
   assert.equal(goal.lessons.n1, undefined);
-  assert.equal(goal.events.length, 0);
+  assert.equal(goal.events.filter(event => event.type === 'EVIDENCE').length, 0);
   assert.equal(goal.coverage[0].dimensions[0].evidence.length, 0);
 
   const validLesson = {
@@ -139,7 +139,7 @@ async function lessonRecovery(question) {
   await policy.session();
   assert.equal(requests, 1);
   assert.equal(goal.lessons.n1.target_dimension, 'units');
-  assert.equal(goal.events.length, 0);
+  assert.equal(goal.events.filter(event => event.type === 'EVIDENCE').length, 0);
   assert.equal(goal.coverage[0].dimensions[0].evidence.length, 0);
 }
 

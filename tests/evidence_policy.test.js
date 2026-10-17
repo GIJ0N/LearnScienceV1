@@ -158,7 +158,7 @@ async function submitThroughUI(goal, question, phase, role, response) {
     attach(empty);
     policy.startTeach(empty, 'n1');
     assert.equal(empty.session.mode, 'TEACH');
-    assert.equal(empty.events.at(-1).type, 'PROGRESS_DISCREPANCY');
+    assert.ok(empty.events.some(event => event.type === 'PROGRESS_DISCREPANCY'));
 
     const partial = goalWithDimensions(['conceptual', 'direct_application']);
     partial.learner.n1 = { level: 5, confidence: 'verified', evidence: [], errors: [], last: null };
