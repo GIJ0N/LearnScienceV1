@@ -330,10 +330,13 @@ function validAuthenticTask(t,nodeId){
 }
 function authenticTask(goal,id){return (goal.authentic_tasks||[]).find(t=>t.task_id===id)}
 function authenticAttempts(goal,taskId){return (goal.authentic_attempts||[]).filter(a=>a.task_id===taskId)}
-function authenticPassed(a){return Boolean(a&&!a.disputed&&a.independent&&a.evaluation?.valid&&a.evaluation.criteria?.length===4&&a.evaluation.criteria.every(r=>r.status==='MET'))}
+function authenticCriterionKnown(result,row){return Boolean(row&&row.status!=='UNCERTAIN'&&row.certainty==='supported'&&(result.valid||result.version==='rubric_evaluation_v1.1'&&['COMPLETE','PARTIAL'].includes(result.evaluation_state)))}
+function authenticCriterionFailed(result,row){return authenticCriterionKnown(result,row)&&['PARTIAL','NOT_DEMONSTRATED'].includes(row.status)}
+function authenticAggregate(result,rows=result.criteria){return rows.some(r=>authenticCriterionFailed(result,r))?'PARTIAL':rows.every(r=>authenticCriterionKnown(result,r)&&r.status==='MET')?'CORRECT':'UNKNOWN'}
+function authenticPassed(a){return Boolean(a&&!a.disputed&&a.independent&&a.evaluation?.valid&&a.evaluation.criteria?.length===4&&a.evaluation.criteria.every(r=>authenticCriterionKnown(a.evaluation,r)&&r.status==='MET'))}
 function authenticProgress(goal,nodeId){
  const tasks=(goal.authentic_tasks||[]).filter(t=>t.node_id===nodeId),attempts=(goal.authentic_attempts||[]).filter(a=>tasks.some(t=>t.task_id===a.task_id));
- const latest=attempts.at(-1),task=authenticTask(goal,latest?.task_id),failed=latest&&!latest.disputed&&latest.evaluation?.valid?latest.evaluation.criteria.find(r=>['PARTIAL','NOT_DEMONSTRATED'].includes(r.status)):null;
+ const latest=attempts.at(-1),task=authenticTask(goal,latest?.task_id),failed=latest&&!latest.disputed?latest.evaluation.criteria.find(r=>authenticCriterionFailed(latest.evaluation,r)):null;
  return {tasks,latest,task,failed,application:attempts.some(authenticPassed),transfer:attempts.some(a=>authenticPassed(a)&&a.transfer_demonstrated&&(goal.authentic_attempts||[]).some(source=>source.attempt_id===a.evaluation.source_attempt_id&&authenticPassed(source))),candidate:tasks.some(t=>t.relation.status==='CANDIDATE')}
 }
 function startAuthentic(goal,id,options={}){
@@ -346,17 +349,20 @@ function startAuthentic(goal,id,options={}){
  save();page='session';render();return true
 }
 function validateAuthenticResult(task,pending,result){
- if(!result||result.version!=='rubric_evaluation_v1'||result.task_id!==task.task_id||result.task_version!==task.version||result.attempt_id!==pending.attempt_id||typeof result.valid!=='boolean'||!Array.isArray(result.criteria)||result.criteria.length!==task.rubric.length)throw policyError('INVALID_RUBRIC_RESULT','La evaluación no corresponde al contrato.');
+ if(!result||!['rubric_evaluation_v1','rubric_evaluation_v1.1'].includes(result.version)||result.task_id!==task.task_id||result.task_version!==task.version||result.attempt_id!==pending.attempt_id||typeof result.valid!=='boolean'||!Array.isArray(result.criteria)||result.criteria.length!==task.rubric.length)throw policyError('INVALID_RUBRIC_RESULT','La evaluación no corresponde al contrato.');
+ const mixed=result.version==='rubric_evaluation_v1.1';
+ if(mixed){const count=result.criteria.filter(r=>r.status!=='UNCERTAIN').length,expected=count===task.rubric.length?'COMPLETE':count?'PARTIAL':'UNAVAILABLE';if(result.evaluation_state!==expected||result.valid!==(expected==='COMPLETE'))throw policyError('INVALID_RUBRIC_RESULT','El estado global contradice los resultados individuales.');}
  const ids=new Set();for(const row of result.criteria){const criterion=task.rubric.find(c=>c.id===row.criterion_id);if(!criterion||ids.has(row.criterion_id)||!['MET','PARTIAL','NOT_DEMONSTRATED','UNCERTAIN'].includes(row.status))throw policyError('INVALID_RUBRIC_RESULT','Criterios desconocidos, repetidos o incompletos.');ids.add(row.criterion_id);
-  if(!result.valid&&row.status!=='UNCERTAIN')throw policyError('INVALID_RUBRIC_RESULT','Una evaluación inválida no puede mostrar criterios acreditados.');
-  if(result.valid){const deterministic=task.blueprint&&((criterion.id==='calculation'&&row.validator==='decimal_exact_v1')||(criterion.id==='units'&&row.validator==='requested_unit_v1'));
-   if(row.status==='UNCERTAIN'||row.certainty!=='supported'||!row.reason||(!deterministic&&['MET','PARTIAL'].includes(row.status)&&(!row.quote||!pending.submission.answer.includes(row.quote)))||(row.quote&&!pending.submission.answer.includes(row.quote)))throw policyError('INVALID_RUBRIC_RESULT','Un juicio incierto o sin evidencia no puede acreditar desempeño.');
+  if(!mixed&&!result.valid&&row.status!=='UNCERTAIN')throw policyError('INVALID_RUBRIC_RESULT','Una evaluación inválida no puede mostrar criterios acreditados.');
+  if(row.status!=='UNCERTAIN'){const deterministic=['length_conversion_v1','length_planning_v1'].includes(task.blueprint)&&((criterion.id==='calculation'&&row.validator==='decimal_exact_v1')||(criterion.id==='units'&&row.validator==='requested_unit_v1'));
+   if(row.certainty!=='supported'||!String(row.reason||'').trim()||(['MET','PARTIAL'].includes(row.status)&&(!row.quote||!pending.submission.answer.includes(row.quote)))||(row.quote&&!pending.submission.answer.includes(row.quote)))throw policyError('INVALID_RUBRIC_RESULT','Un juicio incierto o sin evidencia no puede acreditar desempeño.');
+   if(mixed&&row.status==='NOT_DEMONSTRATED'&&!row.quote&&!(deterministic&&row.checks?.some(c=>c.validator===row.validator&&c.status==='FAIL'))&&row.error!=='missing')throw policyError('INVALID_RUBRIC_RESULT','Un juicio negativo necesita evidencia u omisión explícita.');
   }
  }return result
 }
 function authenticEvidence(goal,task,attempt,dimension,status,independent,extra={}){
  const contract=normalizeActivityContract({activity_id:task.task_id+':'+dimension,node_id:task.node_id,stage:'AUTHENTIC',kind:'context_case',observable_dimensions:dimension==='parent'?[]:[dimension],supports_independence:independent,supports_transfer:dimension==='transfer',is_novel_variant:dimension==='transfer',role:'authentic_assessment',question_prompt:task.prompt,question_reference:task.rubric.map(c=>c.requirement).join(' ')});
- const prepared=prepareRecord(goal,task.node_id,'AUTHENTIC',attempt.submission.answer,{status,error_type:status==='PARTIAL'?dimension:'none',feedback:attempt.evaluation.reason,evaluator_version:'rubric_evaluation_v1'},independent?0:1,contract,attempt.attempt_id+':'+dimension);
+ const prepared=prepareRecord(goal,task.node_id,'AUTHENTIC',attempt.submission.answer,{status,error_type:status==='PARTIAL'?dimension:'none',feedback:attempt.evaluation.reason,evaluator_version:attempt.evaluation.version},independent?0:1,contract,attempt.attempt_id+':'+dimension);
  Object.assign(prepared.event,{assessment_attempt_id:attempt.attempt_id,task_id:task.task_id,task_version:task.version,assessment_policy_version:AUTHENTIC_POLICY_VERSION,source_task_id:task.source_task_id,...extra});return commitRecord(goal,task.node_id,prepared)
 }
 function commitAuthenticResult(goal,task,pending,result){
@@ -365,24 +371,24 @@ function commitAuthenticResult(goal,task,pending,result){
  if((goal.authentic_attempts||[]).some(a=>a.attempt_id===pending.attempt_id))return false;
  validateAuthenticResult(task,pending,result);
  return goalTransaction(goal,()=>{
-  const independent=pending.assisted_criteria.length===0,allMet=result.valid&&result.criteria.every(r=>r.status==='MET');
+  const independent=pending.assisted_criteria.length===0,aggregate=authenticAggregate(result),allMet=result.valid&&aggregate==='CORRECT';
   const source=authenticTask(goal,task.source_task_id),sourceAttempt=(goal.authentic_attempts||[]).find(a=>a.attempt_id===result.source_attempt_id&&a.task_id===source?.task_id);
   // Local whitelist mirrors the backend's registered pair. Provider novelty labels alone have no authority.
   const verifiedTransfer=allMet&&independent&&result.transfer_eligible===true&&task.purpose==='transfer'&&source?.node_id===task.node_id&&source?.blueprint==='length_conversion_v1'&&task.blueprint==='length_planning_v1'&&authenticPassed(sourceAttempt);
-  const attempt={attempt_id:pending.attempt_id,task_id:task.task_id,submission:cloneData(pending.submission),assisted_criteria:[...pending.assisted_criteria],independent,at:Date.now(),evaluation:cloneData(result),disputed:false,transfer_demonstrated:verifiedTransfer};
+  const attempt={attempt_id:pending.attempt_id,task_id:task.task_id,submission:cloneData(pending.submission),assisted_criteria:[...pending.assisted_criteria],independent,at:Date.now(),evaluation:cloneData(result),disputed:false,transfer_demonstrated:verifiedTransfer,reevaluation_of:pending.reevaluation_of||null};
   goal.authentic_attempts=goal.authentic_attempts||[];goal.authentic_attempts.push(attempt);
   // Each dimension is judged only from its own criteria; invalid/uncertain evaluation creates no positive evidence.
   for(const dim of [...new Set(task.rubric.map(c=>c.dimension))]){
-   const rows=task.rubric.filter(c=>c.dimension===dim).map(c=>result.criteria.find(r=>r.criterion_id===c.id)),status=!result.valid?'UNKNOWN':(dim==='contextual_application'?allMet:rows.every(r=>r.status==='MET'))?'CORRECT':'PARTIAL';
+   const rows=task.rubric.filter(c=>c.dimension===dim).map(c=>result.criteria.find(r=>r.criterion_id===c.id)),status=dim==='contextual_application'?aggregate:authenticAggregate(result,rows);
    const helped=task.rubric.filter(c=>c.dimension===dim).some(c=>pending.assisted_criteria.includes(c.id));
    authenticEvidence(goal,task,attempt,dim,status,!helped)
   }
-  if(!task.rubric.some(c=>c.dimension==='contextual_application'))authenticEvidence(goal,task,attempt,'contextual_application',!result.valid?'UNKNOWN':allMet?'CORRECT':'PARTIAL',independent);
+  if(!task.rubric.some(c=>c.dimension==='contextual_application'))authenticEvidence(goal,task,attempt,'contextual_application',aggregate,independent);
   if(verifiedTransfer)authenticEvidence(goal,task,attempt,'transfer','CORRECT',true,{novelty_policy_version:'near_transfer_registry_v1',source_attempt_id:sourceAttempt.attempt_id});
-  const parent=authenticEvidence(goal,task,attempt,'parent',!result.valid?'UNKNOWN':allMet?'CORRECT':'PARTIAL',independent);attempt.parent_attempt_id=parent.attempt_id;
+  const parent=authenticEvidence(goal,task,attempt,'parent',aggregate,independent);attempt.parent_attempt_id=parent.attempt_id;
   goal.events.push({type:'FEEDBACK_EXPOSURE',node_id:task.node_id,task_id:task.task_id,at:Date.now(),policy_version:AUTHENTIC_POLICY_VERSION});
   active.pending_attempt=null;active.attempts+=1;active.assisted_criteria=[];
-  rememberDecision(goal,{...selectTutorAction(goal,Date.now(),{focus:task.node_id,reselect:true}),action:!result.valid?'ASSESSMENT_PENDING':allMet?'APPLICATION_DEMONSTRATED':'RUBRIC_REPAIR',policy_version:AUTHENTIC_POLICY_VERSION,reason:!result.valid?'El evaluador no pudo fundamentar el resultado. Conservamos la respuesta sin acreditar ni penalizar.':allMet?(independent?'Has satisfecho los criterios sin ayuda declarada. La transferencia y la retención se comprueban por separado.':'Satisficiste los criterios con apoyo; falta comprobar ejecución independiente.'):'Practica el criterio pendiente y después vuelve a resolver la tarea completa.'});
+  rememberDecision(goal,{...selectTutorAction(goal,Date.now(),{focus:task.node_id,reselect:true}),action:aggregate==='UNKNOWN'?'ASSESSMENT_PENDING':allMet?'APPLICATION_DEMONSTRATED':'RUBRIC_REPAIR',policy_version:AUTHENTIC_POLICY_VERSION,reason:aggregate==='UNKNOWN'?'Quedan criterios inciertos. Conservamos los resultados fundamentados; puedes reintentar la evaluación sin penalización por incertidumbre.':allMet?(independent?'Has satisfecho los criterios sin ayuda declarada. La transferencia y la retención se comprueban por separado.':'Satisficiste los criterios con apoyo; falta comprobar ejecución independiente.'):'Hay un criterio pendiente fundamentado. Practícalo y después vuelve a resolver la tarea completa.'});
   save();return true
  })
 }
@@ -396,7 +402,7 @@ function disputeAuthentic(goal,task,attempt,reason){
 }
 async function repairAuthentic(goal,task,attempt,criterionId){
  const criterion=task.rubric.find(c=>c.id===criterionId),row=attempt.evaluation.criteria.find(r=>r.criterion_id===criterionId),parent=goal.events.find(e=>e.attempt_id===attempt.parent_attempt_id);
- if(!criterion||!['PARTIAL','NOT_DEMONSTRATED'].includes(row?.status)||!parent||attempt.disputed||topContext(goal)||goal.session.authentic.attempts>=3)return;
+ if(!criterion||!authenticCriterionFailed(attempt.evaluation,row)||!parent||attempt.disputed||topContext(goal)||goal.session.authentic.attempts>=3)return;
  const question={prompt:task.prompt,reference:criterion.requirement,kind:CONFIRMATION_KINDS[criterion.dimension]||'explanation',observable_dimensions:[criterion.dimension]};
  await taskAction('Preparando práctica del criterio…',async()=>{
   const plan=await api('/api/context/create',{question,answer:attempt.submission.answer,feedback:'Criterio a reparar: '+criterion.requirement+' Juicio: '+row.reason,error_type:criterion.dimension,parent_node_id:task.node_id,nearby_prerequisites:[]});
@@ -428,12 +434,20 @@ async function authenticView(box,goal,node){
  box.append(E('p','Condiciones: '+current.constraints.join(' ')),E('p','Herramientas permitidas: '+current.conditions.allowed_tools.join(', ')),E('small','Las herramientas de accesibilidad no cuentan como ayuda. Las pistas sobre el método o la solución sí deben declararse.'),E('p','Relación entre tareas: '+current.relation.status+' · '+current.relation.basis));
  for(const criterion of current.rubric)box.append(E('p',criterion.id+': '+criterion.requirement));
  const latest=authenticAttempts(goal,current.task_id).at(-1);
- if(latest){
+ if(latest&&!sessionState.pending_attempt){
   box.append(E('h3','Resultados por criterio'),E('p',latest.disputed?'Evaluación cuestionada: evidencia suspendida hasta una nueva comprobación.':latest.evaluation.reason));
-  for(const row of latest.evaluation.criteria)box.append(E('p',row.criterion_id+': '+({MET:'demostrado',PARTIAL:'parcial',NOT_DEMONSTRATED:'pendiente',UNCERTAIN:'incierto'}[row.status])+'. '+row.reason),E('small',row.quote?'Evidencia de tu respuesta: «'+row.quote+'»':'Comprobación: '+row.validator));
+  if(latest.evaluation.evaluation_state)box.append(E('p','Estado de evaluación: '+({COMPLETE:'completa',PARTIAL:'parcialmente verificable',UNAVAILABLE:'pendiente de verificación'}[latest.evaluation.evaluation_state])));
+  for(const row of latest.evaluation.criteria){box.append(E('p',row.criterion_id+': '+({MET:'demostrado',PARTIAL:'parcial',NOT_DEMONSTRATED:'pendiente',UNCERTAIN:'incierto'}[row.status])+'. '+row.reason),E('small',row.quote?'Evidencia de tu respuesta: «'+row.quote+'»':'Comprobación: '+row.validator));
+   for(const check of row.checks||[])box.append(E('small',` · ${check.validator} (${check.source}): ${check.status}`));
+  }
+  const diagnostics=[...(latest.evaluation.diagnostics||[]),...latest.evaluation.criteria.flatMap(r=>r.diagnostics||[])];
+  if(diagnostics.length)box.append(E('p','Diagnóstico técnico: '+[...new Set(diagnostics.map(d=>(d.criterion_id?d.criterion_id+': ':'')+d.code))].join(' · ')));
   box.append(E('p',authenticPassed(latest)?'Aplicación independiente demostrada en esta tarea.':'Aplicación independiente aún pendiente.'),E('p',latest.transfer_demonstrated&&!latest.disputed&&(goal.authentic_attempts||[]).some(source=>source.attempt_id===latest.evaluation.source_attempt_id&&authenticPassed(source))?'Transferencia cercana demostrada bajo el par de tareas definido. No acredita expertise.':'Transferencia no acreditada.'));
-  const failed=!latest.disputed&&latest.evaluation.valid&&latest.evaluation.criteria.find(r=>['PARTIAL','NOT_DEMONSTRATED'].includes(r.status));
+  const failed=!latest.disputed&&latest.evaluation.criteria.find(r=>authenticCriterionFailed(latest.evaluation,r));
   if(failed&&sessionState.attempts<3)box.append(B('Practicar criterio: '+failed.criterion_id,()=>repairAuthentic(goal,current,latest,failed.criterion_id)));
+  if(!latest.disputed&&!latest.evaluation.valid&&sessionState.attempts<3)box.append(B('Reevaluar criterios pendientes',()=>{
+   sessionState.pending_attempt={attempt_id:newId('assessment'),submission:cloneData(latest.submission),assisted_criteria:[...latest.assisted_criteria],reevaluation_of:latest.attempt_id};save();render()
+  },true));
   if(sessionState.attempts<3)box.append(B('Reintentar tarea completa',()=>startAuthentic(goal,node.id,{source_task_id:current.task_id,purpose:'retry',attempts:sessionState.attempts}),true));
   if(authenticPassed(latest)&&sessionState.attempts<3)box.append(B('Intentar una situación nueva',()=>startAuthentic(goal,node.id,{source_task_id:current.task_id,purpose:'transfer',attempts:sessionState.attempts})));
   if(!latest.disputed){const dispute=E('textarea');dispute.placeholder='Explica qué criterio consideras mal evaluado';box.append(dispute,B('Cuestionar esta evaluación',()=>disputeAuthentic(goal,current,latest,dispute.value),true))}
@@ -442,7 +456,7 @@ async function authenticView(box,goal,node){
  }
  const pending=sessionState.pending_attempt,answer=E('textarea'),number=E('input'),unit=E('input');answer.placeholder='Tu solución, razonamiento y justificación';answer.value=pending?.submission.answer||sessionState.draft||'';answer.oninput=()=>{sessionState.draft=answer.value;save()};box.append(answer);
  if(current.family==='quantitative'&&current.blueprint){number.placeholder='Resultado numérico final';unit.placeholder='Unidad final';number.value=pending?.submission.final_value||sessionState.final_value||'';unit.value=pending?.submission.final_unit||sessionState.final_unit||'';number.oninput=()=>{sessionState.final_value=number.value;save()};unit.oninput=()=>{sessionState.final_unit=unit.value;save()};box.append(number,unit)}
- for(const criterion of current.rubric){const label=E('label'),check=E('input');check.type='checkbox';check.style.width='auto';check.checked=sessionState.assisted_criteria.includes(criterion.id);check.disabled=Boolean(pending);check.onchange=()=>{sessionState.assisted_criteria=check.checked?[...new Set([...sessionState.assisted_criteria,criterion.id])]:sessionState.assisted_criteria.filter(id=>id!==criterion.id);save()};label.append(check,' Recibí una pista sobre '+criterion.id);box.append(label,E('br'))}
+ for(const criterion of current.rubric){const label=E('label'),check=E('input');check.type='checkbox';check.style.width='auto';check.checked=(pending?.assisted_criteria||sessionState.assisted_criteria).includes(criterion.id);check.disabled=Boolean(pending);check.onchange=()=>{sessionState.assisted_criteria=check.checked?[...new Set([...sessionState.assisted_criteria,criterion.id])]:sessionState.assisted_criteria.filter(id=>id!==criterion.id);save()};label.append(check,' Recibí una pista sobre '+criterion.id);box.append(label,E('br'))}
  answer.disabled=number.disabled=unit.disabled=Boolean(pending);
  box.append(B(pending?'Reintentar evaluación pendiente':'Evaluar con rúbrica',()=>taskAction('Evaluando los criterios…',async()=>{
   if(!answer.value.trim())throw Error('Escribe tu respuesta.');

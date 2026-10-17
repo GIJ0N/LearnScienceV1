@@ -55,7 +55,9 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(result['criteria'][2]['status'],'PARTIAL','correct final unit cannot erase incorrect dimensional reasoning')
         for value in ['NaN','Infinity','','1e999']:
             result=a.evaluate_task(task,{'answer':answer,'final_value':value,'final_unit':'cm'},'attempt-1',lambda *args:raw_result(task,answer))
-            self.assertFalse(result['valid']);self.assertTrue(all(r['status']=='UNCERTAIN' for r in result['criteria']))
+            self.assertFalse(result['valid'])
+            self.assertEqual(result['criteria'][1]['status'],'UNCERTAIN')
+            self.assertEqual(result['criteria'][0]['status'],'MET','a missing number must not erase a grounded method judgment')
 
     def test_alternative_method_not_rejected_by_exact_answer_text(self):
         task=TASKS['engineering'];answer='Cada metro son diez decímetros y cada decímetro diez centímetros: 7 × 10 × 10 = 700 cm; conservo la longitud pedida.'
@@ -71,7 +73,9 @@ class ContractTests(unittest.TestCase):
         for change in changes:
             raw=raw_result(task,answer);change(raw)
             result=a.normalize_evaluation(task,answer,'attempt-1',raw)
-            self.assertFalse(result['valid']);self.assertTrue(all(r['status']=='UNCERTAIN' for r in result['criteria']))
+            self.assertFalse(result['valid']);self.assertTrue(any(r['status']=='UNCERTAIN' for r in result['criteria']))
+            self.assertTrue(result['diagnostics'] or any(r['diagnostics'] for r in result['criteria']))
+            self.assertFalse(a.all_met({'evaluation':result,'independent':True}))
         result=a.evaluate_task(task,{'answer':task['prompt']},'attempt-1',lambda *args:self.fail('copying prompt is not evaluable performance'))
         self.assertFalse(result['valid'])
 
@@ -104,7 +108,9 @@ class DurableEndpointTests(unittest.TestCase):
                     with self.assertRaises(urllib.error.HTTPError):post('/api/assessment/evaluate',{**payload,'submission':{**payload['submission'],'answer':'Otra respuesta'}})
                     with self.assertRaises(urllib.error.HTTPError):post('/api/assessment/evaluate',{**payload,'profile_id':other['profile_id']})
                 with patch.object(app,'gemini',side_effect=ValueError('Proveedor no disponible')):
-                    with self.assertRaises(urllib.error.HTTPError):post('/api/assessment/evaluate',{**payload,'attempt_id':'failure'})
+                    unavailable=post('/api/assessment/evaluate',{**payload,'attempt_id':'failure'})['evaluation']
+                    self.assertEqual(unavailable['evaluation_state'],'UNAVAILABLE')
+                    self.assertEqual(unavailable['diagnostics'][0]['code'],'PROVIDER_UNAVAILABLE')
                 self.assertEqual(memory.history(profile['profile_id']),[],'endpoint evaluation alone never fabricates learning evidence')
                 app.set_memory_for_tests(DurableMemory(Path(directory)/'db.sqlite3'))
                 self.assertEqual(post('/api/profile/load',{'profile_id':profile['profile_id']})['store']['goals'][0]['authentic_tasks'],[task])

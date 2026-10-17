@@ -30,6 +30,7 @@ jobs:
         run: |
           node tests/authentic_assessment.test.js
           python tests/authentic_assessment.test.py
+          python tests/assessment_mixed.test.py
           python tools/evaluate_assessments.py
 
       - name: Test adaptive tutoring cycle and durable decisions

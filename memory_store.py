@@ -9,7 +9,7 @@ import sqlite3
 import threading
 import time
 import uuid
-from assessment_service import validate_task, EVALUATION_VERSION
+from assessment_service import validate_task, EVALUATION_VERSIONS
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -132,7 +132,7 @@ def validate_store(raw, profile_id):
             if not isinstance(attempt, dict) or not attempt.get("attempt_id") or attempt["attempt_id"] in assessment_ids or attempt.get("task_id") not in task_ids:
                 raise ValueError("Identidad de evaluación auténtica inválida.")
             evaluation = attempt.get("evaluation", {})
-            if evaluation.get("version") != EVALUATION_VERSION or evaluation.get("attempt_id") != attempt["attempt_id"] or evaluation.get("task_id") != attempt["task_id"]:
+            if evaluation.get("version") not in EVALUATION_VERSIONS or evaluation.get("attempt_id") != attempt["attempt_id"] or evaluation.get("task_id") != attempt["task_id"]:
                 raise ValueError("La evaluación no corresponde a su tarea e intento.")
             assessment_ids.add(attempt["attempt_id"])
         episodes = goal.get("repairEpisodes", [])
