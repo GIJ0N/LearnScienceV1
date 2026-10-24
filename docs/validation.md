@@ -20,9 +20,15 @@ node tests/evidence_sufficiency.test.js
 python tests/evidence_confirmation.test.py
 python tests/adaptive_lesson.test.py
 python tests/reachable_dimensions.test.py
+node tests/delayed_review.test.js
+python tests/delayed_review_backend.test.py
 python tests/durable_memory.test.py
 node tests/durable_memory_frontend.test.js
 node tests/microtutoring_repair_episode.test.js
+node tests/repair_teaching_v2.test.js
+python tests/repair_teaching_backend.test.py
+node tests/repair_diagnosis_recovery.test.js
+python tests/repair_diagnosis_recovery_backend.test.py
 node --check app.js
 python app_legacy.py --self-test
 python -m py_compile app_legacy.py
@@ -40,6 +46,10 @@ Git almacena los archivos de este repositorio con LF, pero un checkout de Window
 
 `python tests/durable_memory.test.py` usa una base SQLite temporal. Verifica persistencia tras reinicio, aislamiento de perfiles, respuesta y evaluación completas, conflicto de revisión sin sobreescritura, importación idempotente sin evidencia inventada, exportación/restauración y contexto de memoria acotado con procedencia. `node tests/durable_memory_frontend.test.js` verifica el error visible de escritura, su recuperación, la asociación de perfil y la pausa de una sesión breve sin escribir el progreso completo en `localStorage`.
 
+`node tests/repair_teaching_v2.test.js` recorre diagnóstico, selección de laguna, enseñanza, omisión mediante CHECK, ayuda guiada, retirada de apoyo, actividad independiente alternativa, retorno al padre, pausa, recarga, checkpoint e idempotencia. `python tests/repair_teaching_backend.test.py` usa respuestas controladas y valida los dos contratos del generador y la persistencia durable. Ninguna de estas pruebas llama a Gemini.
+
+`node tests/repair_diagnosis_recovery.test.js` verifica error de red, contrato inválido, reintento, doble clic, respuesta tardía, recarga, pausa y fallos de persistencia del diagnóstico inicial. `python tests/repair_diagnosis_recovery_backend.test.py` valida que el estado pendiente solo pueda apuntar al intento y actividad padre existentes. Un diagnóstico pendiente no es un episodio y no añade evidencia.
+
 La misma secuencia se ejecuta en `.github/workflows/ci.yml`. Si falta una suite, falla un comando o no se puede usar la versión fijada de Node.js/Python, el paso correspondiente termina con error y el job falla. No se silencian errores ni se convierten en advertencias.
 
 ## Respuestas simuladas y Gemini
@@ -53,6 +63,7 @@ Una validación `BLOCKED` significa que una prueba no se pudo ejecutar por falta
 - No hay una prueba completa de navegador en CI.
 - No se evalúan respuestas reales de Gemini.
 - La detección de novedad de microtutoría es textual y conservadora; no afirma equivalencia semántica total.
+- La detección de copias en ejemplos y pistas también es textual. Una aceptación con Gemini debe revisar manualmente que el ejemplo no filtre la solución del padre ni de la actividad independiente.
 - Los servicios modulares extraídos todavía no son la ruta ejecutable principal.
 - `config.py` y `gemini_client.py` conservan errores de sintaxis legacy preexistentes en `main`; quedan fuera de esta validación y no se modifican.
 
@@ -81,3 +92,23 @@ del proveedor siguen simuladas; estas pruebas no validan aprendizaje humano ni n
 ## Microlecciones adaptadas según evidencia durable
 
 Cuando un usuario solicita volver a aprender, se genera una microlección nueva usando hasta cinco intentos recientes almacenados en SQLite para el nodo y, si existe, la dimensión objetivo. Un error reciente elige refuerzo, una respuesta asistida elige apoyo gradual, un acierto independiente elige consolidación y la evidencia ausente o legacy incompleta conserva enseñanza inicial. Esta adaptación solo modifica el contenido y muestra su razón: no acredita dominio ni sustituye los contratos de evidencia v2. El proveedor real todavía requiere prueba manual.
+
+## Repaso diferido verificable
+
+El flujo registra un primer repaso desde un intento correcto de integración
+aceptado para el nodo. La programación es idempotente y conserva el intento
+de origen, la fecha de origen, la última exposición conocida, el vencimiento,
+las fechas de presentación y respuesta, la ayuda y `delayed_review_v1`.
+
+`required` sigue significando que una dimensión debe ser suficiente según
+Evidence Policy v1; no implica independencia configurable por meta. La
+independencia se exige según la política por dimensión. La programación o la
+espera no acreditan dominio. La interfaz distingue práctica inmediata,
+recuperación diferida observada y demora no verificable. Los datos legacy sin
+ancla temporal quedan en la última categoría y no reciben evidencia inventada.
+
+Para probarlo sin esperar un día, ejecuta `node tests/delayed_review.test.js`.
+La prueba inyecta un reloj local y comprueba el estado antes, en y después del
+vencimiento, ayuda, fechas inválidas o futuras, contratos dirigidos y
+persistencia de los campos en una normalización v4. El reloj del equipo no se
+modifica y el resultado no demuestra retención humana.

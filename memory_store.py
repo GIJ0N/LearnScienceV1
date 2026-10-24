@@ -114,6 +114,23 @@ def validate_store(raw, profile_id):
                 if evidence_id in evidence_ids:
                     raise ValueError("El respaldo contiene evidence_id duplicados.")
                 evidence_ids.add(evidence_id)
+        pending = goal.get("pending_repair_diagnosis")
+        if pending is not None:
+            if not isinstance(pending, dict) or pending.get("version") != "repair_diagnosis_recovery_v1":
+                raise ValueError("El diagnóstico pendiente tiene una versión incompatible.")
+            if pending.get("status") not in {"PENDING", "REQUESTING", "ERROR", "POSTPONED"}:
+                raise ValueError("El diagnóstico pendiente tiene un estado inválido.")
+            if not pending.get("request_id") or not isinstance(pending.get("request"), dict):
+                raise ValueError("El diagnóstico pendiente no conserva su solicitud.")
+            if pending.get("parent_node_id") not in allowed_nodes:
+                raise ValueError("El diagnóstico pendiente apunta a un nodo inexistente.")
+            if str(pending.get("parent_attempt_id") or "") not in goal_attempt_ids:
+                raise ValueError("El diagnóstico pendiente apunta a un intento padre inexistente.")
+            parent = next((event for event in events if str(event.get("attempt_id") or "") == str(pending.get("parent_attempt_id") or "")), None)
+            if not parent or str(parent.get("activity_id") or "") != str(pending.get("parent_activity_id") or ""):
+                raise ValueError("El diagnóstico pendiente no corresponde a la actividad padre.")
+            pending["profile_id"] = profile_id
+            pending["goal_id"] = goal["id"]
         episodes = goal.get("repairEpisodes", [])
         if not isinstance(episodes, list):
             raise ValueError("Los episodios de reparación son inválidos.")
@@ -124,11 +141,39 @@ def validate_store(raw, profile_id):
                 raise ValueError("El episodio de reparación apunta a un nodo inexistente.")
             if episode.get("parent_attempt_id") is not None and str(episode.get("parent_attempt_id")) not in goal_attempt_ids:
                 raise ValueError("El episodio de reparación apunta a un intento padre inexistente.")
+            plan_version = episode.get("plan_version") or "microtutoring_repair_episode_v1"
+            if plan_version == "repair_teaching_v2":
+                gaps = episode.get("suspected_gaps", [])
+                gap_ids = {str(item.get("gap_id")) for item in gaps if isinstance(item, dict) and item.get("gap_id")}
+                selected = episode.get("selected_gap")
+                if selected is not None and (not isinstance(selected, dict) or str(selected.get("gap_id") or "") not in gap_ids):
+                    raise ValueError("La enseñanza apunta a una laguna inexistente.")
+                package = episode.get("teaching_package")
+                if package is not None:
+                    if not isinstance(package, dict) or package.get("plan_version") != "repair_teaching_v2":
+                        raise ValueError("El paquete de enseñanza tiene una versión incompatible.")
+                    selected_id = str(selected.get("gap_id") or "") if isinstance(selected, dict) else ""
+                    if not selected_id or str(package.get("gap_id") or "") != selected_id or str(episode.get("plan_gap_id") or "") != selected_id:
+                        raise ValueError("El paquete de enseñanza no corresponde a la laguna seleccionada.")
+                    activities = package.get("repair_activities")
+                    if not isinstance(activities, dict) or any(not isinstance(activities.get(stage), dict) for stage in ("CHECK", "GUIDED", "INDEPENDENT")):
+                        raise ValueError("El paquete de enseñanza no contiene todas las actividades.")
+                    retries = package.get("independent_retries")
+                    if not isinstance(retries, list) or len(retries) != 1 or not isinstance(retries[0], dict):
+                        raise ValueError("El paquete no conserva la actividad independiente alternativa.")
+                checkpoint = episode.get("attempt_checkpoint")
+                if checkpoint is not None:
+                    if not isinstance(checkpoint, dict) or not checkpoint.get("attempt_id") or checkpoint.get("status") not in {"EVALUATING", "EVALUATED", "APPLYING", "APPLIED"}:
+                        raise ValueError("El checkpoint del intento de reparación es inválido.")
+                    if checkpoint.get("status") in {"EVALUATED", "APPLYING", "APPLIED"} and not isinstance(checkpoint.get("evaluation"), dict):
+                        raise ValueError("El checkpoint evaluado no conserva su evaluación.")
             episode["profile_id"] = profile_id
         stack = goal.get("contextStack", [])
         if not isinstance(stack, list):
             raise ValueError("La pila de contextos es inválida.")
         episode_ids = {str(item["episode_id"]) for item in episodes}
+        if any(event.get("type") == "CONTENT_EXPOSURE" and str(event.get("episode_id") or "") not in episode_ids for event in events):
+            raise ValueError("Una exposición apunta a un episodio inexistente.")
         if any(not isinstance(item, dict) or (item.get("episode_id") is not None and str(item.get("episode_id")) not in episode_ids) for item in stack):
             raise ValueError("La pila de contextos apunta a un episodio inexistente.")
         counts["goals"] += 1

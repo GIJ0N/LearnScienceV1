@@ -46,6 +46,12 @@ jobs:
       - name: Run reachable dimension integration tests
         run: python tests/reachable_dimensions.test.py
 
+      - name: Run delayed review frontend tests
+        run: node tests/delayed_review.test.js
+
+      - name: Run delayed review backend contract tests
+        run: python tests/delayed_review_backend.test.py
+
       - name: Run durable memory tests
         run: python tests/durable_memory.test.py
 
@@ -54,6 +60,17 @@ jobs:
 
       - name: Run microtutoring repair episode tests
         run: node tests/microtutoring_repair_episode.test.js
+
+      - name: Run repair teaching frontend tests
+        run: node tests/repair_teaching_v2.test.js
+
+      - name: Run repair teaching backend tests
+        run: python tests/repair_teaching_backend.test.py
+
+      - name: Run repair diagnosis recovery tests
+        run: |
+          node tests/repair_diagnosis_recovery.test.js
+          python tests/repair_diagnosis_recovery_backend.test.py
 
       - name: Check app.js syntax
         run: node --check app.js
@@ -69,4 +86,3 @@ jobs:
 
       - name: Run parity checker regression tests
         run: python tests/check_parity.test.py
-
