@@ -83,11 +83,13 @@ Un PR debe mostrar todas las suites, `node --check`, el self-test y la compilaci
 
 ## Suficiencia v2
 
-Las pruebas nuevas cubren dos preguntas independientes, exclusión de ayuda/duplicados,
-correcciones, demora mínima de memoria, visita limitada y continuación provisional.
-El recorrido HTTP usa la ruta activa `/api/confirmation` y SQLite temporal; comprueba
-recarga, exportación y restauración de la sesión pendiente. La generación y evaluación
-del proveedor siguen simuladas; estas pruebas no validan aprendizaje humano ni novedad semántica.
+La regresión `adaptive_cycle.test.js` ahora finaliza naturalmente: el fixture responde también al guardado posterior a la respuesta tardía y restaura `fetch`; cinco ejecuciones consecutivas terminaron con código 0.
+
+Las suites Python se compararon en el padre `05bbd8289d0494c2cef94491382af100f9bda6fb` y en el integrado `196f394acc6b5105753c2971c0511c9c3c164f82`: ambas pasan en el padre y ambas fallaron inicialmente en el integrado por regresiones de integración en `app_legacy.py`. Tras restaurar selectivamente sus capacidades, las dos suites pasan en el integrado.
+
+La validación histórica del checkout limpio fue parcial respecto al workflow: omitió `node tests/adaptive_cycle.test.js`. La comprobación actual del fixture configura un perfil sintético, espera de forma acotada la pregunta y el contexto de reparación, y conserva la expectativa `session.mode === "CONTEXT"`.
+
+Las pruebas nuevas cubren dos preguntas independientes, exclusión de ayuda/duplicados, correcciones, demora mínima de memoria, visita limitada y continuación provisional. El recorrido HTTP usa la ruta activa `/api/confirmation` y SQLite temporal; comprueba recarga, exportación y restauración de la sesión pendiente. La generación y evaluación del proveedor siguen simuladas; estas pruebas no validan aprendizaje humano ni novedad semántica.
 
 ## Microlecciones adaptadas según evidencia durable
 

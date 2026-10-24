@@ -8,9 +8,10 @@ let serial=0,calls=[],failGeneration=false,invalidGeneration=false;
 const q=(prompt='Convierte unidades',dimension='units')=>({prompt,reference:'Criterio',kind:p.CONFIRMATION_KINDS[dimension],observable_dimensions:[dimension]});
 function lesson(){return {target_dimension:'units',explanation:'Una unidad expresa una medida',example:'Ejemplo resuelto',common_error:'No mezclar unidades',check:q('Explica','conceptual'),guided:q('Con apoyo'),independent:q('Sin apoyo'),integration:{prompt:'Interpreta',reference:'r',kind:'context_case'}}}
 function goal(){return {id:'g',goal:'Aprender medidas',nodes:['a','b'].map((id,i)=>({id,name:id,level:i,prerequisites:i?['a']:[],outcome:'Resolver',probe:q('Diagnóstico '+id)})),coverage:['a','b'].map(id=>({id,dimensions:[{id:'units',required:true,evidence:[]}]})),events:[],learner:{},lessons:{a:lesson(),b:lesson()},reviews:[],contextStack:[],repairEpisodes:[],session:{mode:'DIAGNOSTIC',node:null,stack:[],hints:0}}}
-function attach(g){p.setStoreForTests({goals:[g],active:g.id});return g}
+function attach(g){p.setProfileForTests({profile_id:'profile-test',name:'Perfil sintético',preferences:{}},1);p.setStoreForTests({goals:[g],active:g.id});return g}
 function find(label,root=roots.app){if(root?.textContent===label)return root;for(const c of root?.children||[]){const f=find(label,c);if(f)return f}return null}
 const settle=()=>new Promise(r=>setImmediate(r));
+async function waitFor(label,predicate,limit=40){for(let i=0;i<limit;i++){if(predicate())return;await settle()}throw new Error(`Timeout esperando ${label}`)}
 function record(g,status='CORRECT',help=0,dimension='units',id='a'){
  const question=q('Pregunta registrada '+(++serial),dimension),activity=p.activityContract(question,id,'evidence_confirmation');
  return p.record(g,id,'CONFIRMATION','Respuesta',{status,error_type:status==='MISCONCEPTION'?'units':'none'},help,activity,'attempt-'+serial)
@@ -20,6 +21,7 @@ global.fetch=async(route,options)=>{const body=JSON.parse(options.body);calls.pu
   if(failGeneration)throw Error('Proveedor indisponible');
   return {ok:true,json:async()=>({question:invalidGeneration?{}:q('Pregunta nueva '+(++serial),body.target_dimension||'units')})};
  }
+ if(route==='/api/profile/save'){assert.equal(body.profile_id,'profile-test');assert.ok(body.store?.active);assert.ok(body.store.goals.some(g=>g.id===body.store.active));return {ok:true,json:async()=>({revision:1})}}
  if(route==='/api/lesson')return {ok:true,json:async()=>lesson()};
  if(route==='/api/evaluate')return {ok:true,json:async()=>({status:'CORRECT',feedback:'Correcto'})};
  if(route==='/api/context/create')throw Error('Reparación simulada no disponible');
@@ -49,20 +51,23 @@ async function submit(g,answer='Respuesta'){const phase=g.session.mode,question=
  // A paused active repair always has priority, without creating or completing any evidence.
  error.contextStack=[{context_id:'ctx'}];assert.equal(p.selectTutorAction(error,Date.now(),{reselect:true}).action,'RESUME_REPAIR');error.contextStack=[];
  // A failed confirmation opens the same repair engine; child successes never repair the parent by themselves.
- const repairing=attach(goal());record(repairing);p.chooseNext(repairing);await settle();
+ const repairing=attach(goal());record(repairing);p.chooseNext(repairing);await waitFor('comprobación padre',()=>Boolean(repairing.session.confirmation?.question));
  const parent=repairing.session.confirmation.question,normalFetch=global.fetch;
  global.fetch=async(route,options)=>{if(route!=='/api/context/create')return normalFetch(route,options);
   const body=JSON.parse(options.body);assert.equal(body.question.prompt,parent.prompt);
   return {ok:true,json:async()=>({suspected_gaps:[{gap_id:'gap',concept:'Escala',reason:'Conversión incorrecta'}],diagnostic_checks:[{gap_id:'gap',question:q('Identifica la escala','conceptual')}],repair_activities:{CHECK:q('Explica la escala','conceptual'),GUIDED:q('Convierte con apoyo','direct_application'),INDEPENDENT:q('Convierte sin ayuda','direct_application')},parent_retest:q('Retoma la conversión original'),transfer_check:{prompt:'Aplica a otro contexto',reference:'Criterio',kind:'transfer'},transfer_novelty_status:'UNCONFIRMED'})};
  };
- p.applyResult(repairing,'a','CONFIRMATION','Confundo unidades',{status:'MISCONCEPTION',error_type:'units',feedback:'Revisa la escala',_activity:p.activityContract(parent,'a','evidence_confirmation'),_attempt_id:'failed-confirmation'});await settle();
- assert.equal(repairing.session.mode,'CONTEXT');const episode=repairing.repairEpisodes[0];assert.equal(episode.parent_question.prompt,parent.prompt);
+ p.applyResult(repairing,'a','CONFIRMATION','Confundo unidades',{status:'MISCONCEPTION',error_type:'units',feedback:'Revisa la escala',_activity:p.activityContract(parent,'a','evidence_confirmation'),_attempt_id:'failed-confirmation'});await waitFor('contexto de reparación',()=>repairing.session.mode==='CONTEXT'&&repairing.repairEpisodes.length===1&&repairing.pending_repair_diagnosis===null);
+ assert.equal(repairing.session.mode,'CONTEXT');const episode=repairing.repairEpisodes[0];assert.equal(episode.parent_attempt_id,'failed-confirmation');assert.equal(episode.parent_response,'Confundo unidades');assert.equal(episode.parent_evaluation.status,'MISCONCEPTION');
+ assert.equal(repairing.events.filter(e=>e.type==='EVIDENCE'&&e.attempt_id==='failed-confirmation').length,1);
+ assert.equal(repairing.contextStack.length,1);assert.equal(repairing.contextStack[0].episode_id,episode.episode_id);
+ assert.equal(repairing.coverage[0].dimensions[0].evidence.length,2);
  for(let i=0;i<4&&episode.stage!=='PARENT_RETEST';i++){const current=p.episodeActivity(episode);p.applyResult(repairing,'a',current.activity.stage,'Respuesta',{status:i===0?'PARTIAL':'CORRECT',_activity:current.activity,_attempt_id:'child-'+i,_episode_id:episode.episode_id,_repair_stage:current.phase,_help_used:0})}
  assert.equal(episode.stage,'PARENT_RETEST');assert.equal(p.verified(repairing,'a'),false);assert.equal(repairing.coverage[0].dimensions[0].evidence.filter(e=>e.evidence_scope==='repair_episode').length,0);
  const paused=p.normalizeGoal(JSON.parse(JSON.stringify(repairing)));assert.equal(p.selectTutorAction(paused,Date.now()).action,'RESUME_REPAIR');assert.equal(p.episodeActivity(paused.repairEpisodes[0]).phase,'PARENT_RETEST');global.fetch=normalFetch;
  // Sufficient evidence permits a harder task; it cannot grant transfer permission.
- const advanced=attach(goal());record(advanced);record(advanced);p.chooseNext(advanced,{focus:'a',reselect:true});await settle();
- assert.equal(advanced.session.confirmation.purpose,'challenge');assert.equal(calls.at(-1).body.difficulty,'challenge');assert.equal(p.activityContract(advanced.session.confirmation.question,'a','evidence_confirmation').supports_transfer,false);
+ const advanced=attach(goal());record(advanced);record(advanced);p.chooseNext(advanced,{focus:'a',reselect:true});await waitFor('desafío',()=>Boolean(advanced.session.confirmation?.question));
+ assert.equal(advanced.session.confirmation.purpose,'challenge');assert.equal(calls.some(c=>c.route==='/api/confirmation'&&c.body.difficulty==='challenge'),true);assert.equal(p.activityContract(advanced.session.confirmation.question,'a','evidence_confirmation').supports_transfer,false);
  await submit(advanced);assert.ok(find('Desafío terminado. Puedes continuar; este intento no certifica transferencia ni expertise.'));
  // Revisitable pending evidence and a persistent six-attempt cap, not an automatic reset on reload.
  const pending=attach(goal());record(pending);pending.session.adaptive={node_id:'a',attempts:6,reviews:0};
@@ -90,8 +95,8 @@ async function submit(g,answer='Respuesta'){const phase=g.session.mode,question=
  assert.equal(broken.events.filter(e=>e.type==='EVIDENCE').length,original);assert.ok(find('Reintentar comprobación'));assert.ok(find('Continuar la ruta con pendientes visibles'));}
  failGeneration=false;invalidGeneration=false;
  // A pending async generation cannot mutate another selected profile's goal.
- const first=attach(goal());record(first);let resolve;global.fetch=()=>new Promise(r=>resolve=r);p.chooseNext(first);await settle();
- const second=attach(goal()),secondBefore=JSON.stringify(second);resolve({ok:true,json:async()=>({question:q('Tardía')})});await settle();assert.equal(first.session.confirmation.question,null);assert.equal(JSON.stringify(second),secondBefore);
+ const first=attach(goal());record(first);let resolve;let delayed=true;const fetchBeforeDelayed=global.fetch;global.fetch=(route,options)=>{if(delayed&&route==='/api/confirmation')return new Promise(r=>resolve=r);if(route==='/api/profile/save')return Promise.resolve({ok:true,json:async()=>({revision:1})});return fetchBeforeDelayed(route,options)};p.chooseNext(first);await settle();
+ const second=attach(goal()),secondBefore=JSON.stringify(second);delayed=false;resolve({ok:true,json:async()=>({question:q('Tardía')})});await waitFor('respuesta tardía descartada',()=>first.session.confirmation.question===null);assert.equal(JSON.stringify(second),secondBefore);global.fetch=fetchBeforeDelayed;
  // The entire decision and pending activity are JSON-compatible and survive normalizing.
  const persisted=p.normalizeGoal(JSON.parse(JSON.stringify(restored)));assert.deepEqual(persisted.session.tutor_decision,restored.session.tutor_decision);assert.deepEqual(persisted.events,restored.events);assert.deepEqual(persisted.session.confirmation,restored.session.confirmation);
  if(process.argv.includes('--snapshot'))process.stdout.write(JSON.stringify({goals:[persisted],active:persisted.id}));else console.log('OK: adaptive student states, visible routing, independent checks, fading, bounded review, failure and restore scenarios');

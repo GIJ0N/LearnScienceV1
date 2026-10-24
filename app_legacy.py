@@ -1,5 +1,5 @@
 """Tutor adaptativo v4. Python 3, sin dependencias externas."""
-import json, os, re, socket, sys, threading, time, urllib.error, urllib.request
+import json, os, re, socket, sys, threading, time, unicodedata, urllib.error, urllib.request
 from collections import defaultdict
 from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -41,6 +41,7 @@ TARGETED_ACTIVITY_FAMILIES={
     'method_selection':'method_selection',
 }
 REVIEW_ACTIVITY_FAMILIES={**TARGETED_ACTIVITY_FAMILIES,'memory':'recall'}
+CONFIRMATION_KINDS={**TARGETED_ACTIVITY_FAMILIES,'conceptual':'explanation','recognition':'recognition','direct_application':'application','contextual_application':'context_case','interpretation':'interpretation','procedure':'procedure','memory':'recall','self_explanation':'self_explanation'}
 DIMENSION_LIST={'type':'ARRAY','items':T}
 Q = obj_schema({'prompt':T,'reference':T,'kind':T,'observable_dimensions':DIMENSION_LIST},
                ['prompt','reference','kind'])
@@ -176,6 +177,33 @@ def make_coverage_map(data):
 def make_map(data):
     return make_coverage_map(data)
 
+def lesson_adaptation(attempts, target_dimension=None):
+    """Choose teaching depth from recorded attempts, never from client mastery claims."""
+    related = []
+    for item in (attempts if isinstance(attempts, list) else [])[:5]:
+        if not isinstance(item, dict):
+            continue
+        event = item.get('event') if isinstance(item.get('event'), dict) else {}
+        observed = event.get('observed_dimensions', [])
+        if target_dimension and (not isinstance(observed, list) or target_dimension not in observed):
+            continue
+        related.append((item, event))
+    if not related:
+        return ('initial', 'Sin evidencia previa pertinente; enseñar los fundamentos.',
+                'Microlección desde nivel cero')
+    recent, event = related[0]
+    if recent.get('result') in ('PARTIAL', 'MISCONCEPTION'):
+        return ('repair', 'El intento más reciente mostró una dificultad; abordar ese error.',
+                'Microlección correctiva: explica el principio que causó el error y un ejemplo diferente')
+    if (recent.get('help_used') or 0) > 0 or (recent.get('result') == 'CORRECT' and event.get('is_independent') is not True):
+        return ('scaffold', 'Hay desempeño asistido o no independiente; retirar apoyo gradualmente.',
+                'Microlección de apoyo gradual: recordar el principio necesario, modelar un paso y retirar ayuda')
+    if recent.get('result') == 'CORRECT' and event.get('is_independent') is True and not event.get('corrected') and (recent.get('help_used') or 0) == 0:
+        return ('consolidate', 'Existe un acierto independiente previo; falta comprobarlo en otra situación.',
+                'Microlección de consolidación: no repetir toda la introducción; centrarse en el principio pendiente y un caso distinto')
+    return ('initial', 'No hay evidencia independiente reciente que justifique saltarse los fundamentos.',
+            'Microlección desde nivel cero')
+
 def make_lesson(data):
     goal=compact(data.get('goal'),160); name=compact(data.get('name'),90)
     parent=compact(data.get('parent'),100)
@@ -183,7 +211,7 @@ def make_lesson(data):
     if not goal or not name:raise ValueError('Falta meta o concepto.')
     if target_dimension and target_dimension not in TARGETED_ACTIVITY_FAMILIES:
         raise ValueError('La dimensión pendiente no tiene una familia de actividad dirigida.')
-    target_instruction='';memory_context='';memory_result={'reason':None,'sources':[]}
+    target_instruction='';memory_context='';memory_result={'reason':None,'sources':[],'attempts':[]}
     if target_dimension:
         target_kind=TARGETED_ACTIVITY_FAMILIES[target_dimension]
         target_instruction=(f' La práctica GUIDED e INDEPENDENT debe evaluar específicamente {target_dimension}; '
@@ -195,8 +223,9 @@ def make_lesson(data):
         memory_result=memory().relevant_memory(profile_id,goal_id,node_id,target_dimension or None,5)
         bounded={'preferences':loaded['preferences'],'recent_attempts':[{'attempt_id':x['attempt_id'],'phase':x['phase'],'result':x['result'],'help_used':x['help_used'],'response_text':compact(x.get('response_text'),240)} for x in memory_result['attempts']]}
         memory_context=' Memoria pertinente y preferencias explícitas: '+compact(json.dumps(bounded,ensure_ascii=False),1800)+'. '
+    adaptation_mode,adaptation_reason,lesson_depth=lesson_adaptation(memory_result.get('attempts',[]),target_dimension or None)
     raw=gemini(f'Meta: {goal}; aprender ahora: {name}; concepto al que regresaremos: {parent or goal}. '
-      'Microlección desde nivel cero: 1 explicación intuitiva de máximo 70 palabras, '
+            f'{lesson_depth}: 1 explicaci\u00f3n intuitiva de m\u00e1ximo 70 palabras, '
       '2 ejemplo resuelto en pasos, 3 error común, 4 pregunta de comprensión simple, '
       '5 ejercicio guiado, 6 caso independiente diferente, 7 pregunta de integración con la meta. '
       'Cada pregunta debe tener criterios de respuesta, kind y observable_dimensions limitadas a lo que realmente observa.'+target_instruction+
@@ -211,6 +240,7 @@ def make_lesson(data):
         validate_targeted_question(out['independent'],target_dimension)
         out['target_dimension']=target_dimension
     out['memory_reason']=memory_result['reason'];out['memory_sources']=memory_result['sources']
+    out['adaptation_mode']=adaptation_mode;out['adaptation_reason']=adaptation_reason
     if not all(out[k] for k in ('explanation','example','common_error')) or not all(q['prompt'] and q['reference'] for q in (out[k] for k in ('check','guided','independent','integration'))):
         raise ValueError('Microlección incompleta; no se guardó.')
     return out
@@ -231,6 +261,39 @@ def evaluate(data):
     status=raw.get('status') if isinstance(raw,dict) else None
     if status not in ('CORRECT','PARTIAL','MISCONCEPTION'):raise ValueError('Evaluación incompleta.')
     return {k:compact(raw.get(k),650) for k in ('status','feedback','error_type','hint')}
+
+def evidence_confirmation(data):
+    """Generate only the missing check; policy and sufficiency remain local."""
+    goal=compact(data.get('goal'),160);concept=compact(data.get('concept'),90)
+    target=compact(data.get('target_dimension'),40)
+    if not goal or not concept or target not in CONFIRMATION_KINDS:
+        raise ValueError('Falta una meta, concepto o dimensión de comprobación válida.')
+    previous=data.get('previous',[])
+    if not isinstance(previous,list) or len(previous)>20 or any(not isinstance(p,str) or len(p)>700 for p in previous):
+        raise ValueError('El historial de preguntas de comprobación es inválido.')
+    difficulty=data.get('difficulty','standard')
+    if difficulty not in ('standard','challenge'):raise ValueError('Dificultad inválida.')
+    challenge=(' Añade una restricción relevante y pide justificar una decisión dentro de esta habilidad; no introduzcas prerrequisitos nuevos ni lo llames transferencia.' if difficulty=='challenge' else '')
+    kind=CONFIRMATION_KINDS[target]
+    prompt=(f'Meta: {goal}; competencia: {concept}. Crea UNA comprobación independiente '
+      f'de {target}, kind exacto {kind}, observable_dimensions exactamente ["{target}"]. '
+      'Pregunta breve con criterio de respuesta. No muestres solución ni pistas en el enunciado. '
+      'Cambia el razonamiento o representación, no solo cifras o nombres. No declares transferencia, '
+      'retención ni dominio. No repitas ni parafrasees estas preguntas: '+json.dumps(previous,ensure_ascii=False)+'. '
+      'No inventes datos técnicos locales.'+challenge)
+    raw=gemini(prompt,REVIEW_SCHEMA,700)
+    q=clean_question(raw.get('question') if isinstance(raw,dict) else None,700,700)
+    if q['kind']!=kind or q.get('observable_dimensions')!=[target]:
+        raise ValueError('La comprobación no respeta la dimensión y familia solicitadas.')
+    def fingerprint(value):
+        return re.sub(r'[^a-z0-9áéíóúüñ]+',' ',unicodedata.normalize('NFKC',value).lower()).strip()
+    if not fingerprint(q['prompt']) or fingerprint(q['prompt']) in {fingerprint(p) for p in previous}:
+        raise ValueError('La comprobación repite una pregunta anterior.')
+    return {'question':q}
+
+MICRO_SCHEMA=obj_schema({'focus':T,'explanation':T,'representation':T,
+ 'steps':{'type':'ARRAY','items':Q},'transfer':Q})
+REPAIR_SCHEMA=obj_schema({'explanation':T,'step':Q})
 
 def review_question(data):
     goal=compact(data.get('goal'),160);concept=compact(data.get('concept'),90)
@@ -504,7 +567,7 @@ def profile_export(data):
 def profile_restore(data):
     return memory().restore(data.get('profile_id'),data.get('backup'))
 
-ROUTES={'/api/map':make_map,'/api/lesson':make_lesson,
+ROUTES={'/api/map':make_map,'/api/lesson':make_lesson,'/api/confirmation':evidence_confirmation,
         '/api/evaluate':evaluate,'/api/review':review_question,'/api/micro/start':micro_start,'/api/micro/repair':micro_repair,'/api/context/create':make_micro_context,'/api/context/step':micro_step,'/api/context/zoom':micro_zoom,'/api/context/status':context_status,'/api/map/update':map_update,
         '/api/profiles/list':profiles_list,'/api/profile/create':profile_create,'/api/profile/load':profile_load,'/api/profile/save':profile_save,'/api/profile/preferences':profile_preferences,'/api/profile/history':profile_history,'/api/profile/import':profile_import,'/api/profile/export':profile_export,'/api/profile/restore':profile_restore}
 
