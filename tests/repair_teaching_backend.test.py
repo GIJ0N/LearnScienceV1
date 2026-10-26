@@ -57,6 +57,27 @@ try:
     assert diagnosis["suspected_gaps"][0]["status"] == "SUSPECTED"
     assert "repair_activities" not in diagnosis
 
+    # The provider-facing repair schema and prompt must constrain the exact
+    # family/dimension pairs; local validation remains authoritative.
+    assert app_legacy.REPAIR_Q["properties"]["kind"]["enum"]
+    assert "explanation → [\"conceptual\"]" in app_legacy.REPAIR_DIAGNOSTIC_PAIR_INSTRUCTION
+    assert app_legacy.REPAIR_TEACHING_SCHEMA["properties"]["repair_activities"]["properties"]["CHECK"]["properties"]["kind"]["enum"] == ["explanation", "recognition"]
+    assert app_legacy.REPAIR_TEACHING_SCHEMA["properties"]["repair_activities"]["properties"]["GUIDED"]["properties"]["kind"]["enum"] == ["application", "calculation", "problem", "procedure"]
+    assert app_legacy.REPAIR_TEACHING_SCHEMA["properties"]["transfer_check"]["properties"]["kind"]["enum"] == ["transfer"]
+    assert 'transfer_check: kind "transfer"' in app_legacy.REPAIR_TEACHING_PAIR_INSTRUCTION
+    app_legacy.gemini = lambda prompt, schema, max_tokens=2000: copy.deepcopy(teaching_response)
+    assert any('distintas de TODAS las comprobaciones diagnósticas recibidas' in item for item in app_legacy.repair_teaching.__code__.co_consts if isinstance(item, str))
+    incompatible_diagnostic = copy.deepcopy(diagnosis_response)
+    incompatible_diagnostic["diagnostic_checks"][0]["question"] = q(
+        "¿Qué operación deshace sumar cinco?", "Restar cinco", "explanation", ["direct_application"])
+    app_legacy.gemini = lambda prompt, schema, max_tokens=2000: incompatible_diagnostic
+    try:
+        app_legacy.make_micro_context(diagnosis_request)
+    except ValueError as error:
+        assert "incompatibles" in str(error)
+    else:
+        raise AssertionError("El backend aceptó una dimensión incompatible con explanation en DIAGNOSTIC")
+
     missing_dimension = copy.deepcopy(diagnosis_response)
     missing_dimension["diagnostic_checks"][0]["question"].pop("observable_dimensions")
     app_legacy.gemini = lambda prompt, schema, max_tokens=2000: missing_dimension
@@ -79,9 +100,22 @@ try:
     try:
         app_legacy.make_micro_context(teaching_request)
     except ValueError as error:
+        assert "repair_activities.GUIDED" in str(error)
         assert "incompatibles" in str(error)
     else:
         raise AssertionError("El backend aceptó una familia incompatible con GUIDED")
+
+    incompatible_transfer = copy.deepcopy(teaching_response)
+    incompatible_transfer["transfer_check"] = q(
+        "Aplica la igualdad en un contexto distinto", "Una aplicación válida", "context_case", ["contextual_application"])
+    app_legacy.gemini = lambda prompt, schema, max_tokens=2000: incompatible_transfer
+    try:
+        app_legacy.make_micro_context(teaching_request)
+    except ValueError as error:
+        assert "transfer_check" in str(error)
+        assert "incompatibles" in str(error)
+    else:
+        raise AssertionError("El backend aceptó un kind de transferencia que el contrato local no reconoce")
 
     copied = copy.deepcopy(teaching_response)
     copied["worked_example"]["prompt"] = diagnosis_request["question"]["prompt"]

@@ -50,6 +50,14 @@ Git almacena los archivos de este repositorio con LF, pero un checkout de Window
 
 `node tests/repair_diagnosis_recovery.test.js` verifica error de red, contrato inválido, reintento, doble clic, respuesta tardía, recarga, pausa y fallos de persistencia del diagnóstico inicial. `python tests/repair_diagnosis_recovery_backend.test.py` valida que el estado pendiente solo pueda apuntar al intento y actividad padre existentes. Un diagnóstico pendiente no es un episodio y no añade evidencia.
 
+`python tests/criterion_assessment.test.py` y `node tests/criterion_assessment_frontend.test.js` cubren la vertical `criterion_assessment_v1`: actividad de opción múltiple con explicación separada, clave privada solo en el servidor, evaluación determinista de la opción, explicación `NOT_EVALUATED` cuando el proveedor controlado no responde, ayuda que impide independencia, idempotencia por `attempt_id` y persistencia compatible. Estas pruebas usan respuestas controladas y no validan eficacia pedagógica ni Gemini real.
+
+`python tests/criterion_durability.test.py` comprueba el contrato privado completo en SQLite aislado, borradores tras reinicio, recuperación de evaluaciones ya persistidas, rechazo de fingerprints distintos, reserva concurrente, recuperación explícita de una reserva cuyo propietario pertenece a un proceso anterior, rechazo de respuestas tardías del propietario anterior, aislamiento por perfil/meta, exportación sin claves, restauración sin contrato privado, eliminación por cascada y compatibilidad con stores legacy. El registro `PENDING` no mantiene una transacción abierta durante la llamada al proveedor: la misma instancia no puede iniciar una segunda evaluación, pero una instancia nueva reclama el mismo `attempt_id` y fingerprint. Si el proceso cae durante la llamada, la recuperación no garantiza que el proveedor se ejecutara una sola vez; sí evita duplicar evidencia y evita que una respuesta tardía sobrescriba la evaluación recuperada.
+
+`python tests/criterion_server_lock.test.py` usa procesos reales y SQLite temporales. Comprueba que una segunda instancia no puede servir la misma base mientras el primer proceso conserva el handle bloqueado, que la caída abrupta libera el bloqueo, que el mismo intento puede recuperarse después, que dos solicitudes del servidor activo no ejecutan dos evaluaciones, que bases distintas funcionan simultáneamente y que una respuesta HTTP perdida no duplica la evaluación. El bloqueo cubre una SQLite local en un solo equipo; no es un protocolo distribuido.
+
+`node tests/repair_acceptance_controlled.test.js` completa un episodio sintético con diagnóstico confirmado, enseñanza, reintento padre y transferencia novedosa, y comprueba la recarga sin duplicados. `python tests/repair_persistence_acceptance.test.py` usa SQLite temporal y un servidor de prueba que confirma el commit antes de cerrar la respuesta HTTP; la siguiente escritura con revisión antigua recibe conflicto y la recarga conserva exactamente el único intento comprometido. Estas son comprobaciones HTTP/SQLite controladas, no aceptación visual de navegador.
+
 La misma secuencia se ejecuta en `.github/workflows/ci.yml`. Si falta una suite, falla un comando o no se puede usar la versión fijada de Node.js/Python, el paso correspondiente termina con error y el job falla. No se silencian errores ni se convierten en advertencias.
 
 ## Respuestas simuladas y Gemini
@@ -57,6 +65,22 @@ La misma secuencia se ejecuta en `.github/workflows/ci.yml`. Si falta una suite,
 Las suites automatizadas usan respuestas locales simuladas. `python app_legacy.py --self-test` también sustituye la llamada de red y la clave de Gemini dentro de la prueba; no necesita `GEMINI_API_KEY` y no evalúa respuestas reales. La CI no configura, imprime ni envía ninguna clave y no inicia servicios externos.
 
 Una validación `BLOCKED` significa que una prueba no se pudo ejecutar por falta de navegador, permisos, credenciales o un servicio externo. Debe informarse como `BLOCKED`, nunca como `PASS`. Las pruebas de navegador completo, recarga real, consola y Gemini real no forman parte de esta CI.
+
+## Aceptación manual de `criterion_assessment_v1`
+
+- Sin proveedor pueden comprobarse el arranque, `/api/health`, perfiles sintéticos, recarga de datos existentes, exportación pública, mapa de solo lectura y las suites automatizadas.
+- La conservación visual de selección y explicación requiere una actividad sintética ya precargada en una SQLite temporal. El repositorio todavía no incluye un harness visual que la cargue y controle el evaluador desde el navegador.
+- Crear una meta, generar una nueva actividad y evaluar semánticamente su explicación usan el proveedor configurado. No forman parte de una prueba local sin API.
+- La aceptación visual end-to-end queda `NO EJECUTADA` hasta disponer de ese harness o autorización expresa para Gemini real. Las pruebas HTTP/SQLite controladas no deben presentarse como aceptación visual.
+
+Arranque aislado que no usa la base habitual:
+
+```powershell
+cd <worktree>
+$env:PORT = '8897'
+$env:RUTA_DB_PATH = Join-Path $env:TEMP 'criterion-assessment-review.sqlite3'
+python app_legacy.py
+```
 
 ## Limitaciones conocidas
 

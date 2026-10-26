@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 STORE_SCHEMA_VERSION = 5
 PROFILE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$")
 DEFAULT_PREFERENCES = {
@@ -21,6 +21,69 @@ DEFAULT_PREFERENCES = {
     "concrete_examples": False,
     "questions_before_explanation": False,
 }
+
+
+def database_path(path=None):
+    configured = path or os.getenv("RUTA_DB_PATH")
+    raw = Path(configured) if configured else Path(__file__).resolve().parent / "data" / "ruta-memory.sqlite3"
+    return Path(os.path.normcase(os.path.realpath(str(raw.expanduser()))))
+
+
+class LocalDatabaseServerLock:
+    """Single-host, single-server lock for one canonical SQLite path."""
+
+    def __init__(self, sqlite_path):
+        self.sqlite_path = database_path(sqlite_path)
+        self.path = Path(str(self.sqlite_path) + ".server.lock")
+        self._handle = None
+
+    @property
+    def acquired(self):
+        return self._handle is not None
+
+    def acquire(self):
+        if self._handle is not None:
+            return self
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        handle = open(self.path, "a+b")
+        try:
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                handle.write(b"0")
+                handle.flush()
+            handle.seek(0)
+            if os.name == "nt":
+                import msvcrt
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except (OSError, IOError) as exc:
+            handle.close()
+            raise RuntimeError(f"Ya existe un servidor usando la SQLite local: {self.sqlite_path}") from exc
+        self._handle = handle
+        return self
+
+    def release(self):
+        handle, self._handle = self._handle, None
+        if handle is None:
+            return
+        try:
+            handle.seek(0)
+            if os.name == "nt":
+                import msvcrt
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        finally:
+            handle.close()
+
+    def __enter__(self):
+        return self.acquire()
+
+    def __exit__(self, *_):
+        self.release()
 
 
 def _json(value):
@@ -114,6 +177,31 @@ def validate_store(raw, profile_id):
                 if evidence_id in evidence_ids:
                     raise ValueError("El respaldo contiene evidence_id duplicados.")
                 evidence_ids.add(evidence_id)
+        criterion_assessments = goal.get("criterion_assessments", [])
+        if not isinstance(criterion_assessments, list):
+            raise ValueError("Las evaluaciones por criterio son inválidas.")
+        criterion_attempts = set()
+        for assessment in criterion_assessments:
+            if not isinstance(assessment, dict) or assessment.get("schema_version") != "criterion_assessment_v1" or not assessment.get("attempt_id") or not assessment.get("activity_id"):
+                raise ValueError("La evaluación por criterio no tiene un contrato válido.")
+            attempt_id = str(assessment["attempt_id"])
+            if attempt_id in criterion_attempts or attempt_id not in goal_attempt_ids:
+                raise ValueError("La evaluación por criterio no corresponde a un intento único del ledger.")
+            criterion_attempts.add(attempt_id)
+        draft = goal.get("criterion_draft")
+        if draft is not None:
+            if not isinstance(draft, dict) or draft.get("schema_version") != "criterion_assessment_v1" or not str(draft.get("goal_id") or "") or not str(draft.get("profile_id") or ""):
+                raise ValueError("El borrador de criterios no conserva su identidad.")
+            if draft.get("status") not in {"DRAFT", "EVALUATING", "EVALUATION_PENDING", "EVALUATED", "UNAVAILABLE"}:
+                raise ValueError("El borrador de criterios tiene un estado inválido.")
+            activity = draft.get("activity")
+            if not isinstance(activity, dict) or "correct_option_id" in activity or not activity.get("activity_id") or not isinstance(activity.get("options"), list):
+                raise ValueError("El borrador no conserva un contrato público válido.")
+            option_ids = [str(item.get("id") or "") for item in activity["options"] if isinstance(item, dict)]
+            if len(option_ids) != len(activity["options"]) or len(option_ids) != len(set(option_ids)) or any(not item for item in option_ids):
+                raise ValueError("El borrador contiene opciones inválidas.")
+            draft["profile_id"] = profile_id
+            draft["goal_id"] = goal_id
         pending = goal.get("pending_repair_diagnosis")
         if pending is not None:
             if not isinstance(pending, dict) or pending.get("version") != "repair_diagnosis_recovery_v1":
@@ -201,8 +289,7 @@ def _question_for(goal, event):
 
 class DurableMemory:
     def __init__(self, path=None):
-        configured = path or os.getenv("RUTA_DB_PATH")
-        self.path = Path(configured) if configured else Path(__file__).resolve().parent / "data" / "ruta-memory.sqlite3"
+        self.path = database_path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
         self.initialize()
@@ -263,7 +350,38 @@ class DurableMemory:
               imported_at INTEGER NOT NULL,
               PRIMARY KEY(profile_id, import_hash)
             );
+            CREATE TABLE IF NOT EXISTS criterion_activities(
+              profile_id TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+              goal_id TEXT NOT NULL,
+              activity_id TEXT NOT NULL,
+              public_contract_json TEXT NOT NULL,
+              private_contract_json TEXT NOT NULL,
+              schema_version TEXT NOT NULL,
+              status TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL,
+              PRIMARY KEY(profile_id, activity_id)
+            );
+            CREATE INDEX IF NOT EXISTS criterion_activities_goal
+              ON criterion_activities(profile_id, goal_id, updated_at DESC);
+            CREATE TABLE IF NOT EXISTS criterion_evaluations(
+              profile_id TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+              goal_id TEXT NOT NULL,
+              activity_id TEXT NOT NULL,
+              attempt_id TEXT NOT NULL,
+              fingerprint TEXT NOT NULL,
+              status TEXT NOT NULL,
+              assessment_json TEXT,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL,
+              PRIMARY KEY(profile_id, attempt_id)
+            );
+            CREATE INDEX IF NOT EXISTS criterion_evaluations_activity
+              ON criterion_evaluations(profile_id, activity_id, updated_at DESC);
             """)
+            columns = {row[1] for row in db.execute("PRAGMA table_info(criterion_evaluations)").fetchall()}
+            if "owner_token" not in columns:
+                db.execute("ALTER TABLE criterion_evaluations ADD COLUMN owner_token TEXT")
             db.execute("INSERT OR REPLACE INTO metadata(key,value) VALUES('schema_version',?)", (str(SCHEMA_VERSION),))
 
     def create_profile(self, name):
@@ -277,6 +395,94 @@ class DurableMemory:
             db.execute("INSERT INTO profiles VALUES(?,?,?,?,?)", (profile_id, name, _json(DEFAULT_PREFERENCES), now, now))
             db.execute("INSERT INTO stores VALUES(?,?,?,?)", (profile_id, _json(empty), 1, now))
         return {"profile_id": profile_id, "name": name, "preferences": _copy(DEFAULT_PREFERENCES), "revision": 1}
+
+    def delete_profile(self, profile_id):
+        profile_id = _profile_id(profile_id)
+        with self._lock, self._connect() as db:
+            deleted = db.execute("DELETE FROM profiles WHERE profile_id=?", (profile_id,)).rowcount
+        if not deleted:
+            raise ValueError("El perfil local no existe.")
+        return {"deleted": True, "profile_id": profile_id}
+
+    def save_criterion_activity(self, profile_id, goal_id, public_contract, private_contract):
+        profile_id = _profile_id(profile_id)
+        goal_id = str(goal_id or "").strip()
+        activity_id = str((public_contract or {}).get("activity_id") or "").strip()
+        if not goal_id or not activity_id or not isinstance(public_contract, dict) or not isinstance(private_contract, dict):
+            raise ValueError("El contrato durable de criterios está incompleto.")
+        if "correct_option_id" not in private_contract or "criteria" not in private_contract:
+            raise ValueError("El contrato privado de criterios está incompleto.")
+        now = time.time_ns()
+        with self._lock, self._connect() as db:
+            profile = db.execute("SELECT 1 FROM profiles WHERE profile_id=?", (profile_id,)).fetchone()
+            if not profile:
+                raise ValueError("El perfil local no existe.")
+            db.execute("""INSERT INTO criterion_activities
+              (profile_id,goal_id,activity_id,public_contract_json,private_contract_json,schema_version,status,created_at,updated_at)
+              VALUES(?,?,?,?,?,?,?,?,?)
+              ON CONFLICT(profile_id,activity_id) DO UPDATE SET
+                goal_id=excluded.goal_id, public_contract_json=excluded.public_contract_json,
+                private_contract_json=excluded.private_contract_json, schema_version=excluded.schema_version,
+                status=excluded.status, updated_at=excluded.updated_at""",
+                       (profile_id, goal_id, activity_id, _json(public_contract), _json(private_contract),
+                        str(public_contract.get("schema_version") or "criterion_assessment_v1"), "ACTIVE", now, now))
+        return {"saved": True, "profile_id": profile_id, "goal_id": goal_id, "activity_id": activity_id}
+
+    def load_criterion_activity(self, profile_id, activity_id):
+        profile_id = _profile_id(profile_id)
+        activity_id = str(activity_id or "").strip()
+        with self._connect() as db:
+            row = db.execute("SELECT * FROM criterion_activities WHERE profile_id=? AND activity_id=?", (profile_id, activity_id)).fetchone()
+        if not row:
+            return None
+        return {"profile_id": row["profile_id"], "goal_id": row["goal_id"], "activity_id": row["activity_id"],
+                "public_contract": json.loads(row["public_contract_json"]),
+                "private_contract": json.loads(row["private_contract_json"]),
+                "schema_version": row["schema_version"], "status": row["status"],
+                "created_at": row["created_at"], "updated_at": row["updated_at"]}
+
+    def begin_criterion_evaluation(self, profile_id, goal_id, activity_id, attempt_id, fingerprint, owner_token=None):
+        profile_id = _profile_id(profile_id)
+        values = (profile_id, str(goal_id or ""), str(activity_id or ""), str(attempt_id or ""), str(fingerprint or ""))
+        now = time.time_ns()
+        with self._lock, self._connect() as db:
+            row = db.execute("SELECT * FROM criterion_evaluations WHERE profile_id=? AND attempt_id=?", (profile_id, values[3])).fetchone()
+            if row:
+                if row["fingerprint"] != values[4]:
+                    raise ValueError("attempt_id ya fue usado con una respuesta o condición distinta.")
+                if row["status"] == "PENDING" and owner_token and row["owner_token"] != owner_token:
+                    db.execute("UPDATE criterion_evaluations SET owner_token=?,updated_at=? WHERE profile_id=? AND attempt_id=?", (str(owner_token), now, profile_id, values[3]))
+                    return {"status": "PENDING", "assessment": None, "created": True, "recovered": True}
+                return {"status": row["status"], "assessment": json.loads(row["assessment_json"]) if row["assessment_json"] else None, "created": False}
+            db.execute("""INSERT INTO criterion_evaluations
+              (profile_id,goal_id,activity_id,attempt_id,fingerprint,status,assessment_json,created_at,updated_at,owner_token)
+              VALUES(?,?,?,?,?,'PENDING',NULL,?,?,?)""", values + (now, now, str(owner_token or "")))
+        return {"status": "PENDING", "assessment": None, "created": True}
+
+    def finish_criterion_evaluation(self, profile_id, attempt_id, fingerprint, assessment, owner_token=None):
+        profile_id = _profile_id(profile_id)
+        now = time.time_ns()
+        with self._lock, self._connect() as db:
+            row = db.execute("SELECT fingerprint,owner_token,status FROM criterion_evaluations WHERE profile_id=? AND attempt_id=?", (profile_id, str(attempt_id))).fetchone()
+            if not row:
+                raise ValueError("La evaluación no fue reservada.")
+            if row["fingerprint"] != str(fingerprint):
+                raise ValueError("La evaluación no coincide con su fingerprint.")
+            if owner_token and row["owner_token"] != str(owner_token):
+                raise ValueError("La evaluación pertenece a otra solicitud activa o recuperada.")
+            if row["status"] == "EVALUATED":
+                return json.loads(db.execute("SELECT assessment_json FROM criterion_evaluations WHERE profile_id=? AND attempt_id=?", (profile_id, str(attempt_id))).fetchone()[0])
+            db.execute("UPDATE criterion_evaluations SET status='EVALUATED',assessment_json=?,updated_at=? WHERE profile_id=? AND attempt_id=?", (_json(assessment), now, profile_id, str(attempt_id)))
+        return assessment
+
+    def load_criterion_evaluation(self, profile_id, attempt_id):
+        profile_id = _profile_id(profile_id)
+        with self._connect() as db:
+            row = db.execute("SELECT * FROM criterion_evaluations WHERE profile_id=? AND attempt_id=?", (profile_id, str(attempt_id))).fetchone()
+        if not row:
+            return None
+        return {"status": row["status"], "fingerprint": row["fingerprint"], "assessment": json.loads(row["assessment_json"]) if row["assessment_json"] else None,
+                "goal_id": row["goal_id"], "activity_id": row["activity_id"], "attempt_id": row["attempt_id"]}
 
     def profiles(self):
         with self._connect() as db:
@@ -419,6 +625,10 @@ class DurableMemory:
             if not current:
                 raise ValueError("El perfil local no existe.")
             revision = current["revision"] + 1
+            # A public backup never carries private criterion contracts. Any
+            # previous registry for this profile must not be reused silently.
+            db.execute("DELETE FROM criterion_evaluations WHERE profile_id=?", (profile_id,))
+            db.execute("DELETE FROM criterion_activities WHERE profile_id=?", (profile_id,))
             db.execute("UPDATE stores SET store_json=?,revision=?,updated_at=? WHERE profile_id=?", (_json(store), revision, now, profile_id))
             db.execute("UPDATE profiles SET preferences_json=?,updated_at=? WHERE profile_id=?", (_json(preferences), now, profile_id))
             db.execute("DELETE FROM attempts WHERE profile_id=?", (profile_id,))
