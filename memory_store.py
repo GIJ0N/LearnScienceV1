@@ -405,6 +405,12 @@ class DurableMemory:
         return {"deleted": True, "profile_id": profile_id}
 
     def save_criterion_activity(self, profile_id, goal_id, public_contract, private_contract):
+        """Insert an immutable activity contract, or return its identical original.
+
+        Identity is (profile_id, activity_id). Goal ownership and both canonical
+        contracts are immutable attributes of that identity. BEGIN IMMEDIATE
+        makes compare-and-insert atomic across SQLite connections/processes.
+        """
         profile_id = _profile_id(profile_id)
         goal_id = str(goal_id or "").strip()
         activity_id = str((public_contract or {}).get("activity_id") or "").strip()
@@ -412,21 +418,39 @@ class DurableMemory:
             raise ValueError("El contrato durable de criterios está incompleto.")
         if "correct_option_id" not in private_contract or "criteria" not in private_contract:
             raise ValueError("El contrato privado de criterios está incompleto.")
+        public_json = _json(public_contract)
+        private_json = _json(private_contract)
+        schema_version = str(public_contract.get("schema_version") or "criterion_assessment_v1")
         now = time.time_ns()
         with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
             profile = db.execute("SELECT 1 FROM profiles WHERE profile_id=?", (profile_id,)).fetchone()
             if not profile:
                 raise ValueError("El perfil local no existe.")
+            row = db.execute("SELECT * FROM criterion_activities WHERE profile_id=? AND activity_id=?", (profile_id, activity_id)).fetchone()
+            if row:
+                try:
+                    stored_public_json = _json(json.loads(row["public_contract_json"]))
+                    stored_private_json = _json(json.loads(row["private_contract_json"]))
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    raise ValueError("CRITERION_ACTIVITY_CONFLICT: el contrato histórico no puede compararse de forma segura.")
+                equivalent = (row["goal_id"] == goal_id and
+                              stored_public_json == public_json and
+                              stored_private_json == private_json and
+                              row["schema_version"] == schema_version)
+                if not equivalent:
+                    raise ValueError("CRITERION_ACTIVITY_CONFLICT: activity_id ya identifica un contrato inmutable diferente en este perfil.")
+                return {"saved": False, "reused": True, "profile_id": profile_id,
+                        "goal_id": row["goal_id"], "activity_id": row["activity_id"],
+                        "created_at": row["created_at"], "updated_at": row["updated_at"]}
             db.execute("""INSERT INTO criterion_activities
               (profile_id,goal_id,activity_id,public_contract_json,private_contract_json,schema_version,status,created_at,updated_at)
-              VALUES(?,?,?,?,?,?,?,?,?)
-              ON CONFLICT(profile_id,activity_id) DO UPDATE SET
-                goal_id=excluded.goal_id, public_contract_json=excluded.public_contract_json,
-                private_contract_json=excluded.private_contract_json, schema_version=excluded.schema_version,
-                status=excluded.status, updated_at=excluded.updated_at""",
-                       (profile_id, goal_id, activity_id, _json(public_contract), _json(private_contract),
-                        str(public_contract.get("schema_version") or "criterion_assessment_v1"), "ACTIVE", now, now))
-        return {"saved": True, "profile_id": profile_id, "goal_id": goal_id, "activity_id": activity_id}
+              VALUES(?,?,?,?,?,?,?,?,?)""",
+                       (profile_id, goal_id, activity_id, public_json, private_json,
+                        schema_version, "ACTIVE", now, now))
+        return {"saved": True, "reused": False, "profile_id": profile_id,
+                "goal_id": goal_id, "activity_id": activity_id,
+                "created_at": now, "updated_at": now}
 
     def load_criterion_activity(self, profile_id, activity_id):
         profile_id = _profile_id(profile_id)

@@ -25,6 +25,7 @@ activity = {
     "prompt": "¿Qué conserva una operación inversa?",
     "options": [{"id": "a", "text": "La igualdad"}, {"id": "b", "text": "Solo un lado"}],
     "correct_option_id": "a",
+    "explanation_reference": "La misma operación reversible en ambos miembros conserva exactamente las soluciones de la igualdad.",
     "criteria": [
         {"criterion_id": "option_choice", "observable_dimension": "recognition", "required": True, "description": "Elegir"},
         {"criterion_id": "explanation", "observable_dimension": "conceptual", "required": True, "description": "Explicar"},
