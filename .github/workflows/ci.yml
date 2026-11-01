@@ -38,6 +38,8 @@ jobs:
         run: |
           node tests/evidence_map.test.js
           python tests/visual_demo_seed.test.py
+          node tests/goal_relations.test.js
+          python tests/goal_relations_persistence.test.py
 
       - name: Run evidence sufficiency and confirmation flow tests
         run: node tests/evidence_sufficiency.test.js
