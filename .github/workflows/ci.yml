@@ -49,6 +49,10 @@ jobs:
           python tests/knowledge_graph_backend.test.py
       - name: Run expert panel tests
         run: node tests/expert_panel.test.js
+      - name: Run area map tests
+        run: |
+          node tests/map_areas.test.js
+          python tests/map_areas_backend.test.py
       - name: Run LLM provider tests
         run: python tests/llm_provider.test.py
       - name: Run learner signal tests

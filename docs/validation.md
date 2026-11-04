@@ -15,6 +15,8 @@ No se ha declarado una versión mínima formal del proyecto. Las versiones anter
 Desde la raíz del repositorio:
 
 ```text
+node tests/map_areas.test.js
+python tests/map_areas_backend.test.py
 node tests/expert_panel.test.js
 node tests/knowledge_graph.test.js
 python tests/knowledge_graph_backend.test.py
@@ -158,6 +160,8 @@ modifica y el resultado no demuestra retención humana.
 `node tests/learner_signals.test.js` y `python tests/learner_signals_backend.test.py` cubren `learner_signals_v1`: confianza ausente como `null`, matriz de calibración, que la confianza no concede independencia ni cambia cobertura, rechazo de confianza inválida antes de llamar al proveedor, «No sé» sin señal, contexto del evaluador y de la microlección, y eventos legacy sin señales. Usan respuestas controladas; no validan Gemini real ni el navegador.
 
 `node tests/placement.test.js` y `python tests/placement_backend.test.py` cubren `placement_v1`: entrada por el tema más avanzado, división de lo pendiente, deducción hacia prerrequisitos solo con acierto seguro, laguna hacia dependientes, conflicto, repregunta de temas frágiles, temas con evidencia previa excluidos, saltos que no conceden dominio y se revocan, idempotencia, una sola llamada por lote, clave privada en servidor, corrección sin proveedor, aislamiento por perfil y meta y borrado en cascada. Usan respuestas controladas; no validan Gemini real ni el navegador.
+
+`node tests/map_areas.test.js` y `python tests/map_areas_backend.test.py` cubren `map_areas_v1`: creación en dos llamadas con la primera área abierta, límites y duplicados de áreas, renombrado de ids por área, dependencias hacia temas existentes, fusión de temas repetidos, rechazo de ciclos/ids/prerrequisitos inválidos, expansión que solo agrega sin tocar lo existente ni conceder evidencia, apertura automática no bloqueante, reintento con espera y que el mapa plano anterior siga igual.
 
 `node tests/expert_panel.test.js` cubre `expert_panel_v1`: las 7 capas con sus umbrales (`none`/`partial`/`met`), que `UNKNOWN`, el diagnóstico, las auditorías, la ayuda y otros temas no cuenten donde no deben, calibración con respuestas decisivas, sobreconfianza e infraconfianza, etiquetas y siguiente paso, y que el panel sea de solo lectura.
 
