@@ -15,6 +15,8 @@ No se ha declarado una versión mínima formal del proyecto. Las versiones anter
 Desde la raíz del repositorio:
 
 ```text
+node tests/spaced_practice.test.js
+python tests/spaced_practice_backend.test.py
 node tests/step_lessons.test.js
 python tests/step_lessons_backend.test.py
 python tests/llm_provider.test.py
@@ -153,6 +155,8 @@ modifica y el resultado no demuestra retención humana.
 `node tests/learner_signals.test.js` y `python tests/learner_signals_backend.test.py` cubren `learner_signals_v1`: confianza ausente como `null`, matriz de calibración, que la confianza no concede independencia ni cambia cobertura, rechazo de confianza inválida antes de llamar al proveedor, «No sé» sin señal, contexto del evaluador y de la microlección, y eventos legacy sin señales. Usan respuestas controladas; no validan Gemini real ni el navegador.
 
 `node tests/placement.test.js` y `python tests/placement_backend.test.py` cubren `placement_v1`: entrada por el tema más avanzado, división de lo pendiente, deducción hacia prerrequisitos solo con acierto seguro, laguna hacia dependientes, conflicto, repregunta de temas frágiles, temas con evidencia previa excluidos, saltos que no conceden dominio y se revocan, idempotencia, una sola llamada por lote, clave privada en servidor, corrección sin proveedor, aislamiento por perfil y meta y borrado en cascada. Usan respuestas controladas; no validan Gemini real ni el navegador.
+
+`node tests/spaced_practice.test.js` y `python tests/spaced_practice_backend.test.py` cubren `spaced_practice_v1`: tabla de peldaños según ayuda y confianza, tope de la escalera, selección intercalada (vencidos primero, sin temas sin exposición, mínimo dos), ninguna creación de `EVIDENCE`, un acierto que no sube el peldaño, retroceso parcial que nunca atrasa un vencimiento, idempotencia por `attempt_id`, contrato de generación con clave privada y aislamiento entre versiones de pregunta.
 
 `node tests/step_lessons.test.js` y `python tests/step_lessons_backend.test.py` cubren `step_lessons_v1`: ciclo predecir → enseñar → comprobar, reparación con tope de 2 y paso `unresolved`, ninguna creación de `EVIDENCE`, idempotencia por `attempt_id`, reinicio si la lección cambia, pasos inválidos descartados (menos de 2 → respaldo), corrección sin proveedor, aislamiento entre diagnóstico y pasos, y reparación que toma la idea errónea del servidor y rechaza aciertos o respuestas inexistentes.
 
