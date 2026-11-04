@@ -39,4 +39,3 @@ for(const bad of [
 assert.throws(()=>policy.normalizeGoal({...raw,foundations:[foundation,{...foundation}]}),/repite un ID/);
 
 console.log('skill foundations frontend: PASS');
-

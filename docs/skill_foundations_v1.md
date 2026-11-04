@@ -9,4 +9,3 @@ Las microlecciones recuperan del almacenamiento autorizado hasta tres fundamento
 Las metas antiguas cargan con una lista vacía. La exportación pública conserva fundamentos y procedencia pública para restaurarlos en otro perfil, reasignando únicamente el propietario mediante la validación existente. No existe un respaldo privado nuevo. Revertir la función requiere retirar el panel, las rutas y el uso en la lección; los datos adicionales permanecen inertes y no alteran `sufficient()`, los umbrales ni el selector pedagógico.
 
 La generación está conectada al cliente de modelo existente, pero en esta entrega solo se valida con proveedor controlado. La aceptación con Gemini real queda pendiente.
-
