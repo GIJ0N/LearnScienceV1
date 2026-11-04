@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: diagnostic-design-doc
+expected_outcome: |
+  Documento docs/ con diagnóstico adaptativo por hebra (piso/techo), una pregunta a la vez, y decisión explícita y conservadora sobre qué cuenta como evidencia.

@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: graded-hints-code-change
+expected_outcome: |
+  Cambio acotado en la ruta activa con app.js y JS incrustado en paridad, test con casos negativos y CI completa en verde, sin llamar a Gemini real.
