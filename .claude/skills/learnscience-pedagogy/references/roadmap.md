@@ -19,9 +19,9 @@ hacen la diferencia entre "aprobó el curso" y "experto".
 
 | # | Paso | Tamaño | Por qué ahora |
 |---|---|---|---|
-| 1 | Confianza 0–100 y campo de razonamiento en cada respuesta evaluable | S | Casi gratis; alimenta todo lo demás (diagnóstico, pistas, repaso) |
-| 2 | Pistas graduadas P0–P5 (`help_used` numérico) + taxonomía de fallos de práctica | S–M | Mejora la honestidad de la independencia y la elección de la siguiente actividad |
-| 3 | Diagnóstico por acotamiento (piso/techo por hebra) antes del mapa | M | Mayor ganancia de velocidad: deja de enseñar desde cero a quien no lo necesita |
+| 1 | ✅ (learner_signals_v1) Confianza 0–100 y campo de razonamiento en cada respuesta evaluable | S | Casi gratis; alimenta todo lo demás (diagnóstico, pistas, repaso) |
+| 2 | ✅ (graded_hints_v1) Pistas graduadas P0–P5 (`help_used` numérico) + taxonomía de fallos de práctica | S–M | Mejora la honestidad de la independencia y la elección de la siguiente actividad |
+| 3 | ✅ (placement_v1) Diagnóstico por acotamiento (piso/techo por hebra) antes del mapa | M | Mayor ganancia de velocidad: deja de enseñar desde cero a quien no lo necesita |
 | 4 | Modo de lección paso a paso: predecir → enseñar → comprobar | M–L | Mayor ganancia de comprensión; mantener la plantilla actual como respaldo |
 | 5 | Programador de espaciado por habilidad + sesión de práctica intercalada (recuerdo/discriminación/composición) | M | Convierte comprensión en disponibilidad y retención |
 | 6 | Grafo de proposiciones y cadenas con procedencia, extraído tras cada sesión | L | Habilita reutilizar entre metas y material de práctica de composición |

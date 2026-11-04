@@ -478,6 +478,26 @@ class DurableMemory:
             );
             CREATE INDEX IF NOT EXISTS criterion_evaluations_activity
               ON criterion_evaluations(profile_id, activity_id, updated_at DESC);
+            CREATE TABLE IF NOT EXISTS placement_items(
+              profile_id TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+              goal_id TEXT NOT NULL,
+              item_id TEXT NOT NULL,
+              node_id TEXT NOT NULL,
+              public_json TEXT NOT NULL,
+              private_json TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              PRIMARY KEY(profile_id, item_id)
+            );
+            CREATE TABLE IF NOT EXISTS placement_answers(
+              profile_id TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+              attempt_id TEXT NOT NULL,
+              goal_id TEXT NOT NULL,
+              item_id TEXT NOT NULL,
+              fingerprint TEXT NOT NULL,
+              result_json TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              PRIMARY KEY(profile_id, attempt_id)
+            );
             """)
             columns = {row[1] for row in db.execute("PRAGMA table_info(criterion_evaluations)").fetchall()}
             if "owner_token" not in columns:
@@ -503,6 +523,45 @@ class DurableMemory:
         if not deleted:
             raise ValueError("El perfil local no existe.")
         return {"deleted": True, "profile_id": profile_id}
+
+    def save_placement_items(self, profile_id, goal_id, items):
+        """Store placement questions; the private part (answer key) never leaves the server."""
+        profile_id = _profile_id(profile_id)
+        goal_id = str(goal_id or "").strip()
+        if not goal_id or not isinstance(items, list):
+            raise ValueError("Las preguntas de diagnóstico están incompletas.")
+        now = time.time_ns()
+        with self._lock, self._connect() as db:
+            if not db.execute("SELECT 1 FROM profiles WHERE profile_id=?", (profile_id,)).fetchone():
+                raise ValueError("El perfil local no existe.")
+            for public, private in items:
+                db.execute("INSERT INTO placement_items VALUES(?,?,?,?,?,?,?)",
+                           (profile_id, goal_id, public["item_id"], public["node_id"], _json(public), _json(private), now))
+
+    def load_placement_item(self, profile_id, item_id):
+        profile_id = _profile_id(profile_id)
+        with self._lock, self._connect() as db:
+            row = db.execute("SELECT * FROM placement_items WHERE profile_id=? AND item_id=?", (profile_id, str(item_id or ""))).fetchone()
+        if not row:
+            return None
+        return {"goal_id": row["goal_id"], "node_id": row["node_id"], "public": json.loads(row["public_json"]), "private": json.loads(row["private_json"])}
+
+    def record_placement_answer(self, profile_id, goal_id, item_id, attempt_id, fingerprint, result):
+        """Idempotent by attempt_id: the same answer returns the stored result; a different one is rejected."""
+        profile_id = _profile_id(profile_id)
+        attempt_id = str(attempt_id or "").strip()
+        if not attempt_id:
+            raise ValueError("Falta attempt_id para la respuesta de diagnóstico.")
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT * FROM placement_answers WHERE profile_id=? AND attempt_id=?", (profile_id, attempt_id)).fetchone()
+            if row:
+                if row["fingerprint"] != fingerprint:
+                    raise ValueError("PLACEMENT_ATTEMPT_CONFLICT: este attempt_id ya registró otra respuesta.")
+                return json.loads(row["result_json"])
+            db.execute("INSERT INTO placement_answers VALUES(?,?,?,?,?,?,?)",
+                       (profile_id, attempt_id, str(goal_id), str(item_id), fingerprint, _json(result), time.time_ns()))
+        return _copy(result)
 
     def save_criterion_activity(self, profile_id, goal_id, public_contract, private_contract):
         """Insert an immutable activity contract, or return its identical original.
