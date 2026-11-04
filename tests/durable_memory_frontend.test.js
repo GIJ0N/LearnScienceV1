@@ -12,7 +12,9 @@ function element(type = 'div') {
 
 const app = element('app');
 const status = element('status');
-global.document = { getElementById: id => id === 'app' ? app : status, createElement: type => element(type) };
+const indicator = element('span');
+indicator.id = 'ruta-persistence-state';
+global.document = { getElementById: id => id === 'app' ? app : id === 'ruta-persistence-state' ? indicator : status, createElement: type => element(type) };
 let localWrites = 0;
 global.localStorage = { getItem: () => null, setItem: () => { localWrites += 1; } };
 global.confirm = () => true;
@@ -42,14 +44,20 @@ policy.setStoreForTests(store);
 policy.setProfileForTests({ profile_id: 'profile-test', name: 'Prueba', preferences: {} }, 1);
 
 (async () => {
-  assert.equal(await policy.save(), false);
+  const failedWrite = policy.save();
+  assert.equal(indicator.textContent, 'Guardando…');
+  assert.equal(await failedWrite, false);
+  assert.equal(indicator.textContent, 'Cambios sin confirmar');
   await policy.flushSave();
   assert.match(status.textContent, /No se guardó la memoria durable/);
   assert.equal(localWrites, 0, 'el progreso completo no vuelve a localStorage');
   assert.equal(requests[0].body.expected_revision, 1);
 
   failSave = false;
-  assert.equal(await policy.save(), true, 'un reintento explícito puede recuperar el guardado');
+  const recoveredWrite = policy.save();
+  assert.equal(await recoveredWrite, true, 'un reintento explícito puede recuperar el guardado');
+  assert.equal(indicator.textContent, 'Sincronizado', 'completion updates the existing indicator without a render');
+  assert.equal(indicator.className, 'status-pill good');
   assert.equal(requests.at(-1).body.profile_id, 'profile-test');
   assert.equal(requests.at(-1).body.store.goals[0].id, 'goal-1');
 
