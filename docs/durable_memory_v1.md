@@ -2,6 +2,8 @@
 
 Ruta guarda la memoria de aprendizaje en SQLite. La base predeterminada es `data/ruta-memory.sqlite3`; `RUTA_DB_PATH` permite usar una ubicación aislada para pruebas. SQLite es la fuente de verdad después de crear o seleccionar un perfil. El navegador conserva únicamente el identificador del perfil seleccionado y estado transitorio de interfaz.
 
+El servidor activo mantiene un bloqueo exclusivo del sistema operativo sobre un archivo estable asociado a la ruta canónica de la SQLite. El handle permanece abierto durante toda la vida del servidor y el archivo de bloqueo no se elimina. Una segunda instancia local que apunte a la misma base se rechaza antes de aceptar solicitudes; bases diferentes pueden usarse simultáneamente. En Windows se usa `msvcrt.locking`; en Linux/CI, `fcntl.flock`. Esto protege una SQLite local en un solo equipo, no ofrece coordinación entre máquinas ni soporte general de bases compartidas.
+
 Un perfil local separa su documento de progreso, preferencias explícitas e intentos. No es una cuenta ni un mecanismo de autenticación. Cada meta, sesión, evento y episodio queda asociado al `profile_id`. La tabla `attempts` es una proyección consultable del ledger: conserva pregunta, respuesta, evaluación, ayuda, dimensiones observadas y el evento completo. La clave `(profile_id, attempt_id)` preserva la idempotencia.
 
 ## Migración y compatibilidad

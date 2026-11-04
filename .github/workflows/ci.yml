@@ -34,6 +34,9 @@ jobs:
       - name: Run evidence policy tests
         run: node tests/evidence_policy.test.js
 
+      - name: Test read-only evidence map
+        run: node tests/evidence_map.test.js
+
       - name: Run evidence sufficiency and confirmation flow tests
         run: node tests/evidence_sufficiency.test.js
 
@@ -46,6 +49,12 @@ jobs:
       - name: Run reachable dimension integration tests
         run: python tests/reachable_dimensions.test.py
 
+      - name: Run delayed review frontend tests
+        run: node tests/delayed_review.test.js
+
+      - name: Run delayed review backend contract tests
+        run: python tests/delayed_review_backend.test.py
+
       - name: Run durable memory tests
         run: python tests/durable_memory.test.py
 
@@ -54,6 +63,29 @@ jobs:
 
       - name: Run microtutoring repair episode tests
         run: node tests/microtutoring_repair_episode.test.js
+
+      - name: Run repair teaching frontend tests
+        run: node tests/repair_teaching_v2.test.js
+
+      - name: Run repair teaching backend tests
+        run: python tests/repair_teaching_backend.test.py
+
+      - name: Run repair diagnosis recovery tests
+        run: |
+          node tests/repair_diagnosis_recovery.test.js
+          python tests/repair_diagnosis_recovery_backend.test.py
+
+      - name: Run criterion assessment v1 tests
+        run: |
+          python tests/criterion_assessment.test.py
+          python tests/criterion_durability.test.py
+          python tests/criterion_server_lock.test.py
+          node tests/criterion_assessment_frontend.test.js
+
+      - name: Run controlled repair acceptance tests
+        run: |
+          node tests/repair_acceptance_controlled.test.js
+          python tests/repair_persistence_acceptance.test.py
 
       - name: Check app.js syntax
         run: node --check app.js
@@ -69,4 +101,3 @@ jobs:
 
       - name: Run parity checker regression tests
         run: python tests/check_parity.test.py
-

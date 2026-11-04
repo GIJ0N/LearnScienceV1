@@ -181,6 +181,8 @@ El historial permanece disponible y no se abre un bucle ilimitado.
 
 ## Compatibilidad y deuda pendiente
 
+Los episodios nuevos pueden usar `repair_teaching_v2`, documentado en `docs/repair_teaching_v2.md`. Esa versión genera la enseñanza después de confirmar y seleccionar la laguna. v1 conserva exactamente este recorrido y no recibe exposiciones o contenido histórico inventados.
+
 - Los datos legacy cargan con `repairEpisodes=[]` y conservan sus demás campos.
 - Los eventos anteriores no se reinterpretan ni se convierten en episodios.
 - `level` continúa como dato de compatibilidad y no decide dominio.
