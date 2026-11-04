@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-function element(type='div'){return {type,textContent:'',value:'',children:[],append(...items){this.children.push(...items)},appendChild(item){this.children.push(item);return item},replaceChildren(...items){this.children=items},querySelectorAll(){return []}}}
+function element(type='div'){return {type,tag:type,textContent:'',value:'',children:[],style:{},attributes:{},append(...items){this.children.push(...items)},appendChild(item){this.children.push(item);return item},prepend(...items){this.children.unshift(...items)},replaceChildren(...items){this.children=items},setAttribute(key,value){this.attributes[key]=value},querySelectorAll(){return []}}}
 const roots={app:element('main'),status:element('div')};
 global.document={getElementById:id=>id==='app'?roots.app:roots.status,createElement:type=>element(type)};
 global.localStorage={getItem:()=>null,setItem:()=>{}};global.confirm=()=>true;
@@ -17,4 +17,26 @@ assert.equal(goal.events.length,1);assert.deepEqual(goal.events[0].observed_dime
 const helped={...assessment,attempt_id:'attempt-2',help_used:1,independent:false,overall:'PARTIAL',criteria:assessment.criteria.map(x=>({...x,status:x.status==='SATISFIED'?'PARTIAL':x.status}))};
 policy.recordCriterionAssessment(goal,'n1',{selected_option_id:'a',explanation:'texto'},helped);assert.equal(goal.events[1].is_independent,false);assert.deepEqual(goal.events[1].observed_dimensions,[]);
 assert.equal(policy.recordCriterionAssessment(goal,'n1',{selected_option_id:'b',explanation:'respuesta distinta'},assessment),false);
-console.log('criterion_assessment_frontend.test.js PASS');
+function all(root){return [root,...root.children.filter(x=>x&&typeof x==='object').flatMap(all)]}
+function text(root){return all(root).map(x=>x.textContent||'').join('\n')}
+const visibleAssessment={...assessment,criteria:[
+  {...assessment.criteria[0],observation:'Opción validada por clave privada.',evaluation_method:'deterministic_option_key'},
+  {...assessment.criteria[1],observation:'Proveedor semántico no disponible.',evaluation_method:'not_evaluated'},
+]};
+const renderedGoal={...draftGoal,criterion_draft:{...draftGoal.criterion_draft,status:'EVALUATED',assessment:visibleAssessment},criterion_assessments:[visibleAssessment]};
+policy.setProfileForTests({profile_id:'profile-a',name:'Perfil sintético'},2);
+policy.setStoreForTests({active:'goal',goals:[renderedGoal]});
+policy.criterionView();
+assert.equal(all(roots.app).filter(x=>String(x.className||'').includes('criterion-card')).length,2);
+assert.match(text(roots.app),/Opción validada por clave privada/);
+assert.match(text(roots.app),/Proveedor semántico no disponible/);
+assert.match(text(roots.app),/no produjo evidencia positiva/);
+assert.match(text(roots.app),/Método: deterministic_option_key/);
+assert.doesNotMatch(text(roots.app),/correct_option_id|PRIVATE_REFERENCE/);
+const repairingGoal={...renderedGoal,contextStack:[{context_id:'context-1',episode_id:'episode-1',status:'ACTIVE'}]};
+policy.setStoreForTests({active:'goal',goals:[repairingGoal]});
+(async()=>{
+  await assert.rejects(policy.requestCriterionActivity(repairingGoal),error=>error.code==='ACTIVE_REPAIR_CONTEXT');
+  assert.equal(repairingGoal.criterion_assessments.length,1,'blocked navigation creates no new assessment or evidence');
+  console.log('criterion_assessment_frontend.test.js PASS');
+})().catch(error=>{console.error(error);process.exitCode=1});

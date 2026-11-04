@@ -35,7 +35,9 @@ jobs:
         run: node tests/evidence_policy.test.js
 
       - name: Test read-only evidence map
-        run: node tests/evidence_map.test.js
+        run: |
+          node tests/evidence_map.test.js
+          python tests/visual_demo_seed.test.py
 
       - name: Run evidence sufficiency and confirmation flow tests
         run: node tests/evidence_sufficiency.test.js

@@ -56,6 +56,10 @@ assert.equal(map.nodes[1].status, 'UNKNOWN', 'mastery does not propagate through
 assert.equal(map.nodes[2].has_contract, false, 'legacy gets no invented coverage');
 assert.deepEqual(map.edges, [{ from: 'n1', to: 'n2' }]);
 assert.ok(map.nodes[1].column > map.nodes[0].column);
+const layout = policy.evidenceNetworkLayout(map);
+assert.equal(layout.nodes.length, 3);
+assert.deepEqual(layout.edges.map(edge => [edge.from, edge.to]), [['n1', 'n2']]);
+assert.ok(layout.nodes.find(node => node.id === 'n2').x > layout.nodes.find(node => node.id === 'n1').x);
 assert.equal(JSON.stringify(frozen), before);
 
 for (const extra of [
@@ -78,6 +82,8 @@ assert.match(policy.evidenceMapSnapshot(malformed).warnings.join(), /inválido/)
 
 const box = element(); policy.renderEvidenceMap(box, frozen);
 assert.equal(all(box).filter(e => e.tag === 'svg').length, 1);
+assert.equal(all(box).filter(e => e.attributes?.['data-relation'] === 'prerequisite').length, 1,
+  'the network renders only real prerequisite relations');
 assert.match(text(box), /attempt-1/); assert.doesNotMatch(text(box), /PRIVATE REFERENCE/);
 const secondButton = all(box).find(e => e.tag === 'button' && e.textContent === 'Comparar fracciones');
 secondButton.onclick(); assert.equal(secondButton.ariaPressed, 'true');
@@ -85,6 +91,18 @@ assert.match(text(box), /No hay intentos registrados/);
 assert.equal(JSON.stringify(frozen), before, 'browsing does not change session, pending diagnosis, episodes or evidence');
 const legacyButton = all(box).find(e => e.tag === 'button' && e.textContent === 'Dato legacy');
 legacyButton.onclick(); assert.match(text(box), /No se inventa cobertura/);
+
+const search = all(box).find(e => e.tag === 'input' && e.placeholder === 'Buscar habilidad');
+search.value = 'fracciones'; search.oninput();
+assert.match(text(box), /1 coincidencia/);
+const graphNode = all(box).find(e => e.attributes?.['data-node-id'] === 'n2');
+assert.match(graphNode.attributes.class, /is-selected/);
+graphNode.onkeydown({ key: 'Enter', preventDefault() {} });
+assert.equal(secondButton.ariaPressed, 'true', 'keyboard selection and list alternative share details');
+const drawing = all(box).find(e => e.tag === 'svg');
+drawing.onwheel({ deltaY: -1, preventDefault() {} });
+assert.ok(all(drawing).some(e => /scale\(1\.12\)/.test(e.attributes?.transform || '')), 'wheel zoom updates only the view');
+assert.equal(JSON.stringify(frozen), before, 'search, select and zoom remain read-only');
 
 // Native text nodes, not generated markup: names cannot execute HTML.
 const unsafe = goal(); unsafe.nodes[0].name = '<img src=x onerror=alert(1)>';
