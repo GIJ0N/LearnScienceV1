@@ -31,6 +31,10 @@ jobs:
           node tests/adaptive_cycle.test.js
           python tests/adaptive_cycle.test.py
 
+      - name: Run learner signal tests
+        run: |
+          node tests/learner_signals.test.js
+          python tests/learner_signals_backend.test.py
       - name: Run evidence policy tests
         run: node tests/evidence_policy.test.js
 

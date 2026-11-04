@@ -661,9 +661,15 @@ class DurableMemory:
         sources = []
         for item in attempts:
             event = item["event"]
-            sources.append({"attempt_id": item["attempt_id"], "phase": item["phase"], "result": item["result"], "help_used": item["help_used"], "observed_dimensions": event.get("observed_dimensions", []), "at": item["occurred_at"]})
+            source = {"attempt_id": item["attempt_id"], "phase": item["phase"], "result": item["result"], "help_used": item["help_used"], "observed_dimensions": event.get("observed_dimensions", []), "at": item["occurred_at"]}
+            if event.get("learner_signal_version"):
+                source["learner_confidence"] = event.get("learner_confidence")
+                source["calibration_signal"] = event.get("calibration_signal")
+            sources.append(source)
         if not sources:
             reason = "No hay intentos anteriores pertinentes para esta habilidad."
+        elif sources[0].get("calibration_signal") == "committed_misconception":
+            reason = "Seleccionada porque el último intento fue incorrecto con confianza alta: posible idea errónea consolidada."
         elif sources[0]["help_used"]:
             reason = "Seleccionada porque el último intento tuvo ayuda y conviene una comprobación posterior."
         elif sources[0]["result"] in ("PARTIAL", "MISCONCEPTION"):

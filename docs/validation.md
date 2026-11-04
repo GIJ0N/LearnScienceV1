@@ -15,6 +15,8 @@ No se ha declarado una versión mínima formal del proyecto. Las versiones anter
 Desde la raíz del repositorio:
 
 ```text
+node tests/learner_signals.test.js
+python tests/learner_signals_backend.test.py
 node tests/evidence_policy.test.js
 node tests/evidence_sufficiency.test.js
 python tests/evidence_confirmation.test.py
@@ -138,3 +140,5 @@ La prueba inyecta un reloj local y comprueba el estado antes, en y después del
 vencimiento, ayuda, fechas inválidas o futuras, contratos dirigidos y
 persistencia de los campos en una normalización v4. El reloj del equipo no se
 modifica y el resultado no demuestra retención humana.
+
+`node tests/learner_signals.test.js` y `python tests/learner_signals_backend.test.py` cubren `learner_signals_v1`: confianza ausente como `null`, matriz de calibración, que la confianza no concede independencia ni cambia cobertura, rechazo de confianza inválida antes de llamar al proveedor, «No sé» sin señal, contexto del evaluador y de la microlección, y eventos legacy sin señales. Usan respuestas controladas; no validan Gemini real ni el navegador.
