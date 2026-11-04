@@ -126,7 +126,7 @@ def seed(db_path):
         "criteria": public["criteria"],
         "rubric_version": "criterion_assessment_v1",
         "contract_digest": digest,
-        "references": {"explanation": public["criteria"][1]["description"]},
+        "references": {"explanation": "Restar 8 a ambos miembros es reversible y conserva exactamente el conjunto de soluciones: 4x=16. Restarlo solo a un miembro rompe la igualdad."},
     }
     goal = {
         "id": "visual-goal",

@@ -14,8 +14,9 @@ const assessment={schema_version:'criterion_assessment_v1',attempt_id:'attempt-1
 assert.equal(policy.recordCriterionAssessment(goal,'n1',{selected_option_id:'a',explanation:'texto'},assessment),true);
 assert.equal(policy.recordCriterionAssessment(goal,'n1',{selected_option_id:'a',explanation:'texto'},assessment),false);
 assert.equal(goal.events.length,1);assert.deepEqual(goal.events[0].observed_dimensions,['recognition']);assert.equal(goal.coverage[0].dimensions[0].evidence.length,1);assert.equal(goal.coverage[0].dimensions[1].evidence.length,0);
-const helped={...assessment,attempt_id:'attempt-2',help_used:1,independent:false,overall:'PARTIAL',criteria:assessment.criteria.map(x=>({...x,status:x.status==='SATISFIED'?'PARTIAL':x.status}))};
-policy.recordCriterionAssessment(goal,'n1',{selected_option_id:'a',explanation:'texto'},helped);assert.equal(goal.events[1].is_independent,false);assert.deepEqual(goal.events[1].observed_dimensions,[]);
+const helped={...assessment,attempt_id:'attempt-2',help_used:1,independent:false,overall:'CORRECT',criteria:assessment.criteria.map(x=>({...x,status:'SATISFIED'}))};
+policy.recordCriterionAssessment(goal,'n1',{selected_option_id:'a',explanation:'texto'},helped);assert.equal(goal.events[1].is_independent,false);assert.deepEqual(goal.events[1].observed_dimensions,['recognition','conceptual']);
+assert.equal(policy.independentSuccesses(goal,'n1','conceptual').length,0,'correct assisted criteria are not independent successes');
 assert.equal(policy.recordCriterionAssessment(goal,'n1',{selected_option_id:'b',explanation:'respuesta distinta'},assessment),false);
 function all(root){return [root,...root.children.filter(x=>x&&typeof x==='object').flatMap(all)]}
 function text(root){return all(root).map(x=>x.textContent||'').join('\n')}

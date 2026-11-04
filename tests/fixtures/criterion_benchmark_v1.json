@@ -1,0 +1,48 @@
+{
+  "version": "criterion_bank_v1",
+  "review_status": "Expected labels authored for engineering review, not independently validated pedagogical ground truth",
+  "domains": [
+    {
+      "id": "fractions", "question": "¿Por qué 1/2 equivale a 2/4?",
+      "options": [{"id":"a","text":"Conservan la misma proporción"},{"id":"b","text":"Tienen el mismo numerador"}],
+      "key":"a", "reference":"Multiplicar numerador y denominador por el mismo factor no nulo conserva la razón. También es válida una partición gráfica del mismo entero en cuartos.",
+      "cases": [
+        {"id":"correct","choice":"a","answer":"Multiplico ambos términos por dos; la proporción no cambia.","provider":{"status":"SATISFIED","observation":"Conserva razón."},"expected":{"overall":"CORRECT","explanation":"SATISFIED"}},
+        {"id":"partial","choice":"b","answer":"Cambia el tamaño de las partes, pero no sé relacionar numerador y denominador.","provider":{"status":"PARTIAL","observation":"Reconoce partición; falta equivalencia."},"expected":{"overall":"PARTIAL","explanation":"PARTIAL"}},
+        {"id":"wrong_reason","choice":"a","answer":"Son iguales porque sumé uno al numerador y dos al denominador; siempre funciona.","provider":{"status":"NOT_SATISFIED","observation":"Generalización aditiva falsa."},"expected":{"overall":"PARTIAL","explanation":"NOT_SATISFIED"}},
+        {"id":"alternative","choice":"a","answer":"Divido cada mitad del mismo pastel en dos: la mitad ocupa dos de los cuatro trozos.","provider":{"status":"SATISFIED","observation":"Partición válida del mismo entero."},"expected":{"overall":"CORRECT","explanation":"SATISFIED"}},
+        {"id":"ambiguous","choice":"a","answer":"Porque queda igual al hacerlo.","provider":{"status":"NOT_EVALUATED","observation":"Referente ambiguo."},"expected":{"overall":"PARTIAL","explanation":"NOT_EVALUATED"}},
+        {"id":"assisted","choice":"a","answer":"Multipliqué ambos términos por dos siguiendo la pista.","help":1,"provider":{"status":"SATISFIED","observation":"Razón correcta asistida."},"expected":{"overall":"CORRECT","explanation":"SATISFIED"}},
+        {"id":"unavailable","choice":"a","answer":"La proporción permanece.","provider":{"status":"BROKEN"},"expected":{"overall":"PARTIAL","explanation":"NOT_EVALUATED"}}
+      ]
+    },
+    {
+      "id":"surface_tension", "question":"¿Por qué una gota pequeña aislada tiende a ser esférica si la gravedad es despreciable?",
+      "options":[{"id":"a","text":"Reduce el área interfacial a volumen fijo"},{"id":"b","text":"La gravedad empuja hacia el centro desde todas direcciones"}],
+      "key":"a", "reference":"Para tensión superficial positiva e isotrópica, reducir área a volumen fijo reduce energía superficial. La esfera minimiza el área; se excluyen gravedad relevante y contactos con sólidos.",
+      "cases":[
+        {"id":"correct","choice":"a","answer":"La esfera minimiza área para ese volumen y por tanto energía superficial.","provider":{"status":"SATISFIED","observation":"Energía y restricción correctas."},"expected":{"overall":"CORRECT","explanation":"SATISFIED"}},
+        {"id":"partial","choice":"b","answer":"La superficie trata de reducirse, pero no sé qué ocurre con el volumen.","provider":{"status":"PARTIAL","observation":"Identifica superficie sin restricción."},"expected":{"overall":"PARTIAL","explanation":"PARTIAL"}},
+        {"id":"wrong_reason","choice":"a","answer":"Es una membrana sólida rígida que mantiene siempre la esfera.","provider":{"status":"NOT_SATISFIED","observation":"Confunde interfaz líquida con sólido."},"expected":{"overall":"PARTIAL","explanation":"NOT_SATISFIED"}},
+        {"id":"alternative","choice":"a","answer":"Una deformación que aumente el área requiere trabajo contra la tensión; la esfera es el mínimo para el líquido fijado.","provider":{"status":"SATISFIED","observation":"Argumento energético equivalente."},"expected":{"overall":"CORRECT","explanation":"SATISFIED"}},
+        {"id":"ambiguous","choice":"a","answer":"Porque las fuerzas se equilibran.","provider":{"status":"NOT_EVALUATED","observation":"No identifica fuerzas ni energía."},"expected":{"overall":"PARTIAL","explanation":"NOT_EVALUATED"}},
+        {"id":"assisted","choice":"a","answer":"La pista indica minimizar energía; a volumen constante la esfera minimiza área.","help":1,"provider":{"status":"SATISFIED","observation":"Explicación asistida válida."},"expected":{"overall":"CORRECT","explanation":"SATISFIED"}},
+        {"id":"unavailable","choice":"a","answer":"Minimiza energía interfacial.","provider":{},"expected":{"overall":"PARTIAL","explanation":"NOT_EVALUATED"}}
+      ]
+    },
+    {
+      "id":"code_reading", "question":"Lee sin ejecutar: a = [1]; b = a; b.append(2). ¿Qué contiene a?",
+      "options":[{"id":"a","text":"[1, 2]"},{"id":"b","text":"[1]"}],
+      "key":"a", "reference":"La asignación b=a enlaza ambas variables al mismo objeto lista; append muta ese objeto. No crea una copia ni reasigna a. No ejecutar código del alumno.",
+      "cases":[
+        {"id":"correct","choice":"a","answer":"Ambos nombres apuntan a la misma lista y append la modifica.","provider":{"status":"SATISFIED","observation":"Aliasing y mutación correctos."},"expected":{"overall":"CORRECT","explanation":"SATISFIED"}},
+        {"id":"partial","choice":"b","answer":"Append cambia una lista pero no sé si se creó una copia.","provider":{"status":"PARTIAL","observation":"Mutación reconocida, identidad pendiente."},"expected":{"overall":"PARTIAL","explanation":"PARTIAL"}},
+        {"id":"wrong_reason","choice":"a","answer":"Python sincroniza automáticamente todas las listas con valores iguales.","provider":{"status":"NOT_SATISFIED","observation":"Igualdad de valores no implica identidad."},"expected":{"overall":"PARTIAL","explanation":"NOT_SATISFIED"}},
+        {"id":"alternative","choice":"a","answer":"Hay un solo objeto y dos etiquetas; al añadir el elemento por b se ve también por a.","provider":{"status":"SATISFIED","observation":"Modelo de objetos equivalente."},"expected":{"overall":"CORRECT","explanation":"SATISFIED"}},
+        {"id":"ambiguous","choice":"a","answer":"Se actualiza porque es así.","provider":{"status":"NOT_EVALUATED","observation":"No permite inferir comprensión."},"expected":{"overall":"PARTIAL","explanation":"NOT_EVALUATED"}},
+        {"id":"assisted","choice":"a","answer":"Con la pista del objeto compartido, append modifica lo que ven ambos nombres.","help":1,"provider":{"status":"SATISFIED","observation":"Razonamiento correcto con ayuda."},"expected":{"overall":"CORRECT","explanation":"SATISFIED"}},
+        {"id":"unavailable","choice":"a","answer":"Ambos nombres son alias.","provider":{"status":"SATISFIED"},"expected":{"overall":"PARTIAL","explanation":"NOT_EVALUATED"}}
+      ]
+    }
+  ]
+}

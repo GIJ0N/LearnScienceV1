@@ -92,6 +92,14 @@ jobs:
       - name: Check app.js syntax
         run: node --check app.js
 
+      - name: Test evaluator and map integrity with offline benchmark
+        run: |
+          python tests/tutor_integrity.test.py
+          python tests/criterion_contract_immutability.test.py
+          node tests/criterion_checkpoint.test.js
+          python tools/criterion_benchmark.py
+          python tests/controlled_demo.test.py
+
       - name: Run the legacy app self-test
         run: python app_legacy.py --self-test
 

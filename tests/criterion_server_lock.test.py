@@ -82,7 +82,7 @@ def prepare_database(path, label):
     }
     private = {
         "correct_option_id": "a", "criteria": public["criteria"], "rubric_version": "criterion_assessment_v1",
-        "contract_digest": "lock-test-contract", "references": {"explanation": "Explicar."},
+        "contract_digest": "lock-test-contract", "references": {"explanation": "A representa aplicar la misma operación a ambos miembros y conservar la igualdad."},
     }
     store.save_criterion_activity(profile["profile_id"], "goal-lock", public, private)
     return profile["profile_id"], public["activity_id"]
