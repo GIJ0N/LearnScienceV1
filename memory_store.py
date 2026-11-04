@@ -12,6 +12,29 @@ import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
+HINT_LADDER_VERSION = "graded_hints_v1"
+HINT_LEVEL_MAX = 5
+
+
+def normalize_hint_level(value):
+    """Return None when no hint was used, otherwise an integer 0..5.
+
+    Unparseable values are treated as the most revealing hint (5): when we cannot
+    tell how much was revealed, the conservative reading is that it was a lot.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return HINT_LEVEL_MAX
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return HINT_LEVEL_MAX
+    if number != number or number in (float("inf"), float("-inf")):
+        return HINT_LEVEL_MAX
+    rounded = int(number) if number == int(number) else int(number) + (1 if number > 0 else 0)
+    return max(0, min(HINT_LEVEL_MAX, rounded))
+
 
 SCHEMA_VERSION = 2
 STORE_SCHEMA_VERSION = 5
@@ -165,6 +188,15 @@ def validate_store(raw, profile_id, allow_profile_rebind=False):
             event["profile_id"] = profile_id
             if event.get("node_id") is not None and event.get("node_id") not in allowed_nodes:
                 raise ValueError("El ledger contiene una referencia de nodo inválida.")
+            if event.get("type") == "EVIDENCE" and "hint_level_max" in event:
+                level = normalize_hint_level(event.get("hint_level_max"))
+                event["hint_level_max"] = level
+                if level is not None:
+                    # Any recorded hint blocks independence, whatever the stored flags say.
+                    event["help_used"] = max(1, int(event.get("help_used") or event.get("help") or 0))
+                    event["is_independent"] = False
+                    if "independent" in event:
+                        event["independent"] = False
             attempt_id = event.get("attempt_id")
             if event.get("type") == "EVIDENCE" and attempt_id:
                 attempt_id = str(attempt_id)
@@ -661,7 +693,7 @@ class DurableMemory:
         sources = []
         for item in attempts:
             event = item["event"]
-            source = {"attempt_id": item["attempt_id"], "phase": item["phase"], "result": item["result"], "help_used": item["help_used"], "observed_dimensions": event.get("observed_dimensions", []), "at": item["occurred_at"]}
+            source = {"attempt_id": item["attempt_id"], "phase": item["phase"], "result": item["result"], "help_used": item["help_used"], "hint_level_max": normalize_hint_level(event.get("hint_level_max")), "observed_dimensions": event.get("observed_dimensions", []), "at": item["occurred_at"]}
             if event.get("learner_signal_version"):
                 source["learner_confidence"] = event.get("learner_confidence")
                 source["calibration_signal"] = event.get("calibration_signal")

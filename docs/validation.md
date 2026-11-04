@@ -31,6 +31,8 @@ node tests/repair_teaching_v2.test.js
 python tests/repair_teaching_backend.test.py
 node tests/repair_diagnosis_recovery.test.js
 python tests/repair_diagnosis_recovery_backend.test.py
+node tests/graded_hints.test.js
+python tests/graded_hints_backend.test.py
 node --check app.js
 python app_legacy.py --self-test
 python -m py_compile app_legacy.py
@@ -55,6 +57,8 @@ Git almacena los archivos de este repositorio con LF, pero un checkout de Window
 `python tests/criterion_assessment.test.py` y `node tests/criterion_assessment_frontend.test.js` cubren la vertical `criterion_assessment_v1`: actividad de opción múltiple con explicación separada, clave privada solo en el servidor, evaluación determinista de la opción, explicación `NOT_EVALUATED` cuando el proveedor controlado no responde, ayuda que impide independencia, idempotencia por `attempt_id` y persistencia compatible. Estas pruebas usan respuestas controladas y no validan eficacia pedagógica ni Gemini real.
 
 `python tests/criterion_durability.test.py` comprueba el contrato privado completo en SQLite aislado, borradores tras reinicio, recuperación de evaluaciones ya persistidas, rechazo de fingerprints distintos, reserva concurrente, recuperación explícita de una reserva cuyo propietario pertenece a un proceso anterior, rechazo de respuestas tardías del propietario anterior, aislamiento por perfil/meta, exportación sin claves, restauración sin contrato privado, eliminación por cascada y compatibilidad con stores legacy. El registro `PENDING` no mantiene una transacción abierta durante la llamada al proveedor: la misma instancia no puede iniciar una segunda evaluación, pero una instancia nueva reclama el mismo `attempt_id` y fingerprint. Si el proceso cae durante la llamada, la recuperación no garantiza que el proveedor se ejecutara una sola vez; sí evita duplicar evidencia y evita que una respuesta tardía sobrescriba la evaluación recuperada.
+
+`node tests/graded_hints.test.js` y `python tests/graded_hints_backend.test.py` cubren `graded_hints_v1` (`docs/graded_hints_v1.md`): el evento registra `hint_level_max` (0-5), cualquier pista —incluida P0— impide independencia en el evento, la suficiencia, el cierre de reparación y `validate_store`, los valores ilegibles se tratan como 5, la huella de criterio solo cambia cuando hay nivel, y los eventos legacy sin el campo no reciben un nivel inventado. Usan proveedor controlado y SQLite temporal; no validan Gemini real ni navegador.
 
 `python tests/criterion_server_lock.test.py` usa procesos reales y SQLite temporales. Comprueba que una segunda instancia no puede servir la misma base mientras el primer proceso conserva el handle bloqueado, que la caída abrupta libera el bloqueo, que el mismo intento puede recuperarse después, que dos solicitudes del servidor activo no ejecutan dos evaluaciones, que bases distintas funcionan simultáneamente y que una respuesta HTTP perdida no duplica la evaluación. El bloqueo cubre una SQLite local en un solo equipo; no es un protocolo distribuido.
 
