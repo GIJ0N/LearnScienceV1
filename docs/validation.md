@@ -15,6 +15,8 @@ No se ha declarado una versión mínima formal del proyecto. Las versiones anter
 Desde la raíz del repositorio:
 
 ```text
+python tests/prompt_quality.test.py
+python tests/prompt_bench.test.py
 node tests/map_areas.test.js
 python tests/map_areas_backend.test.py
 node tests/expert_panel.test.js
@@ -160,6 +162,8 @@ modifica y el resultado no demuestra retención humana.
 `node tests/learner_signals.test.js` y `python tests/learner_signals_backend.test.py` cubren `learner_signals_v1`: confianza ausente como `null`, matriz de calibración, que la confianza no concede independencia ni cambia cobertura, rechazo de confianza inválida antes de llamar al proveedor, «No sé» sin señal, contexto del evaluador y de la microlección, y eventos legacy sin señales. Usan respuestas controladas; no validan Gemini real ni el navegador.
 
 `node tests/placement.test.js` y `python tests/placement_backend.test.py` cubren `placement_v1`: entrada por el tema más avanzado, división de lo pendiente, deducción hacia prerrequisitos solo con acierto seguro, laguna hacia dependientes, conflicto, repregunta de temas frágiles, temas con evidencia previa excluidos, saltos que no conceden dominio y se revocan, idempotencia, una sola llamada por lote, clave privada en servidor, corrección sin proveedor, aislamiento por perfil y meta y borrado en cascada. Usan respuestas controladas; no validan Gemini real ni el navegador.
+
+`python tests/prompt_quality.test.py` y `python tests/prompt_bench.test.py` cubren `prompt_quality_v1`: la compuerta de calidad de preguntas (repetidas, «todas las anteriores», correcta delatada por longitud, enunciado que revela la respuesta, sin falsos positivos con variables), que los cinco prompts generadores incluyan las reglas, el banco en modo reproducción con 8 casos sintéticos (cumplimiento, sesgos antes de barajar, costo en llamadas y tokens) y que corra sin red ni claves.
 
 `node tests/map_areas.test.js` y `python tests/map_areas_backend.test.py` cubren `map_areas_v1`: creación en dos llamadas con la primera área abierta, límites y duplicados de áreas, renombrado de ids por área, dependencias hacia temas existentes, fusión de temas repetidos, rechazo de ciclos/ids/prerrequisitos inválidos, expansión que solo agrega sin tocar lo existente ni conceder evidencia, apertura automática no bloqueante, reintento con espera y que el mapa plano anterior siga igual.
 

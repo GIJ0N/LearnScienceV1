@@ -154,6 +154,8 @@ class ProviderSelection(unittest.TestCase):
             handler.do_GET()
         self.assertEqual(sent['content']['provider'], 'anthropic')
         self.assertTrue(sent['content']['configured'])
+        self.assertIn('daily_limit', sent['content'])
+        self.assertIn('calls_today', sent['content'])
         self.assertNotIn(SECRET, json.dumps(sent['content']))
 
 

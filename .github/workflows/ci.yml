@@ -53,6 +53,10 @@ jobs:
         run: |
           node tests/map_areas.test.js
           python tests/map_areas_backend.test.py
+      - name: Run prompt quality tests
+        run: |
+          python tests/prompt_quality.test.py
+          python tests/prompt_bench.test.py
       - name: Run LLM provider tests
         run: python tests/llm_provider.test.py
       - name: Run learner signal tests
