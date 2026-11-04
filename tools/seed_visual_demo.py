@@ -174,7 +174,31 @@ def seed(db_path):
             "assessment": None,
         },
     }
-    store = {"schema_version": 4, "profile_id": profile_id, "goals": [goal], "active": goal["id"]}
+    second_goal = {
+        "id": "visual-goal-physics", "profile_id": profile_id,
+        "goal": "Modelar circuitos eléctricos básicos",
+        "context": "Segunda meta sintética para demostrar conexiones explícitas",
+        "nodes": [
+            {"id": "fundamentos", "name": "Conservación de energía", "outcome": "Explicar el balance de energía en un circuito.", "kind": "concept", "prerequisites": []},
+            {"id": "modelo", "name": "Plantear una ecuación de circuito", "outcome": "Traducir un circuito simple a una ecuación.", "kind": "skill", "prerequisites": ["fundamentos"]},
+        ],
+        "coverage": [coverage("fundamentos", "conceptual", "Comprensión", []) | {"name": "Conservación de energía"}],
+        "learner": {}, "lessons": {}, "reviews": [], "events": [],
+        "session": {"profile_id": profile_id, "mode": "DIAGNOSTIC", "node": None, "stack": [], "stage": "teach", "tries": 0},
+        "map_updates": [], "contextStack": [], "repairEpisodes": [],
+        "pending_repair_diagnosis": None, "criterion_assessments": [], "criterion_draft": None,
+    }
+    relation = {
+        "schema_version": "goal_relation_v1", "relation_id": "demo-relation-equations-circuits",
+        "profile_id": profile_id,
+        "source": {"goal_id": goal["id"], "node_id": "ecuaciones"},
+        "target": {"goal_id": second_goal["id"], "node_id": "modelo"},
+        "type": "application",
+        "explanation": "Manipular ecuaciones se aplica al plantear y resolver el modelo algebraico de un circuito.",
+        "provenance": {"source": "synthetic_demo", "label": "Dato sintético revisable"},
+        "created_at": int(time.time() * 1000), "status": "confirmed",
+    }
+    store = {"schema_version": 5, "profile_id": profile_id, "goals": [goal, second_goal], "active": goal["id"], "goal_relations": [relation]}
     memory.save_criterion_activity(profile_id, goal["id"], public, private)
     memory.save(profile_id, store, source["revision"])
     return {"database": str(path), "profile_id": profile_id, "empty_profile_id": empty["profile_id"]}

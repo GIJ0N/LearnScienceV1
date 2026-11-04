@@ -21,6 +21,8 @@ DEFAULT_PREFERENCES = {
     "concrete_examples": False,
     "questions_before_explanation": False,
 }
+GOAL_RELATION_TYPES = {"prerequisite", "shared_principle", "application", "analogy", "related_candidate"}
+GOAL_RELATION_STATES = {"proposed", "confirmed", "rejected"}
 
 
 def database_path(path=None):
@@ -101,7 +103,7 @@ def _profile_id(value):
     return value
 
 
-def validate_store(raw, profile_id):
+def validate_store(raw, profile_id, allow_profile_rebind=False):
     """Validate relations and add ownership metadata without inventing evidence."""
     profile_id = _profile_id(profile_id)
     if not isinstance(raw, dict) or not isinstance(raw.get("goals"), list):
@@ -270,6 +272,72 @@ def validate_store(raw, profile_id):
     active = store.get("active")
     if active is not None and active not in goal_ids:
         raise ValueError("La meta activa no existe en el respaldo.")
+    relations = store.get("goal_relations", [])
+    if not isinstance(relations, list) or len(relations) > 1000:
+        raise ValueError("Las relaciones entre metas son inválidas.")
+    relation_ids = set()
+    goals_by_id = {str(goal["id"]): goal for goal in store["goals"]}
+    normalized_relations = []
+    for relation in relations:
+        if not isinstance(relation, dict) or relation.get("schema_version") != "goal_relation_v1":
+            raise ValueError("La relación entre metas no tiene una versión compatible.")
+        relation_id = str(relation.get("relation_id") or "").strip()
+        if not relation_id or relation_id in relation_ids:
+            raise ValueError("Los IDs de relación deben existir y ser únicos.")
+        relation_ids.add(relation_id)
+        relation_profile = str(relation.get("profile_id") or "").strip()
+        if relation_profile and relation_profile != profile_id and not allow_profile_rebind:
+            raise ValueError("La relación entre metas pertenece a otro perfil.")
+        source = relation.get("source")
+        target = relation.get("target")
+        if not isinstance(source, dict) or not isinstance(target, dict):
+            raise ValueError("La relación no conserva sus extremos.")
+        source_goal = str(source.get("goal_id") or "").strip()
+        target_goal = str(target.get("goal_id") or "").strip()
+        source_node = str(source.get("node_id") or "").strip()
+        target_node = str(target.get("node_id") or "").strip()
+        if not all((source_goal, target_goal, source_node, target_node)) or source_goal == target_goal:
+            raise ValueError("La relación debe unir habilidades concretas de metas distintas.")
+        relation_type = str(relation.get("type") or "").strip()
+        state = str(relation.get("status") or "").strip()
+        explanation = str(relation.get("explanation") or "").strip()
+        provenance = relation.get("provenance")
+        created_at = relation.get("created_at")
+        if relation_type not in GOAL_RELATION_TYPES or state not in GOAL_RELATION_STATES or not explanation or len(explanation) > 800:
+            raise ValueError("La relación no conserva tipo, estado y explicación válidos.")
+        if not isinstance(provenance, dict) or not str(provenance.get("source") or "").strip():
+            raise ValueError("La relación no conserva su procedencia.")
+        if not isinstance(created_at, (int, float)) or created_at < 0:
+            raise ValueError("La relación no conserva una fecha válida.")
+        source_exists = source_goal in goals_by_id and source_node in {str(node["id"]) for node in goals_by_id[source_goal].get("nodes", [])}
+        target_exists = target_goal in goals_by_id and target_node in {str(node["id"]) for node in goals_by_id[target_goal].get("nodes", [])}
+        normalized_relations.append({
+            **_copy(relation), "schema_version": "goal_relation_v1", "relation_id": relation_id,
+            "profile_id": profile_id, "source": {"goal_id": source_goal, "node_id": source_node},
+            "target": {"goal_id": target_goal, "node_id": target_node}, "type": relation_type,
+            "explanation": explanation, "provenance": _copy(provenance), "created_at": created_at,
+            "status": state, "endpoint_status": "available" if source_exists and target_exists else "missing",
+        })
+    graph = {}
+    for relation in normalized_relations:
+        if relation["type"] != "prerequisite" or relation["status"] == "rejected" or relation["endpoint_status"] == "missing":
+            continue
+        graph.setdefault(relation["source"]["goal_id"], set()).add(relation["target"]["goal_id"])
+    visiting, visited = set(), set()
+    def visit(goal_id):
+        if goal_id in visiting:
+            return True
+        if goal_id in visited:
+            return False
+        visiting.add(goal_id)
+        if any(visit(target) for target in graph.get(goal_id, ())):
+            return True
+        visiting.remove(goal_id)
+        visited.add(goal_id)
+        return False
+    if any(visit(goal_id) for goal_id in tuple(graph)):
+        raise ValueError("Las relaciones de prerrequisito entre metas contienen un ciclo.")
+    store["goal_relations"] = normalized_relations
     return store, counts
 
 
@@ -608,7 +676,7 @@ class DurableMemory:
 
     def import_store(self, profile_id, raw_store):
         profile_id = _profile_id(profile_id)
-        canonical, counts = validate_store(raw_store, profile_id)
+        canonical, counts = validate_store(raw_store, profile_id, allow_profile_rebind=True)
         digest = hashlib.sha256(_json(raw_store).encode("utf-8")).hexdigest()
         now = time.time_ns()
         rows = self._attempt_rows(profile_id, canonical)
@@ -638,7 +706,7 @@ class DurableMemory:
         profile_id = _profile_id(profile_id)
         if not isinstance(backup, dict) or backup.get("backup_version") != 1 or not isinstance(backup.get("store"), dict):
             raise ValueError("El respaldo durable es inválido.")
-        store, counts = validate_store(backup["store"], profile_id)
+        store, counts = validate_store(backup["store"], profile_id, allow_profile_rebind=True)
         raw_preferences = backup.get("profile", {}).get("preferences", {})
         preferences = {key: raw_preferences.get(key) is True for key in DEFAULT_PREFERENCES}
         rows = self._attempt_rows(profile_id, store)
