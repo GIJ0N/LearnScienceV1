@@ -24,7 +24,7 @@ hacen la diferencia entre "aprobó el curso" y "experto".
 | 3 | ✅ (placement_v1) Diagnóstico por acotamiento (piso/techo por hebra) antes del mapa | M | Mayor ganancia de velocidad: deja de enseñar desde cero a quien no lo necesita |
 | 4 | ✅ (step_lessons_v1) Modo de lección paso a paso: predecir → enseñar → comprobar | M–L | Mayor ganancia de comprensión; mantener la plantilla actual como respaldo |
 | 5 | ✅ (spaced_practice_v1; composición pendiente del paso 6) Programador de espaciado por habilidad + sesión de práctica intercalada (recuerdo/discriminación/composición) | M | Convierte comprensión en disponibilidad y retención |
-| 6 | Grafo de proposiciones y cadenas con procedencia, extraído tras cada sesión | L | Habilita reutilizar entre metas y material de práctica de composición |
+| 6 | ✅ parcial (knowledge_graph_v1: extracción, cadenas y composición; pendiente que el diagnóstico lea el grafo y conexiones entre metas) Grafo de proposiciones y cadenas con procedencia, extraído tras cada sesión | L | Habilita reutilizar entre metas y material de práctica de composición |
 | 7 | Panel de calibración y de "nivel experto" por nodo con las 7 capas | M | Hace visible el progreso real hacia experto |
 
 Infraestructura transversal (hacer en paralelo, pequeña):

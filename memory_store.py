@@ -498,6 +498,30 @@ class DurableMemory:
               created_at INTEGER NOT NULL,
               PRIMARY KEY(profile_id, attempt_id)
             );
+            CREATE TABLE IF NOT EXISTS knowledge_props(
+              profile_id TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+              goal_id TEXT NOT NULL,
+              prop_id TEXT NOT NULL,
+              statement TEXT NOT NULL,
+              norm TEXT NOT NULL,
+              sources_json TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              PRIMARY KEY(profile_id, prop_id),
+              UNIQUE(profile_id, goal_id, norm)
+            );
+            CREATE TABLE IF NOT EXISTS knowledge_chains(
+              profile_id TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+              goal_id TEXT NOT NULL,
+              chain_id TEXT NOT NULL,
+              node_id TEXT NOT NULL,
+              premises_json TEXT NOT NULL,
+              conclusion_id TEXT NOT NULL,
+              chain_key TEXT NOT NULL,
+              sources_json TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              PRIMARY KEY(profile_id, chain_id),
+              UNIQUE(profile_id, goal_id, chain_key)
+            );
             """)
             columns = {row[1] for row in db.execute("PRAGMA table_info(criterion_evaluations)").fetchall()}
             if "owner_token" not in columns:
@@ -545,6 +569,71 @@ class DurableMemory:
         if not row:
             return None
         return {"goal_id": row["goal_id"], "node_id": row["node_id"], "public": json.loads(row["public_json"]), "private": json.loads(row["private_json"])}
+
+    def save_graph(self, profile_id, goal_id, node_id, props, chains, source):
+        """Store propositions (deduplicated by normalized statement within the goal) and chains with provenance.
+
+        props: [{"statement", "norm"}]; chains: [{"premises": [index], "conclusion": index}] indexing props.
+        """
+        profile_id = _profile_id(profile_id)
+        goal_id = str(goal_id or "").strip()
+        node_id = str(node_id or "").strip()
+        if not goal_id or not node_id or not isinstance(props, list) or not isinstance(chains, list):
+            raise ValueError("El grafo está incompleto.")
+        now = time.time_ns()
+        with self._lock, self._connect() as db:
+            if not db.execute("SELECT 1 FROM profiles WHERE profile_id=?", (profile_id,)).fetchone():
+                raise ValueError("El perfil local no existe.")
+            ids = []
+            for p in props:
+                row = db.execute("SELECT prop_id, sources_json FROM knowledge_props WHERE profile_id=? AND goal_id=? AND norm=?",
+                                 (profile_id, goal_id, p["norm"])).fetchone()
+                if row:
+                    sources = json.loads(row["sources_json"])
+                    if source not in sources:
+                        sources.append(source)
+                        db.execute("UPDATE knowledge_props SET sources_json=? WHERE profile_id=? AND prop_id=?", (_json(sources), profile_id, row["prop_id"]))
+                    ids.append(row["prop_id"])
+                else:
+                    pid = "prop-" + uuid.uuid4().hex
+                    db.execute("INSERT INTO knowledge_props VALUES(?,?,?,?,?,?,?)", (profile_id, goal_id, pid, p["statement"], p["norm"], _json([source]), now))
+                    ids.append(pid)
+            out = []
+            for c in chains:
+                premises = [ids[i] for i in c["premises"]]
+                conclusion = ids[c["conclusion"]]
+                key = "|".join(sorted(premises)) + ">" + conclusion
+                row = db.execute("SELECT chain_id, sources_json FROM knowledge_chains WHERE profile_id=? AND goal_id=? AND chain_key=?",
+                                 (profile_id, goal_id, key)).fetchone()
+                if row:
+                    sources = json.loads(row["sources_json"])
+                    if source not in sources:
+                        sources.append(source)
+                        db.execute("UPDATE knowledge_chains SET sources_json=? WHERE profile_id=? AND chain_id=?", (_json(sources), profile_id, row["chain_id"]))
+                    cid = row["chain_id"]
+                else:
+                    cid = "chain-" + uuid.uuid4().hex
+                    db.execute("INSERT INTO knowledge_chains VALUES(?,?,?,?,?,?,?,?,?)", (profile_id, goal_id, cid, node_id, _json(premises), conclusion, key, _json([source]), now))
+                out.append(cid)
+        return {"prop_ids": ids, "chain_ids": out}
+
+    def load_graph(self, profile_id, goal_id, chain_ids=None):
+        """Return the goal's propositions and chains (optionally only the given chains and the propositions they use)."""
+        profile_id = _profile_id(profile_id)
+        goal_id = str(goal_id or "").strip()
+        with self._lock, self._connect() as db:
+            chains = [dict(r) for r in db.execute("SELECT * FROM knowledge_chains WHERE profile_id=? AND goal_id=? ORDER BY created_at, chain_id", (profile_id, goal_id)).fetchall()]
+            if chain_ids is not None:
+                wanted = {str(x) for x in chain_ids}
+                chains = [c for c in chains if c["chain_id"] in wanted]
+            props = {r["prop_id"]: dict(r) for r in db.execute("SELECT * FROM knowledge_props WHERE profile_id=? AND goal_id=?", (profile_id, goal_id)).fetchall()}
+        out_chains = [{"chain_id": c["chain_id"], "node_id": c["node_id"], "premises": json.loads(c["premises_json"]), "conclusion": c["conclusion_id"],
+                       "sources": json.loads(c["sources_json"])} for c in chains]
+        if chain_ids is not None:
+            used = {i for c in out_chains for i in c["premises"] + [c["conclusion"]]}
+            props = {k: v for k, v in props.items() if k in used}
+        return {"propositions": [{"prop_id": k, "statement": v["statement"], "sources": json.loads(v["sources_json"])} for k, v in props.items()],
+                "chains": out_chains}
 
     def load_choice_answer(self, profile_id, goal_id, item_id, attempt_id):
         """Return the stored grading result of an answered private-key question, or None."""
