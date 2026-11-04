@@ -8,7 +8,11 @@ if str(Path(__file__).resolve().parent) not in sys.path:sys.path.insert(0,str(Pa
 from memory_store import DurableMemory, LocalDatabaseServerLock, database_path, normalize_hint_level, HINT_LADDER_VERSION
 
 HOST, PORT = '127.0.0.1', int(os.getenv('PORT','8765'))
+PROVIDER = os.getenv('LLM_PROVIDER','gemini').strip().lower()
 MODEL = os.getenv('GEMINI_MODEL','gemini-3.1-flash-lite')
+ANTHROPIC_MODEL = os.getenv('ANTHROPIC_MODEL','claude-sonnet-5-5')
+ANTHROPIC_VERSION = '2023-06-01'
+ANTHROPIC_TOOL = 'respond_json'
 LIMIT = int(os.getenv('DAILY_CALL_LIMIT','30'))
 CALLS, LOCK = defaultdict(int), threading.Lock()
 SYSTEM = ('Tutor para adultos. Enseña antes de examinar a quien no conoce un concepto. '
@@ -203,13 +207,69 @@ def evaluate_criterion_activity(data):
     assessment={'schema_version':CRITERION_ASSESSMENT_VERSION,'attempt_id':attempt_id,'activity_id':activity_id,'criteria':criteria,'overall':overall,'help_used':help_used,'hint_level_max':hint_level_max,'hint_ladder_version':HINT_LADDER_VERSION,'independent':independent,'independence_scope':['recognition','conceptual'],'assistance_source':assistance_source,'overall_method':'required_criteria_policy_v1','goal_id':goal_id,'fingerprint':fingerprint}
     return memory().finish_criterion_evaluation(profile_id,attempt_id,fingerprint,assessment,_EVALUATION_OWNER)
 
-def gemini(prompt, schema, max_tokens=2000):
-    key = os.getenv('GEMINI_API_KEY','').strip()
-    if not key:raise ValueError('Falta GEMINI_API_KEY en la terminal del servidor.')
+def active_model():
+    return ANTHROPIC_MODEL if PROVIDER == 'anthropic' else MODEL
+
+def _consume_quota():
     with LOCK:
         today=date.today().isoformat()
         if CALLS[today]>=LIMIT:raise ValueError('Límite local alcanzado; continúa con contenido guardado.')
         CALLS[today]+=1
+
+def _scrub_secret(text,secret):
+    """Never let a provider error echo the API key back to the browser or logs."""
+    return text.replace(secret,'[clave oculta]') if secret else text
+
+def _json_schema(node):
+    """Translate the provider-neutral (Gemini-style, uppercase) schema to JSON Schema."""
+    if isinstance(node,dict):
+        out={}
+        for k,v in node.items():
+            if k=='type' and isinstance(v,str):out[k]=v.lower()
+            elif k=='properties' and isinstance(v,dict):out[k]={pk:_json_schema(pv) for pk,pv in v.items()}
+            elif k=='items':out[k]=_json_schema(v)
+            else:out[k]=v
+        return out
+    if isinstance(node,list):return [_json_schema(x) for x in node]
+    return node
+
+def _anthropic_call(prompt, schema, max_tokens=2000):
+    key=os.getenv('ANTHROPIC_API_KEY','').strip()
+    if not key:raise ValueError('Falta ANTHROPIC_API_KEY en la terminal del servidor.')
+    _consume_quota()
+    payload={'model':ANTHROPIC_MODEL,'max_tokens':max_tokens,'system':SYSTEM,
+             'messages':[{'role':'user','content':prompt}],
+             'tools':[{'name':ANTHROPIC_TOOL,'description':'Devuelve la respuesta estructurada del tutor.','input_schema':_json_schema(schema)}],
+             'tool_choice':{'type':'tool','name':ANTHROPIC_TOOL}}
+    req=urllib.request.Request('https://api.anthropic.com/v1/messages',
+      data=json.dumps(payload,ensure_ascii=False).encode('utf-8'),
+      headers={'Content-Type':'application/json','x-api-key':key,'anthropic-version':ANTHROPIC_VERSION},method='POST')
+    try:
+        with urllib.request.urlopen(req,timeout=90) as resp:answer=json.load(resp)
+    except urllib.error.HTTPError as exc:
+        try:detail=json.load(exc).get('error',{}).get('message','')
+        except (ValueError,TypeError,AttributeError):detail=''
+        if exc.code==401:raise ValueError('Anthropic rechazó la clave (401); revisa ANTHROPIC_API_KEY.')
+        if exc.code==429:raise ValueError('Anthropic aplicó un límite de solicitudes (429); revisa tu cuota.')
+        raise ValueError(f'Anthropic rechazó la solicitud ({exc.code}): {compact(_scrub_secret(detail,key),260)}')
+    except (TimeoutError,socket.timeout,urllib.error.URLError):
+        raise ValueError('Anthropic tardó demasiado o se perdió la conexión.')
+    if answer.get('stop_reason')=='max_tokens':raise ValueError('Claude devolvió una salida incompleta (límite de tokens). No se guardó progreso.')
+    for block in answer.get('content') or []:
+        if isinstance(block,dict) and block.get('type')=='tool_use' and isinstance(block.get('input'),dict) and block.get('name')==ANTHROPIC_TOOL:
+            return block['input']
+    raise ValueError('Claude no devolvió la estructura pedida. No se guardó progreso.')
+
+def gemini(prompt, schema, max_tokens=2000):
+    """Single entry point for every model call. Provider is chosen by LLM_PROVIDER."""
+    if PROVIDER=='anthropic':return _anthropic_call(prompt,schema,max_tokens)
+    if PROVIDER!='gemini':raise ValueError('LLM_PROVIDER debe ser gemini o anthropic.')
+    return _gemini_call(prompt,schema,max_tokens)
+
+def _gemini_call(prompt, schema, max_tokens=2000):
+    key = os.getenv('GEMINI_API_KEY','').strip()
+    if not key:raise ValueError('Falta GEMINI_API_KEY en la terminal del servidor.')
+    _consume_quota()
     payload={'systemInstruction':{'parts':[{'text':SYSTEM}]},
              'contents':[{'role':'user','parts':[{'text':prompt}]}],
              'generationConfig':{'responseMimeType':'application/json',
@@ -224,7 +284,7 @@ def gemini(prompt, schema, max_tokens=2000):
         try:detail=json.load(exc).get('error',{}).get('message','')
         except (ValueError,TypeError):detail=''
         if exc.code==429:raise ValueError('Gemini aplicó un límite de solicitudes (429); revisa la cuota del proyecto.')
-        raise ValueError(f'Gemini rechazó la solicitud ({exc.code}): {compact(detail,260)}')
+        raise ValueError(f'Gemini rechazó la solicitud ({exc.code}): {compact(_scrub_secret(detail,key),260)}')
     except (TimeoutError,socket.timeout,urllib.error.URLError):
         raise ValueError('Gemini tardó demasiado o se perdió la conexión.')
     try:
@@ -836,7 +896,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers();self.wfile.write(raw)
     def do_GET(self):
         if self.path=='/':self.respond(200,HTML,'text/html; charset=utf-8')
-        elif self.path=='/api/health':self.respond(200,{'ok':True,'configured':bool(os.getenv('GEMINI_API_KEY')),'model':MODEL})
+        elif self.path=='/api/health':self.respond(200,{'ok':True,'configured':bool(os.getenv('ANTHROPIC_API_KEY' if PROVIDER=='anthropic' else 'GEMINI_API_KEY')),'provider':PROVIDER,'model':active_model()})
         else:self.respond(404,{'error':'No existe esta ruta.'})
     def do_POST(self):
         if self.path not in ROUTES:self.respond(404,{'error':'No existe esta ruta.'});return
@@ -886,7 +946,7 @@ if __name__=='__main__':
             raise SystemExit(2)
         try:
             memory()
-            print(f'Tutor en http://{HOST}:{PORT}; modelo {MODEL}')
+            print(f'Tutor en http://{HOST}:{PORT}; proveedor {PROVIDER}; modelo {active_model()}')
             ThreadingHTTPServer((HOST,PORT),Handler).serve_forever()
         finally:
             _SERVER_DB_LOCK.release()
