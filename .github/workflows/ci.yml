@@ -47,6 +47,8 @@ jobs:
         run: |
           node tests/knowledge_graph.test.js
           python tests/knowledge_graph_backend.test.py
+      - name: Run expert panel tests
+        run: node tests/expert_panel.test.js
       - name: Run LLM provider tests
         run: python tests/llm_provider.test.py
       - name: Run learner signal tests
