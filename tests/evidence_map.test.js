@@ -114,5 +114,6 @@ const empty = element(); policy.renderEvidenceMap(empty, {}); assert.match(text(
 const large = goal(); large.nodes = Array.from({ length: 41 }, (_, i) => ({ id: `large-${i}`, name: `Habilidad ${i}`, prerequisites: [] }));
 const list = element(); policy.renderEvidenceMap(list, freeze(large));
 assert.equal(all(list).filter(e => e.tag === 'svg').length, 0);
-assert.equal(all(list).filter(e => e.tag === 'button').length, 41);
+assert.equal(all(list).filter(e => e.tag === 'button' && /^Habilidad \d+$/.test(e.textContent)).length, 41,
+  'the accessible node list remains complete when the detail panel has explicit foundation actions');
 console.log('PASS: read-only evidence map, policy parity, no propagation, legacy, help/scope/duplicates, cycles, accessible controls and safe text');

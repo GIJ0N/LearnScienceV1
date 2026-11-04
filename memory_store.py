@@ -23,6 +23,9 @@ DEFAULT_PREFERENCES = {
 }
 GOAL_RELATION_TYPES = {"prerequisite", "shared_principle", "application", "analogy", "related_candidate"}
 GOAL_RELATION_STATES = {"proposed", "confirmed", "rejected"}
+FOUNDATION_VERSION = "skill_foundation_v1"
+FOUNDATION_STATES = {"proposed", "accepted", "rejected"}
+FOUNDATION_SOURCES = {"manual", "model", "session", "provided_reference"}
 
 
 def database_path(path=None):
@@ -146,6 +149,67 @@ def validate_store(raw, profile_id, allow_profile_rebind=False):
             raise ValueError("El estado del estudiante contiene referencias de nodo inválidas.")
         if not isinstance(lessons, dict) or any(node_id not in allowed_nodes for node_id in lessons):
             raise ValueError("Las microlecciones contienen referencias de nodo inválidas.")
+        foundations = goal.get("foundations", [])
+        if not isinstance(foundations, list) or len(foundations) > 500:
+            raise ValueError("Los fundamentos de la meta son inválidos.")
+        foundation_ids = set()
+        normalized_foundations = []
+        for foundation in foundations:
+            if not isinstance(foundation, dict) or foundation.get("schema_version") != FOUNDATION_VERSION:
+                raise ValueError("El fundamento no tiene una versión compatible.")
+            foundation_id = str(foundation.get("foundation_id") or "").strip()
+            foundation_profile = str(foundation.get("profile_id") or "").strip()
+            foundation_goal = str(foundation.get("goal_id") or "").strip()
+            node_id = str(foundation.get("node_id") or "").strip()
+            state = str(foundation.get("status") or "").strip()
+            current_revision = foundation.get("current_revision")
+            revisions = foundation.get("revisions")
+            if not foundation_id or foundation_id in foundation_ids:
+                raise ValueError("Los IDs de fundamento deben existir y ser únicos dentro de la meta.")
+            if foundation_profile and foundation_profile != profile_id and not allow_profile_rebind:
+                raise ValueError("El fundamento pertenece a otro perfil.")
+            if foundation_goal not in ("", goal_id) or node_id not in allowed_nodes or state not in FOUNDATION_STATES:
+                raise ValueError("El fundamento apunta a una meta, habilidad o estado incompatible.")
+            if not isinstance(current_revision, int) or current_revision < 1 or not isinstance(revisions, list) or not revisions:
+                raise ValueError("El fundamento no conserva sus revisiones.")
+            revision_numbers = set()
+            clean_revisions = []
+            for revision in revisions:
+                if not isinstance(revision, dict) or not isinstance(revision.get("revision"), int):
+                    raise ValueError("Una revisión del fundamento es inválida.")
+                number = revision["revision"]
+                statement = str(revision.get("statement") or "").strip()
+                conditions = revision.get("conditions")
+                provenance = revision.get("provenance")
+                created_at = revision.get("created_at")
+                review_state = str(revision.get("status") or "").strip()
+                if number < 1 or number in revision_numbers or not statement or len(statement) > 800:
+                    raise ValueError("Una revisión del fundamento no conserva identidad y contenido válidos.")
+                if not isinstance(conditions, list) or len(conditions) > 8 or any(not isinstance(item, str) or not item.strip() or len(item) > 500 for item in conditions):
+                    raise ValueError("Las condiciones del fundamento son inválidas.")
+                if not isinstance(provenance, dict) or provenance.get("source") not in FOUNDATION_SOURCES:
+                    raise ValueError("El fundamento no conserva una procedencia válida.")
+                if provenance.get("source") == "provided_reference" and not str(provenance.get("reference") or "").strip():
+                    raise ValueError("La referencia aportada no conserva su procedencia.")
+                if provenance.get("source") == "session" and not str(provenance.get("session_id") or "").strip():
+                    raise ValueError("El fundamento derivado de sesión no conserva session_id.")
+                if not isinstance(created_at, (int, float)) or created_at < 0 or review_state not in FOUNDATION_STATES:
+                    raise ValueError("La revisión del fundamento no conserva fecha o estado válidos.")
+                revision_numbers.add(number)
+                clean_revisions.append({**_copy(revision), "statement": statement,
+                    "conditions": [item.strip() for item in conditions], "provenance": _copy(provenance),
+                    "status": review_state})
+            if current_revision not in revision_numbers:
+                raise ValueError("La revisión activa del fundamento no existe.")
+            current = next(item for item in clean_revisions if item["revision"] == current_revision)
+            if current["status"] != state:
+                raise ValueError("El estado del fundamento no coincide con su revisión activa.")
+            foundation_ids.add(foundation_id)
+            normalized_foundations.append({**_copy(foundation), "schema_version": FOUNDATION_VERSION,
+                "foundation_id": foundation_id, "profile_id": profile_id, "goal_id": goal_id,
+                "node_id": node_id, "status": state, "current_revision": current_revision,
+                "revisions": clean_revisions})
+        goal["foundations"] = normalized_foundations
         reviews = goal.get("reviews", [])
         if not isinstance(reviews, list) or any(not isinstance(item, dict) or item.get("id") not in allowed_nodes for item in reviews):
             raise ValueError("Los repasos contienen referencias de nodo inválidas.")

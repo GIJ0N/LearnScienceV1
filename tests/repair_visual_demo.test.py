@@ -7,10 +7,22 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 import app_legacy as app
 from tools.seed_visual_demo import seed
-from tools.serve_controlled_demo import _repair_diagnosis, _repair_teaching
+from tools.serve_controlled_demo import _controlled_lesson, _controlled_map, _repair_diagnosis, _repair_teaching
 
 
 class RepairVisualDemoTest(unittest.TestCase):
+    def test_controlled_foundation_map_and_lesson_use_production_contracts(self):
+        mapped = app.validated_map(_controlled_map())
+        self.assertEqual(mapped[0]['id'], 'demo-foundation-skill')
+        old = app.gemini
+        try:
+            app.gemini = lambda prompt, schema, max_tokens=0: _controlled_lesson()
+            raw = app.make_lesson({'goal':'Ecuaciones','name':'Equivalencia','parent':'Ecuaciones'})
+            self.assertEqual(raw['check']['observable_dimensions'], ['conceptual'])
+            self.assertEqual(raw['independent']['observable_dimensions'], ['direct_application'])
+        finally:
+            app.gemini = old
+
     def test_controlled_repair_contracts_pass_production_validation(self):
         diagnosis = _repair_diagnosis()
         old = app.gemini

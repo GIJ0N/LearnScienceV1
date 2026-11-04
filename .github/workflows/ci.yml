@@ -41,6 +41,11 @@ jobs:
           node tests/goal_relations.test.js
           python tests/goal_relations_persistence.test.py
 
+      - name: Test versioned skill foundations
+        run: |
+          python tests/skill_foundations_backend.test.py
+          node tests/skill_foundations_frontend.test.js
+
       - name: Run evidence sufficiency and confirmation flow tests
         run: node tests/evidence_sufficiency.test.js
 

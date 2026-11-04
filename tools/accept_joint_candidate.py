@@ -11,6 +11,7 @@ import subprocess
 import sys
 import time
 import urllib.parse
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
@@ -43,8 +44,14 @@ class Ledger:
             INSERT OR IGNORE INTO control VALUES (1, NULL);
             """)
 
+    @contextmanager
     def connect(self):
-        return sqlite3.connect(self.path, timeout=20)
+        connection = sqlite3.connect(self.path, timeout=20)
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
 
     def reserve(self, operation):
         with self.connect() as db:

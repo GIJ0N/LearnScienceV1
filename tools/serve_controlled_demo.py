@@ -66,6 +66,37 @@ def _repair_teaching():
     }
 
 
+def _controlled_lesson():
+    def question(prompt,reference,kind,dimensions):
+        return {'prompt':prompt,'reference':reference,'kind':kind,'observable_dimensions':dimensions}
+    return {
+        'explanation':'Una ecuación conserva sus soluciones al aplicar la misma operación reversible a ambos miembros.',
+        'example':'2x + 4 = 10; resta 4 en ambos miembros y después divide ambos entre 2.',
+        'common_error':'Modificar solo un miembro rompe la equivalencia.',
+        'check':question('¿Por qué se opera en ambos miembros?','Para conservar la igualdad.','explanation',['conceptual']),
+        'guided':question('Explica el primer paso en 3x+4=16.','Restar 4 a ambos miembros.','application',['direct_application']),
+        'independent':question('Resuelve 5x+3=28 y justifica.','Restar 3 y dividir entre 5; x=5.','application',['direct_application']),
+        'integration':question('Aplica el principio a una tarifa 2c+5=19.','Restar 5 y dividir entre 2; c=7.','transfer',['transfer']),
+    }
+
+
+def _controlled_map():
+    specs=[
+        ('demo-foundation-skill','Equivalencia de ecuaciones','Explicar y aplicar operaciones equivalentes.',[]),
+        ('demo-variables','Variables y constantes','Distinguir variables y constantes.',['demo-foundation-skill']),
+        ('demo-units','Consistencia de unidades','Comprobar unidades compatibles.',['demo-foundation-skill']),
+        ('demo-method','Selección de operación','Elegir una operación reversible.',['demo-variables']),
+        ('demo-transfer','Aplicación contextual','Aplicar equivalencia en un caso nuevo.',['demo-method']),
+    ]
+    nodes=[];coverage=[]
+    for node_id,name,outcome,prerequisites in specs:
+        nodes.append({'id':node_id,'name':name,'outcome':outcome,'level':0,'prerequisites':prerequisites,'kind':'concept',
+          'probe':{'prompt':'Explica brevemente: '+name+'.','reference':outcome,'kind':'explanation','observable_dimensions':['conceptual']}})
+        coverage.append({'id':node_id,'name':name,'kind':'concept','priority':'high','prerequisites':prerequisites,
+          'contexts':['ecuaciones'],'dimensions':[{'id':'conceptual','name':'Comprensión conceptual','required':True}]})
+    return {'nodes':nodes,'coverage':coverage}
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--db',type=Path,required=True)
@@ -74,6 +105,7 @@ def main():
     parser.add_argument('--semantic',choices=['SATISFIED','PARTIAL','NOT_SATISFIED','NOT_EVALUATED','unavailable','invalid'],default='SATISFIED')
     parser.add_argument('--hold-evaluation',action='store_true',help='Wait for Enter in terminal after reserving evaluation; Ctrl+C simulates interruption')
     parser.add_argument('--fail-once',choices=['none','diagnose','teach','evaluate'],default='none',help='Controlled one-shot network-style failure for UI recovery checks')
+    parser.add_argument('--fail-save-once',action='store_true',help='Reject the first profile save in this harness process')
     args=parser.parse_args();db=args.db.expanduser().resolve()
     if db.is_relative_to(ROOT):parser.error('Use a temporary database outside the repository.')
     marker=db.with_suffix('.demo-marker')
@@ -91,6 +123,13 @@ def main():
                 failures[name]-=1
                 raise ValueError('DEMO fallo controlado de red en '+name+'; reintenta explícitamente.')
         def provider(prompt,schema,max_tokens=2000):
+            if schema is app.MAP_SCHEMA:
+                return _controlled_map()
+            if schema is app.FOUNDATION_PROPOSAL_SCHEMA:
+                return {'statement':'Aplicar la misma operación reversible a ambos miembros conserva el conjunto de soluciones.',
+                        'conditions':['La operación debe estar definida','Debe aplicarse a ambos miembros']}
+            if schema is app.STAGE_SCHEMA:
+                return _controlled_lesson()
             if schema is app.CRITERION_ACTIVITY_PROVIDER_SCHEMA:
                 raw=copy.deepcopy(_criterion_contract());raw['activity_id']='demo-'+uuid.uuid4().hex
                 raw['correct_option_id']='subtract-both';raw['explanation_reference']='Restar ocho a ambos miembros es reversible y conserva las soluciones de la ecuación.'
@@ -112,7 +151,15 @@ def main():
             raise ValueError('DEMO: esta operación no tiene proveedor controlado; no se llamó a una API.')
         app.gemini=provider
         app.HTML=app.HTML.replace('<body>','<body><div role="status" style="padding:12px;background:#ffe08a;color:#111">DEMOSTRACIÓN · proveedor controlado · sin llamadas reales · juicio fijo '+args.semantic+'</div>')
-        server=ThreadingHTTPServer((app.HOST,args.port),app.Handler)
+        save_failures={'remaining':1 if args.fail_save_once else 0}
+        class DemoHandler(app.Handler):
+            def do_POST(self):
+                if self.path=='/api/profile/save' and save_failures['remaining']:
+                    save_failures['remaining']-=1
+                    self.respond(503,{'error':'DEMO fallo controlado de guardado; el contenido no fue confirmado.'})
+                    return
+                super().do_POST()
+        server=ThreadingHTTPServer((app.HOST,args.port),DemoHandler)
         print(f'DEMOSTRACIÓN http://127.0.0.1:{args.port}/',flush=True)
         try:server.serve_forever()
         except KeyboardInterrupt:pass
