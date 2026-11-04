@@ -730,6 +730,8 @@ def profile_restore(data):
 
 PLACEMENT_VERSION='placement_v1'
 PLACEMENT_BATCH=8
+import random as _random
+_PLACEMENT_RANDOM=_random.SystemRandom()
 PLACEMENT_OPTION=obj_schema({'id':T,'text':T,'misconception':T},['id','text'])
 PLACEMENT_SCHEMA=obj_schema({'items':{'type':'ARRAY','items':obj_schema({'node_id':T,'prompt':T,'options':{'type':'ARRAY','items':PLACEMENT_OPTION},'correct_option_id':T,'explanation':T})}})
 
@@ -762,6 +764,9 @@ def validated_placement_item(raw,allowed):
             if not wrong:raise ValueError('Cada opción incorrecta debe nombrar la idea errónea que la produce.')
             misconceptions[oid]=wrong
     if key not in ids:raise ValueError('La clave no corresponde a ninguna opción.')
+    # Models tend to put the key first: shuffle and relabel so position carries no signal.
+    order=list(public_options);_PLACEMENT_RANDOM.shuffle(order);labels='abcde';relabel={o['id']:labels[i] for i,o in enumerate(order)}
+    public_options=[{'id':relabel[o['id']],'text':o['text']} for o in order];key=relabel[key];misconceptions={relabel[k]:v for k,v in misconceptions.items()}
     item_id='placement-'+uuid.uuid4().hex
     public={'schema_version':PLACEMENT_VERSION,'item_id':item_id,'node_id':node_id,'prompt':prompt,'options':public_options}
     private={'correct_option_id':key,'explanation':explanation,'misconceptions':misconceptions}

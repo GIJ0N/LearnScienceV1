@@ -48,7 +48,7 @@ Estado de cada tema, derivado de las respuestas (nunca guardado como dominio):
 
 ## Contratos
 
-`POST /api/placement/items` → `{profile_id, goal_id, goal, nodes:[{id,name,outcome,prerequisites}], node_ids:[≤8], avoid_prompts?}` → `{items:[{item_id,node_id,prompt,options:[{id,text}]}]}`. El servidor valida que cada pregunta pertenezca a un tema pedido, tenga de 3 a 5 opciones con IDs únicos, la clave esté entre ellas y cada opción incorrecta nombre una idea errónea. La parte privada se guarda en `placement_items` (SQLite).
+`POST /api/placement/items` → `{profile_id, goal_id, goal, nodes:[{id,name,outcome,prerequisites}], node_ids:[≤8], avoid_prompts?}` → `{items:[{item_id,node_id,prompt,options:[{id,text}]}]}`. El servidor valida que cada pregunta pertenezca a un tema pedido, tenga de 3 a 5 opciones con IDs únicos, la clave esté entre ellas y cada opción incorrecta nombre una idea errónea. La parte privada se guarda en `placement_items` (SQLite). El servidor **baraja y vuelve a etiquetar** las opciones (a, b, c…) antes de guardarlas: en la primera prueba con Gemini real (2026-11-04) la clave quedó en «a» en todas las preguntas, y la posición no debe delatar la respuesta.
 
 `POST /api/placement/answer` → `{profile_id, goal_id, item_id, attempt_id, selected_option_id | null, learner_confidence?, reasoning?}` → `{status: CORRECT | MISCONCEPTION | UNKNOWN, correct_option_id, explanation, selected_misconception, node_id}`. Idempotente por `attempt_id`: repetir la misma respuesta devuelve la misma corrección; el mismo `attempt_id` con otra respuesta se rechaza.
 

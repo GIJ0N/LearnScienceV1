@@ -55,6 +55,19 @@ class PlacementBackend(unittest.TestCase):
             self.assertNotIn('explanation', public)
             self.assertTrue(all('misconception' not in o for o in public['options']))
 
+    def test_options_are_shuffled_and_relabeled_consistently(self):
+        positions = set()
+        for _ in range(30):
+            public, private = app.validated_placement_item(item('b'), {'b'})
+            ids = [o['id'] for o in public['options']]
+            self.assertEqual(ids, ['a', 'b', 'c'])
+            correct = next(o for o in public['options'] if o['id'] == private['correct_option_id'])
+            self.assertEqual(correct['text'], '75')
+            wrong = {o['text']: private['misconceptions'][o['id']] for o in public['options'] if o['id'] != private['correct_option_id']}
+            self.assertIn('Suma la diferencia', wrong['33'])
+            positions.add(private['correct_option_id'])
+        self.assertGreater(len(positions), 1, 'La clave no debe quedar siempre en la misma posición')
+
     def test_invalid_items_are_dropped_and_empty_batch_fails(self):
         bad = [item('zzz'), item('a', key='q'), item('b', options=[{'id': 'a', 'text': '1'}, {'id': 'b', 'text': '2'}]),
                item('a', options=[{'id': 'a', 'text': '75'}, {'id': 'b', 'text': '33', 'misconception': ''}, {'id': 'c', 'text': '1', 'misconception': 'x'}])]
@@ -66,15 +79,16 @@ class PlacementBackend(unittest.TestCase):
     def test_grading_is_deterministic_and_needs_no_provider(self):
         out, _ = self.generate([item('b')], node_ids=('b',))
         item_id = out['items'][0]['item_id']
+        by_text = {o['text']: o['id'] for o in out['items'][0]['options']}
         with patch.object(app, 'gemini', side_effect=AssertionError('no debe llamarse')):
-            right = app.answer_placement_item({'profile_id': self.profile, 'goal_id': 'g1', 'item_id': item_id, 'attempt_id': 't1', 'selected_option_id': 'a', 'learner_confidence': 90})
-            wrong = app.answer_placement_item({'profile_id': self.profile, 'goal_id': 'g1', 'item_id': item_id, 'attempt_id': 't2', 'selected_option_id': 'b', 'learner_confidence': 95})
+            right = app.answer_placement_item({'profile_id': self.profile, 'goal_id': 'g1', 'item_id': item_id, 'attempt_id': 't1', 'selected_option_id': by_text['75'], 'learner_confidence': 90})
+            wrong = app.answer_placement_item({'profile_id': self.profile, 'goal_id': 'g1', 'item_id': item_id, 'attempt_id': 't2', 'selected_option_id': by_text['33'], 'learner_confidence': 95})
             unknown = app.answer_placement_item({'profile_id': self.profile, 'goal_id': 'g1', 'item_id': item_id, 'attempt_id': 't3', 'selected_option_id': None, 'learner_confidence': 80})
         self.assertEqual(right['status'], 'CORRECT')
         self.assertEqual(wrong['status'], 'MISCONCEPTION')
         self.assertIn('Suma la diferencia', wrong['selected_misconception'])
         self.assertEqual(unknown['status'], 'UNKNOWN')
-        self.assertEqual(unknown['correct_option_id'], 'a')
+        self.assertEqual(unknown['correct_option_id'], by_text['75'])
 
     def test_idempotent_by_attempt_and_conflict_rejected(self):
         out, _ = self.generate([item('b')], node_ids=('b',))
@@ -83,7 +97,7 @@ class PlacementBackend(unittest.TestCase):
         first = app.answer_placement_item(payload)
         self.assertEqual(app.answer_placement_item(dict(payload)), first)
         with self.assertRaises(ValueError):
-            app.answer_placement_item({**payload, 'selected_option_id': 'b'})
+            app.answer_placement_item({**payload, 'selected_option_id': 'c'})
 
     def test_isolation_by_profile_and_goal_and_invalid_input(self):
         out, _ = self.generate([item('b')], node_ids=('b',))
