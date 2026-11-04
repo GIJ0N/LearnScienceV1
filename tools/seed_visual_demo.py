@@ -136,7 +136,21 @@ def seed(db_path):
         "nodes": nodes,
         "coverage": coverage_items,
         "learner": {},
-        "lessons": {},
+        "lessons": {
+            "ecuaciones": {
+                "target_dimension": "equation_manipulation",
+                "explanation": "Aplicar la misma operación reversible a ambos miembros conserva la igualdad.",
+                "example": "2x + 4 = 10; resta 4 en ambos miembros y divide ambos entre 2.",
+                "common_error": "Cambiar solo un miembro rompe la igualdad.",
+                "independent": {
+                    "activity_id": "demo-parent-independent",
+                    "prompt": "Resuelve 7x + 6 = 34 y explica por qué cada paso conserva la igualdad.",
+                    "reference": "Restar 6 a ambos miembros y dividir ambos entre 7; x=4.",
+                    "kind": "equation_manipulation",
+                    "observable_dimensions": ["equation_manipulation"],
+                },
+            }
+        },
         "reviews": [],
         "events": events,
         "session": {"profile_id": profile_id, "mode": "INDEPENDENT", "node": "ecuaciones", "stack": [], "stage": "practice", "tries": 0},

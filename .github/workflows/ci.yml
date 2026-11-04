@@ -90,6 +90,7 @@ jobs:
         run: |
           node tests/repair_acceptance_controlled.test.js
           python tests/repair_persistence_acceptance.test.py
+          python tests/repair_visual_demo.test.py
 
       - name: Test bounded real acceptance harness offline
         run: python tests/accept_joint_candidate.test.py
