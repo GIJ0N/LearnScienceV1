@@ -88,6 +88,7 @@ jobs:
         run: |
           node tests/repair_acceptance_controlled.test.js
           python tests/repair_persistence_acceptance.test.py
+          python tests/repair_visual_demo.test.py
 
       - name: Check app.js syntax
         run: node --check app.js
