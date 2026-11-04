@@ -15,6 +15,8 @@ No se ha declarado una versión mínima formal del proyecto. Las versiones anter
 Desde la raíz del repositorio:
 
 ```text
+node tests/step_lessons.test.js
+python tests/step_lessons_backend.test.py
 python tests/llm_provider.test.py
 node tests/placement.test.js
 python tests/placement_backend.test.py
@@ -151,5 +153,7 @@ modifica y el resultado no demuestra retención humana.
 `node tests/learner_signals.test.js` y `python tests/learner_signals_backend.test.py` cubren `learner_signals_v1`: confianza ausente como `null`, matriz de calibración, que la confianza no concede independencia ni cambia cobertura, rechazo de confianza inválida antes de llamar al proveedor, «No sé» sin señal, contexto del evaluador y de la microlección, y eventos legacy sin señales. Usan respuestas controladas; no validan Gemini real ni el navegador.
 
 `node tests/placement.test.js` y `python tests/placement_backend.test.py` cubren `placement_v1`: entrada por el tema más avanzado, división de lo pendiente, deducción hacia prerrequisitos solo con acierto seguro, laguna hacia dependientes, conflicto, repregunta de temas frágiles, temas con evidencia previa excluidos, saltos que no conceden dominio y se revocan, idempotencia, una sola llamada por lote, clave privada en servidor, corrección sin proveedor, aislamiento por perfil y meta y borrado en cascada. Usan respuestas controladas; no validan Gemini real ni el navegador.
+
+`node tests/step_lessons.test.js` y `python tests/step_lessons_backend.test.py` cubren `step_lessons_v1`: ciclo predecir → enseñar → comprobar, reparación con tope de 2 y paso `unresolved`, ninguna creación de `EVIDENCE`, idempotencia por `attempt_id`, reinicio si la lección cambia, pasos inválidos descartados (menos de 2 → respaldo), corrección sin proveedor, aislamiento entre diagnóstico y pasos, y reparación que toma la idea errónea del servidor y rechaza aciertos o respuestas inexistentes.
 
 `python tests/llm_provider.test.py` cubre el cambio de proveedor: contrato HTTP de Anthropic (cabeceras, modelo, herramienta forzada, esquema en JSON Schema), que todos los esquemas de la app sean objetos en raíz, salida truncada y estructura faltante rechazadas, errores en español sin eco de la clave, cuota compartida y proveedor por defecto Gemini. Usa una red simulada; no contacta a ningún proveedor.

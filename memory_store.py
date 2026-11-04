@@ -546,6 +546,14 @@ class DurableMemory:
             return None
         return {"goal_id": row["goal_id"], "node_id": row["node_id"], "public": json.loads(row["public_json"]), "private": json.loads(row["private_json"])}
 
+    def load_choice_answer(self, profile_id, goal_id, item_id, attempt_id):
+        """Return the stored grading result of an answered private-key question, or None."""
+        profile_id = _profile_id(profile_id)
+        with self._lock, self._connect() as db:
+            row = db.execute("SELECT result_json FROM placement_answers WHERE profile_id=? AND attempt_id=? AND goal_id=? AND item_id=?",
+                             (profile_id, str(attempt_id or ""), str(goal_id or ""), str(item_id or ""))).fetchone()
+        return json.loads(row["result_json"]) if row else None
+
     def record_placement_answer(self, profile_id, goal_id, item_id, attempt_id, fingerprint, result):
         """Idempotent by attempt_id: the same answer returns the stored result; a different one is rejected."""
         profile_id = _profile_id(profile_id)

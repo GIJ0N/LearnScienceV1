@@ -35,6 +35,10 @@ jobs:
         run: |
           node tests/placement.test.js
           python tests/placement_backend.test.py
+      - name: Run step lesson tests
+        run: |
+          node tests/step_lessons.test.js
+          python tests/step_lessons_backend.test.py
       - name: Run LLM provider tests
         run: python tests/llm_provider.test.py
       - name: Run learner signal tests
