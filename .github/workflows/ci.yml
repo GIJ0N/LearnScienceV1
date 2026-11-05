@@ -34,6 +34,7 @@ jobs:
       - name: Run placement diagnostic tests
         run: |
           node tests/placement.test.js
+          node tests/qa_round1.test.js
           python tests/placement_backend.test.py
       - name: Run step lesson tests
         run: |

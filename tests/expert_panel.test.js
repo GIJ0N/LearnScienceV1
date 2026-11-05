@@ -18,6 +18,8 @@ let r = layers([]);
 assert.ok(Object.values(r.layers).every(v => v === 'none'));
 assert.equal(r.label, 'Sin medir');
 assert.equal(r.next.layer, 'comprehension');
+// Algo parcial (sin ninguna capa lograda) se llama «Iniciando», no «Sin medir».
+assert.equal(layers([ev({ phase: 'COMPREHENSION', result: 'MISCONCEPTION', status: 'MISCONCEPTION' })]).label, 'Iniciando');
 assert.equal(p.EXPERT_LAYERS.length, 7);
 
 // 1 Comprensión

@@ -53,15 +53,19 @@ assert.equal(policy.probedPlacementStatus([{ status: 'CORRECT', learner_confiden
   assert.equal(policy.nextPlacementNode(g), 'd');
 }
 
-// Confident success on the goal resolves the whole chain in one question; skips do not grant mastery.
+// Una sola respuesta correcta no deduce nada; con dos aciertos directos se deducen los prerrequisitos. Saltar no concede dominio.
 {
   const g = attach(goal()); policy.startPlacement(g);
   answer(g, 'd', 'CORRECT', 90);
-  const st = policy.placementStatuses(g);
-  assert.equal(st.d, 'held'); assert.equal(st.a, 'inferred_held'); assert.equal(st.c, 'inferred_held');
-  assert.equal(st.e, 'unprobed', 'e no es prerrequisito de d: no se deduce');
-  assert.equal(policy.nextPlacementNode(g), 'e');
+  let st = policy.placementStatuses(g);
+  assert.equal(st.d, 'held');
+  assert.notEqual(st.a, 'inferred_held', 'Un solo acierto no basta para deducir prerrequisitos');
+  assert.notEqual(st.c, 'inferred_held');
+  assert.equal(policy.PLACEMENT_INFERENCE_MIN_CORRECT, 2);
+  assert.notEqual(policy.nextPlacementNode(g), null);
   answer(g, 'e', 'CORRECT', 100);
+  st = policy.placementStatuses(g);
+  assert.equal(st.a, 'inferred_held'); assert.equal(st.c, 'inferred_held');
   assert.equal(policy.nextPlacementNode(g), null);
   const out = policy.finishPlacement(g, 'resolved', false);
   assert.deepEqual(out.skipped.sort(), ['a', 'b', 'c', 'd', 'e']);
@@ -112,6 +116,8 @@ assert.equal(policy.probedPlacementStatus([{ status: 'CORRECT', learner_confiden
   const g = attach(goal()); policy.startPlacement(g);
   answer(g, 'a', 'UNKNOWN');
   answer(g, 'c', 'CORRECT', 90);
+  assert.equal(policy.placementStatuses(g).b, 'inferred_gap', 'Con un solo acierto directo aún no se deduce hacia atrás');
+  answer(g, 'e', 'CORRECT', 90);
   const st = policy.placementStatuses(g);
   assert.equal(st.b, 'conflict');
   assert.equal(policy.nextPlacementNode(g), 'b');
