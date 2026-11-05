@@ -29,6 +29,8 @@ python tests/step_lessons_backend.test.py
 python tests/llm_provider.test.py
 node tests/placement.test.js
 node tests/qa_round1.test.js
+node tests/content_trust.test.js
+python tests/content_trust_backend.test.py
 python tests/placement_backend.test.py
 node tests/learner_signals.test.js
 python tests/learner_signals_backend.test.py
@@ -180,3 +182,6 @@ modifica y el resultado no demuestra retención humana.
 
 ## Ronda QA 1 (`fix/qa-round-1`)
 Corrige lo hallado en la prueba real con Gemini: `maxOutputTokens` con margen para tokens de razonamiento (causa del `MAX_TOKENS`); la lección por pasos que falla ya no se desactiva para siempre (aviso visible y botón para reintentar); el diagnóstico solo deduce prerrequisitos con ≥2 aciertos directos y termina en una pantalla de resultados; las áreas muestran ✓ solo con verificación y ≈ si se saltaron por diagnóstico; la etiqueta experta pasa a «Iniciando» con avance parcial; el prompt exige español correcto y ejemplos exactos. `node tests/qa_round1.test.js` cubre lo verificable sin proveedor real. No sustituye una segunda prueba en el navegador ni una revisión semántica de las preguntas.
+
+## Contenido confiable (`content_trust_v1`)
+`python tests/content_trust_backend.test.py` y `node tests/content_trust.test.js` cubren: auditoría de contenido que falla abierta y se marca como no verificada; una regeneración de la lección con los errores detectados y descarte si la segunda también falla; descarte solo de las preguntas señaladas del diagnóstico; pistas por pregunta en 3 niveles que nunca revelan la clave; reportes «Esto está mal» guardados y borrados en cascada; profundidad del mapa (curiosidad, sólido, profesional, experto) en ambos prompts; guardados agrupados con el último estado; etiquetas traducidas. Usan respuestas controladas con `CONTENT_VERIFY` activado solo en esta prueba. No miden si la auditoría de Gemini real detecta errores de física: eso necesita la segunda prueba QA con temas distintos.

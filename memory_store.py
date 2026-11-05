@@ -488,6 +488,16 @@ class DurableMemory:
               created_at INTEGER NOT NULL,
               PRIMARY KEY(profile_id, item_id)
             );
+            CREATE TABLE IF NOT EXISTS content_reports(
+              report_id INTEGER PRIMARY KEY AUTOINCREMENT,
+              profile_id TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+              goal_id TEXT NOT NULL,
+              node_id TEXT NOT NULL,
+              kind TEXT NOT NULL,
+              excerpt TEXT NOT NULL,
+              note TEXT NOT NULL,
+              created_at INTEGER NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS placement_answers(
               profile_id TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
               attempt_id TEXT NOT NULL,
@@ -561,6 +571,26 @@ class DurableMemory:
             for public, private in items:
                 db.execute("INSERT INTO placement_items VALUES(?,?,?,?,?,?,?)",
                            (profile_id, goal_id, public["item_id"], public["node_id"], _json(public), _json(private), now))
+
+    def save_content_report(self, profile_id, goal_id, node_id, kind, excerpt, note):
+        """Learner flag on generated content. It never creates or removes evidence."""
+        profile_id = _profile_id(profile_id)
+        goal_id = str(goal_id or "").strip()
+        if not goal_id or kind not in ("lesson", "question", "placement", "step"):
+            raise ValueError("El reporte de contenido está incompleto.")
+        with self._lock, self._connect() as db:
+            if not db.execute("SELECT 1 FROM profiles WHERE profile_id=?", (profile_id,)).fetchone():
+                raise ValueError("El perfil local no existe.")
+            db.execute("INSERT INTO content_reports(profile_id,goal_id,node_id,kind,excerpt,note,created_at) VALUES(?,?,?,?,?,?,?)",
+                       (profile_id, goal_id, str(node_id or ""), kind, str(excerpt or "")[:600], str(note or "")[:400], time.time_ns()))
+
+    def load_content_reports(self, profile_id, goal_id=None):
+        profile_id = _profile_id(profile_id)
+        query, args = "SELECT * FROM content_reports WHERE profile_id=?", [profile_id]
+        if goal_id:
+            query += " AND goal_id=?"; args.append(str(goal_id))
+        with self._lock, self._connect() as db:
+            return [dict(r) for r in db.execute(query + " ORDER BY report_id", args).fetchall()]
 
     def load_placement_item(self, profile_id, item_id):
         profile_id = _profile_id(profile_id)

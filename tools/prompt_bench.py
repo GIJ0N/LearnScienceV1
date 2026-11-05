@@ -20,6 +20,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 import app_legacy as app  # noqa: E402
+app.CONTENT_VERIFY = False  # el banco mide la salida del prompt, no la auditoría (content_trust_v1)
 from memory_store import DurableMemory  # noqa: E402
 
 CASES = ROOT / 'evals' / 'prompts' / 'cases.json'
