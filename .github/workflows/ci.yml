@@ -37,6 +37,8 @@ jobs:
           node tests/qa_round1.test.js
           node tests/content_trust.test.js
           python tests/content_trust_backend.test.py
+          node tests/error_hunt.test.js
+          python tests/error_hunt_backend.test.py
           python tests/placement_backend.test.py
       - name: Run step lesson tests
         run: |

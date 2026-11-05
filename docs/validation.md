@@ -31,6 +31,8 @@ node tests/placement.test.js
 node tests/qa_round1.test.js
 node tests/content_trust.test.js
 python tests/content_trust_backend.test.py
+node tests/error_hunt.test.js
+python tests/error_hunt_backend.test.py
 python tests/placement_backend.test.py
 node tests/learner_signals.test.js
 python tests/learner_signals_backend.test.py
@@ -185,3 +187,6 @@ Corrige lo hallado en la prueba real con Gemini: `maxOutputTokens` con margen pa
 
 ## Contenido confiable (`content_trust_v1`)
 `python tests/content_trust_backend.test.py` y `node tests/content_trust.test.js` cubren: auditoría de contenido que falla abierta y se marca como no verificada; una regeneración de la lección con los errores detectados y descarte si la segunda también falla; descarte solo de las preguntas señaladas del diagnóstico; pistas por pregunta en 3 niveles que nunca revelan la clave; reportes «Esto está mal» guardados y borrados en cascada; profundidad del mapa (curiosidad, sólido, profesional, experto) en ambos prompts; guardados agrupados con el último estado; etiquetas traducidas. Usan respuestas controladas con `CONTENT_VERIFY` activado solo en esta prueba. No miden si la auditoría de Gemini real detecta errores de física: eso necesita la segunda prueba QA con temas distintos.
+
+## Encuentra el error (`error_hunt_v1`)
+`python tests/error_hunt_backend.test.py` y `node tests/error_hunt.test.js` cubren: contrato local de la solución (3 a 6 pasos numerados consecutivos desde 1, cada opción cita un paso existente), clave privada, descarte de ítems mal formados o repetidos, descarte de los señalados por la auditoría, corrección sin proveedor, idempotencia por `attempt_id`, aislamiento por versión, disponibilidad con un solo tema, evento `DISCRIMINATION` con `variant: 'error_hunt'` y ausencia total de `EVIDENCE`. Usan respuestas controladas; no miden si Gemini real escribe errores bien escondidos ni si el paso señalado es de verdad el erróneo (eso depende del verificador y del reporte «Esto está mal»).
