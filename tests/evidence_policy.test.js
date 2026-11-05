@@ -69,6 +69,8 @@ function eventFor(role, kind, status = 'CORRECT', help = 0, extra = {}) {
 }
 
 async function submitThroughUI(goal, question, phase, role, response) {
+  // Deja terminar el render previo (la vista TEACH pide pasos al servidor sin esperar) para que no retenga `busy`.
+  await new Promise(resolve => setImmediate(resolve));
   attach(goal);
   global.fetch = async () => ({ ok: true, json: async () => response });
   const box = element('section');

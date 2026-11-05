@@ -31,6 +31,38 @@ jobs:
           node tests/adaptive_cycle.test.js
           python tests/adaptive_cycle.test.py
 
+      - name: Run placement diagnostic tests
+        run: |
+          node tests/placement.test.js
+          python tests/placement_backend.test.py
+      - name: Run step lesson tests
+        run: |
+          node tests/step_lessons.test.js
+          python tests/step_lessons_backend.test.py
+      - name: Run spaced practice tests
+        run: |
+          node tests/spaced_practice.test.js
+          python tests/spaced_practice_backend.test.py
+      - name: Run knowledge graph tests
+        run: |
+          node tests/knowledge_graph.test.js
+          python tests/knowledge_graph_backend.test.py
+      - name: Run expert panel tests
+        run: node tests/expert_panel.test.js
+      - name: Run area map tests
+        run: |
+          node tests/map_areas.test.js
+          python tests/map_areas_backend.test.py
+      - name: Run prompt quality tests
+        run: |
+          python tests/prompt_quality.test.py
+          python tests/prompt_bench.test.py
+      - name: Run LLM provider tests
+        run: python tests/llm_provider.test.py
+      - name: Run learner signal tests
+        run: |
+          node tests/learner_signals.test.js
+          python tests/learner_signals_backend.test.py
       - name: Run evidence policy tests
         run: node tests/evidence_policy.test.js
 
@@ -94,6 +126,11 @@ jobs:
 
       - name: Test bounded real acceptance harness offline
         run: python tests/accept_joint_candidate.test.py
+
+      - name: Test graded hints
+        run: |
+          node tests/graded_hints.test.js
+          python tests/graded_hints_backend.test.py
 
       - name: Check app.js syntax
         run: node --check app.js

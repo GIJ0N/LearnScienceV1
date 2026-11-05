@@ -12,6 +12,29 @@ import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
+HINT_LADDER_VERSION = "graded_hints_v1"
+HINT_LEVEL_MAX = 5
+
+
+def normalize_hint_level(value):
+    """Return None when no hint was used, otherwise an integer 0..5.
+
+    Unparseable values are treated as the most revealing hint (5): when we cannot
+    tell how much was revealed, the conservative reading is that it was a lot.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return HINT_LEVEL_MAX
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return HINT_LEVEL_MAX
+    if number != number or number in (float("inf"), float("-inf")):
+        return HINT_LEVEL_MAX
+    rounded = int(number) if number == int(number) else int(number) + (1 if number > 0 else 0)
+    return max(0, min(HINT_LEVEL_MAX, rounded))
+
 
 SCHEMA_VERSION = 2
 STORE_SCHEMA_VERSION = 5
@@ -165,6 +188,15 @@ def validate_store(raw, profile_id, allow_profile_rebind=False):
             event["profile_id"] = profile_id
             if event.get("node_id") is not None and event.get("node_id") not in allowed_nodes:
                 raise ValueError("El ledger contiene una referencia de nodo inválida.")
+            if event.get("type") == "EVIDENCE" and "hint_level_max" in event:
+                level = normalize_hint_level(event.get("hint_level_max"))
+                event["hint_level_max"] = level
+                if level is not None:
+                    # Any recorded hint blocks independence, whatever the stored flags say.
+                    event["help_used"] = max(1, int(event.get("help_used") or event.get("help") or 0))
+                    event["is_independent"] = False
+                    if "independent" in event:
+                        event["independent"] = False
             attempt_id = event.get("attempt_id")
             if event.get("type") == "EVIDENCE" and attempt_id:
                 attempt_id = str(attempt_id)
@@ -446,6 +478,50 @@ class DurableMemory:
             );
             CREATE INDEX IF NOT EXISTS criterion_evaluations_activity
               ON criterion_evaluations(profile_id, activity_id, updated_at DESC);
+            CREATE TABLE IF NOT EXISTS placement_items(
+              profile_id TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+              goal_id TEXT NOT NULL,
+              item_id TEXT NOT NULL,
+              node_id TEXT NOT NULL,
+              public_json TEXT NOT NULL,
+              private_json TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              PRIMARY KEY(profile_id, item_id)
+            );
+            CREATE TABLE IF NOT EXISTS placement_answers(
+              profile_id TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+              attempt_id TEXT NOT NULL,
+              goal_id TEXT NOT NULL,
+              item_id TEXT NOT NULL,
+              fingerprint TEXT NOT NULL,
+              result_json TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              PRIMARY KEY(profile_id, attempt_id)
+            );
+            CREATE TABLE IF NOT EXISTS knowledge_props(
+              profile_id TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+              goal_id TEXT NOT NULL,
+              prop_id TEXT NOT NULL,
+              statement TEXT NOT NULL,
+              norm TEXT NOT NULL,
+              sources_json TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              PRIMARY KEY(profile_id, prop_id),
+              UNIQUE(profile_id, goal_id, norm)
+            );
+            CREATE TABLE IF NOT EXISTS knowledge_chains(
+              profile_id TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+              goal_id TEXT NOT NULL,
+              chain_id TEXT NOT NULL,
+              node_id TEXT NOT NULL,
+              premises_json TEXT NOT NULL,
+              conclusion_id TEXT NOT NULL,
+              chain_key TEXT NOT NULL,
+              sources_json TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              PRIMARY KEY(profile_id, chain_id),
+              UNIQUE(profile_id, goal_id, chain_key)
+            );
             """)
             columns = {row[1] for row in db.execute("PRAGMA table_info(criterion_evaluations)").fetchall()}
             if "owner_token" not in columns:
@@ -471,6 +547,118 @@ class DurableMemory:
         if not deleted:
             raise ValueError("El perfil local no existe.")
         return {"deleted": True, "profile_id": profile_id}
+
+    def save_placement_items(self, profile_id, goal_id, items):
+        """Store placement questions; the private part (answer key) never leaves the server."""
+        profile_id = _profile_id(profile_id)
+        goal_id = str(goal_id or "").strip()
+        if not goal_id or not isinstance(items, list):
+            raise ValueError("Las preguntas de diagnóstico están incompletas.")
+        now = time.time_ns()
+        with self._lock, self._connect() as db:
+            if not db.execute("SELECT 1 FROM profiles WHERE profile_id=?", (profile_id,)).fetchone():
+                raise ValueError("El perfil local no existe.")
+            for public, private in items:
+                db.execute("INSERT INTO placement_items VALUES(?,?,?,?,?,?,?)",
+                           (profile_id, goal_id, public["item_id"], public["node_id"], _json(public), _json(private), now))
+
+    def load_placement_item(self, profile_id, item_id):
+        profile_id = _profile_id(profile_id)
+        with self._lock, self._connect() as db:
+            row = db.execute("SELECT * FROM placement_items WHERE profile_id=? AND item_id=?", (profile_id, str(item_id or ""))).fetchone()
+        if not row:
+            return None
+        return {"goal_id": row["goal_id"], "node_id": row["node_id"], "public": json.loads(row["public_json"]), "private": json.loads(row["private_json"])}
+
+    def save_graph(self, profile_id, goal_id, node_id, props, chains, source):
+        """Store propositions (deduplicated by normalized statement within the goal) and chains with provenance.
+
+        props: [{"statement", "norm"}]; chains: [{"premises": [index], "conclusion": index}] indexing props.
+        """
+        profile_id = _profile_id(profile_id)
+        goal_id = str(goal_id or "").strip()
+        node_id = str(node_id or "").strip()
+        if not goal_id or not node_id or not isinstance(props, list) or not isinstance(chains, list):
+            raise ValueError("El grafo está incompleto.")
+        now = time.time_ns()
+        with self._lock, self._connect() as db:
+            if not db.execute("SELECT 1 FROM profiles WHERE profile_id=?", (profile_id,)).fetchone():
+                raise ValueError("El perfil local no existe.")
+            ids = []
+            for p in props:
+                row = db.execute("SELECT prop_id, sources_json FROM knowledge_props WHERE profile_id=? AND goal_id=? AND norm=?",
+                                 (profile_id, goal_id, p["norm"])).fetchone()
+                if row:
+                    sources = json.loads(row["sources_json"])
+                    if source not in sources:
+                        sources.append(source)
+                        db.execute("UPDATE knowledge_props SET sources_json=? WHERE profile_id=? AND prop_id=?", (_json(sources), profile_id, row["prop_id"]))
+                    ids.append(row["prop_id"])
+                else:
+                    pid = "prop-" + uuid.uuid4().hex
+                    db.execute("INSERT INTO knowledge_props VALUES(?,?,?,?,?,?,?)", (profile_id, goal_id, pid, p["statement"], p["norm"], _json([source]), now))
+                    ids.append(pid)
+            out = []
+            for c in chains:
+                premises = [ids[i] for i in c["premises"]]
+                conclusion = ids[c["conclusion"]]
+                key = "|".join(sorted(premises)) + ">" + conclusion
+                row = db.execute("SELECT chain_id, sources_json FROM knowledge_chains WHERE profile_id=? AND goal_id=? AND chain_key=?",
+                                 (profile_id, goal_id, key)).fetchone()
+                if row:
+                    sources = json.loads(row["sources_json"])
+                    if source not in sources:
+                        sources.append(source)
+                        db.execute("UPDATE knowledge_chains SET sources_json=? WHERE profile_id=? AND chain_id=?", (_json(sources), profile_id, row["chain_id"]))
+                    cid = row["chain_id"]
+                else:
+                    cid = "chain-" + uuid.uuid4().hex
+                    db.execute("INSERT INTO knowledge_chains VALUES(?,?,?,?,?,?,?,?,?)", (profile_id, goal_id, cid, node_id, _json(premises), conclusion, key, _json([source]), now))
+                out.append(cid)
+        return {"prop_ids": ids, "chain_ids": out}
+
+    def load_graph(self, profile_id, goal_id, chain_ids=None):
+        """Return the goal's propositions and chains (optionally only the given chains and the propositions they use)."""
+        profile_id = _profile_id(profile_id)
+        goal_id = str(goal_id or "").strip()
+        with self._lock, self._connect() as db:
+            chains = [dict(r) for r in db.execute("SELECT * FROM knowledge_chains WHERE profile_id=? AND goal_id=? ORDER BY created_at, chain_id", (profile_id, goal_id)).fetchall()]
+            if chain_ids is not None:
+                wanted = {str(x) for x in chain_ids}
+                chains = [c for c in chains if c["chain_id"] in wanted]
+            props = {r["prop_id"]: dict(r) for r in db.execute("SELECT * FROM knowledge_props WHERE profile_id=? AND goal_id=?", (profile_id, goal_id)).fetchall()}
+        out_chains = [{"chain_id": c["chain_id"], "node_id": c["node_id"], "premises": json.loads(c["premises_json"]), "conclusion": c["conclusion_id"],
+                       "sources": json.loads(c["sources_json"])} for c in chains]
+        if chain_ids is not None:
+            used = {i for c in out_chains for i in c["premises"] + [c["conclusion"]]}
+            props = {k: v for k, v in props.items() if k in used}
+        return {"propositions": [{"prop_id": k, "statement": v["statement"], "sources": json.loads(v["sources_json"])} for k, v in props.items()],
+                "chains": out_chains}
+
+    def load_choice_answer(self, profile_id, goal_id, item_id, attempt_id):
+        """Return the stored grading result of an answered private-key question, or None."""
+        profile_id = _profile_id(profile_id)
+        with self._lock, self._connect() as db:
+            row = db.execute("SELECT result_json FROM placement_answers WHERE profile_id=? AND attempt_id=? AND goal_id=? AND item_id=?",
+                             (profile_id, str(attempt_id or ""), str(goal_id or ""), str(item_id or ""))).fetchone()
+        return json.loads(row["result_json"]) if row else None
+
+    def record_placement_answer(self, profile_id, goal_id, item_id, attempt_id, fingerprint, result):
+        """Idempotent by attempt_id: the same answer returns the stored result; a different one is rejected."""
+        profile_id = _profile_id(profile_id)
+        attempt_id = str(attempt_id or "").strip()
+        if not attempt_id:
+            raise ValueError("Falta attempt_id para la respuesta de diagnóstico.")
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT * FROM placement_answers WHERE profile_id=? AND attempt_id=?", (profile_id, attempt_id)).fetchone()
+            if row:
+                if row["fingerprint"] != fingerprint:
+                    raise ValueError("PLACEMENT_ATTEMPT_CONFLICT: este attempt_id ya registró otra respuesta.")
+                return json.loads(row["result_json"])
+            db.execute("INSERT INTO placement_answers VALUES(?,?,?,?,?,?,?)",
+                       (profile_id, attempt_id, str(goal_id), str(item_id), fingerprint, _json(result), time.time_ns()))
+        return _copy(result)
 
     def save_criterion_activity(self, profile_id, goal_id, public_contract, private_contract):
         """Insert an immutable activity contract, or return its identical original.
@@ -661,9 +849,15 @@ class DurableMemory:
         sources = []
         for item in attempts:
             event = item["event"]
-            sources.append({"attempt_id": item["attempt_id"], "phase": item["phase"], "result": item["result"], "help_used": item["help_used"], "observed_dimensions": event.get("observed_dimensions", []), "at": item["occurred_at"]})
+            source = {"attempt_id": item["attempt_id"], "phase": item["phase"], "result": item["result"], "help_used": item["help_used"], "hint_level_max": normalize_hint_level(event.get("hint_level_max")), "observed_dimensions": event.get("observed_dimensions", []), "at": item["occurred_at"]}
+            if event.get("learner_signal_version"):
+                source["learner_confidence"] = event.get("learner_confidence")
+                source["calibration_signal"] = event.get("calibration_signal")
+            sources.append(source)
         if not sources:
             reason = "No hay intentos anteriores pertinentes para esta habilidad."
+        elif sources[0].get("calibration_signal") == "committed_misconception":
+            reason = "Seleccionada porque el último intento fue incorrecto con confianza alta: posible idea errónea consolidada."
         elif sources[0]["help_used"]:
             reason = "Seleccionada porque el último intento tuvo ayuda y conviene una comprobación posterior."
         elif sources[0]["result"] in ("PARTIAL", "MISCONCEPTION"):

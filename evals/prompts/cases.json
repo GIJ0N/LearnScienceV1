@@ -1,0 +1,961 @@
+[
+ {
+  "id": "placement-bien-formado",
+  "flow": "placement",
+  "source": "synthetic",
+  "input": {
+   "goal_id": "g1",
+   "goal": "Entender por qué flotan los barcos",
+   "nodes": [
+    {
+     "id": "densidad",
+     "name": "Densidad",
+     "outcome": "Comparar densidades",
+     "prerequisites": []
+    },
+    {
+     "id": "empuje",
+     "name": "Empuje",
+     "outcome": "Predecir si algo flota",
+     "prerequisites": [
+      "densidad"
+     ]
+    },
+    {
+     "id": "presion",
+     "name": "Presión",
+     "outcome": "Calcular presión",
+     "prerequisites": []
+    }
+   ],
+   "node_ids": [
+    "densidad",
+    "empuje"
+   ]
+  },
+  "recorded": [
+   {
+    "items": [
+     {
+      "node_id": "densidad",
+      "prompt": "Un cubo de 2 kg ocupa 1 litro y otro de 3 kg ocupa 2 litros. ¿Cuál es más denso?",
+      "options": [
+       {
+        "id": "a",
+        "text": "Igual densidad",
+        "misconception": "Confusión típica 0: aplica la idea hermana."
+       },
+       {
+        "id": "b",
+        "text": "El segundo",
+        "misconception": "Confusión típica 1: aplica la idea hermana."
+       },
+       {
+        "id": "c",
+        "text": "El primero",
+        "misconception": ""
+       },
+       {
+        "id": "d",
+        "text": "No se puede saber",
+        "misconception": "Confusión típica 3: aplica la idea hermana."
+       }
+      ],
+      "correct_option_id": "c",
+      "explanation": "La correcta aplica la idea y las otras no."
+     },
+     {
+      "node_id": "empuje",
+      "prompt": "Una bola maciza de acero se hunde pero un barco de acero flota. ¿Qué lo explica mejor?",
+      "options": [
+       {
+        "id": "a",
+        "text": "El barco desplaza mucha agua",
+        "misconception": ""
+       },
+       {
+        "id": "b",
+        "text": "El acero del barco pesa menos",
+        "misconception": "Confusión típica 1: aplica la idea hermana."
+       },
+       {
+        "id": "c",
+        "text": "El agua empuja más al barco por ser grande",
+        "misconception": "Confusión típica 2: aplica la idea hermana."
+       },
+       {
+        "id": "d",
+        "text": "El casco tiene aire más ligero que el acero",
+        "misconception": "Confusión típica 3: aplica la idea hermana."
+       }
+      ],
+      "correct_option_id": "a",
+      "explanation": "La correcta aplica la idea y las otras no."
+     }
+    ]
+   }
+  ],
+  "expect": {
+   "min_accepted": 2,
+   "max_model_calls": 1
+  }
+ },
+ {
+  "id": "placement-con-sesgos-del-modelo",
+  "flow": "placement",
+  "source": "synthetic",
+  "input": {
+   "goal_id": "g1",
+   "goal": "Entender por qué flotan los barcos",
+   "nodes": [
+    {
+     "id": "densidad",
+     "name": "Densidad",
+     "outcome": "Comparar densidades",
+     "prerequisites": []
+    },
+    {
+     "id": "empuje",
+     "name": "Empuje",
+     "outcome": "Predecir si algo flota",
+     "prerequisites": [
+      "densidad"
+     ]
+    },
+    {
+     "id": "presion",
+     "name": "Presión",
+     "outcome": "Calcular presión",
+     "prerequisites": []
+    }
+   ],
+   "node_ids": [
+    "densidad",
+    "empuje"
+   ]
+  },
+  "recorded": [
+   {
+    "items": [
+     {
+      "node_id": "densidad",
+      "prompt": "Si un objeto es denso, ¿qué sabemos?",
+      "options": [
+       {
+        "id": "a",
+        "text": "Tiene mucha masa en poco volumen",
+        "misconception": ""
+       },
+       {
+        "id": "b",
+        "text": "Es pesado",
+        "misconception": "Confusión típica 1: aplica la idea hermana."
+       },
+       {
+        "id": "c",
+        "text": "Es grande",
+        "misconception": "Confusión típica 2: aplica la idea hermana."
+       }
+      ],
+      "correct_option_id": "a",
+      "explanation": "La correcta aplica la idea y las otras no."
+     },
+     {
+      "node_id": "densidad",
+      "prompt": "¿Qué compara la densidad?",
+      "options": [
+       {
+        "id": "a",
+        "text": "La cantidad de masa que hay en cada unidad de volumen de un material, sin importar el tamaño de la muestra",
+        "misconception": ""
+       },
+       {
+        "id": "b",
+        "text": "Peso",
+        "misconception": "Confusión típica 1: aplica la idea hermana."
+       },
+       {
+        "id": "c",
+        "text": "Tamaño",
+        "misconception": "Confusión típica 2: aplica la idea hermana."
+       }
+      ],
+      "correct_option_id": "a",
+      "explanation": "La correcta aplica la idea y las otras no."
+     },
+     {
+      "node_id": "empuje",
+      "prompt": "¿Qué afirmación es cierta?",
+      "options": [
+       {
+        "id": "a",
+        "text": "Solo el barco flota",
+        "misconception": "Confusión típica 0: aplica la idea hermana."
+       },
+       {
+        "id": "b",
+        "text": "Solo la bola flota",
+        "misconception": "Confusión típica 1: aplica la idea hermana."
+       },
+       {
+        "id": "c",
+        "text": "Todas las anteriores",
+        "misconception": ""
+       }
+      ],
+      "correct_option_id": "c",
+      "explanation": "La correcta aplica la idea y las otras no."
+     },
+     {
+      "node_id": "empuje",
+      "prompt": "¿Cuál es el efecto?",
+      "options": [
+       {
+        "id": "a",
+        "text": "Sube",
+        "misconception": ""
+       },
+       {
+        "id": "b",
+        "text": "Baja",
+        "misconception": "Confusión típica 1: aplica la idea hermana."
+       },
+       {
+        "id": "c",
+        "text": "Igual",
+        "misconception": "Confusión típica 2: aplica la idea hermana."
+       }
+      ],
+      "correct_option_id": "a",
+      "explanation": "La correcta aplica la idea y las otras no."
+     }
+    ]
+   }
+  ],
+  "expect": {
+   "min_accepted": 1,
+   "min_rejected": {
+    "más larga": 1,
+    "todas/ninguna": 1
+   },
+   "max_model_calls": 1
+  }
+ },
+ {
+  "id": "pasos-bien-formados",
+  "flow": "steps",
+  "source": "synthetic",
+  "input": {
+   "goal_id": "g1",
+   "node_id": "empuje",
+   "goal": "Entender por qué flotan los barcos",
+   "name": "Empuje",
+   "parent": "Flotación",
+   "explanation": "e",
+   "example": "x",
+   "common_error": "c"
+  },
+  "recorded": [
+   {
+    "steps": [
+     {
+      "predict": "¿Qué crees que pasa en el caso 1?",
+      "resolution": "Lo cierto es esto, por esto.",
+      "body": "Cuerpo del paso 1 con motivo.",
+      "check": {
+       "node_id": "empuje",
+       "prompt": "Una esfera de 1 kg ocupa 2 litros: ¿flotará en agua?",
+       "options": [
+        {
+         "id": "a",
+         "text": "Sí, su densidad es menor",
+         "misconception": ""
+        },
+        {
+         "id": "b",
+         "text": "No, pesa 1 kg",
+         "misconception": "Confusión típica 1: aplica la idea hermana."
+        },
+        {
+         "id": "c",
+         "text": "Depende del color",
+         "misconception": "Confusión típica 2: aplica la idea hermana."
+        }
+       ],
+       "correct_option_id": "a",
+       "explanation": "La correcta aplica la idea y las otras no."
+      }
+     },
+     {
+      "predict": "¿Qué crees que pasa en el caso 2?",
+      "resolution": "Lo cierto es esto, por esto.",
+      "body": "Cuerpo del paso 2 con motivo.",
+      "check": {
+       "node_id": "empuje",
+       "prompt": "Un bloque de 6 kg ocupa 2 litros: ¿flotará en agua?",
+       "options": [
+        {
+         "id": "a",
+         "text": "No, su densidad es mayor",
+         "misconception": ""
+        },
+        {
+         "id": "b",
+         "text": "Sí, es compacto",
+         "misconception": "Confusión típica 1: aplica la idea hermana."
+        },
+        {
+         "id": "c",
+         "text": "Sí, si se lanza",
+         "misconception": "Confusión típica 2: aplica la idea hermana."
+        }
+       ],
+       "correct_option_id": "a",
+       "explanation": "La correcta aplica la idea y las otras no."
+      }
+     },
+     {
+      "predict": "¿Qué crees que pasa en el caso 3?",
+      "resolution": "Lo cierto es esto, por esto.",
+      "body": "Cuerpo del paso 3 con motivo.",
+      "check": {
+       "node_id": "empuje",
+       "prompt": "Un barco hueco de acero desplaza 100 litros y pesa 60 kg: ¿flota?",
+       "options": [
+        {
+         "id": "a",
+         "text": "Sí, el empuje supera el peso",
+         "misconception": ""
+        },
+        {
+         "id": "b",
+         "text": "No, el acero se hunde",
+         "misconception": "Confusión típica 1: aplica la idea hermana."
+        },
+        {
+         "id": "c",
+         "text": "No, desplaza poco",
+         "misconception": "Confusión típica 2: aplica la idea hermana."
+        }
+       ],
+       "correct_option_id": "a",
+       "explanation": "La correcta aplica la idea y las otras no."
+      }
+     },
+     {
+      "predict": "¿Qué crees que pasa en el caso 4?",
+      "resolution": "Lo cierto es esto, por esto.",
+      "body": "Cuerpo del paso 4 con motivo.",
+      "check": {
+       "node_id": "empuje",
+       "prompt": "El mismo barco carga hasta pesar 120 kg: ¿qué ocurre?",
+       "options": [
+        {
+         "id": "a",
+         "text": "Se hunde",
+         "misconception": ""
+        },
+        {
+         "id": "b",
+         "text": "Flota igual",
+         "misconception": "Confusión típica 1: aplica la idea hermana."
+        },
+        {
+         "id": "c",
+         "text": "Flota más alto",
+         "misconception": "Confusión típica 2: aplica la idea hermana."
+        }
+       ],
+       "correct_option_id": "a",
+       "explanation": "La correcta aplica la idea y las otras no."
+      }
+     }
+    ]
+   }
+  ],
+  "expect": {
+   "min_accepted": 3,
+   "max_model_calls": 1
+  }
+ },
+ {
+  "id": "pasos-insuficientes-usan-respaldo",
+  "flow": "steps",
+  "source": "synthetic",
+  "input": {
+   "goal_id": "g1",
+   "node_id": "empuje",
+   "goal": "Entender por qué flotan los barcos",
+   "name": "Empuje",
+   "parent": "Flotación",
+   "explanation": "e",
+   "example": "x",
+   "common_error": "c"
+  },
+  "recorded": [
+   {
+    "steps": [
+     {
+      "predict": "¿Qué crees que pasa en el caso 1?",
+      "resolution": "Lo cierto es esto, por esto.",
+      "body": "Cuerpo del paso 1 con motivo.",
+      "check": {
+       "node_id": "empuje",
+       "prompt": "Una esfera de 1 kg ocupa 2 litros: ¿flotará en agua?",
+       "options": [
+        {
+         "id": "a",
+         "text": "Sí, su densidad es menor",
+         "misconception": ""
+        },
+        {
+         "id": "b",
+         "text": "No, pesa 1 kg",
+         "misconception": "Confusión típica 1: aplica la idea hermana."
+        },
+        {
+         "id": "c",
+         "text": "Depende del color",
+         "misconception": "Confusión típica 2: aplica la idea hermana."
+        }
+       ],
+       "correct_option_id": "a",
+       "explanation": "La correcta aplica la idea y las otras no."
+      }
+     },
+     {
+      "predict": "",
+      "resolution": "x",
+      "body": "y",
+      "check": {
+       "node_id": "empuje",
+       "prompt": "p",
+       "options": [
+        {
+         "id": "a",
+         "text": "a",
+         "misconception": ""
+        },
+        {
+         "id": "b",
+         "text": "b",
+         "misconception": "Confusión típica 1: aplica la idea hermana."
+        },
+        {
+         "id": "c",
+         "text": "c",
+         "misconception": "Confusión típica 2: aplica la idea hermana."
+        }
+       ],
+       "correct_option_id": "a",
+       "explanation": "La correcta aplica la idea y las otras no."
+      }
+     }
+    ]
+   }
+  ],
+  "expect": {
+   "error_contains": "no cumplió el contrato"
+  }
+ },
+ {
+  "id": "discriminacion-bien-formada",
+  "flow": "discrimination",
+  "source": "synthetic",
+  "input": {
+   "goal_id": "g1",
+   "goal": "Entender por qué flotan los barcos",
+   "nodes": [
+    {
+     "id": "densidad",
+     "name": "Densidad",
+     "outcome": "Comparar densidades"
+    },
+    {
+     "id": "empuje",
+     "name": "Empuje",
+     "outcome": "Predecir si algo flota"
+    },
+    {
+     "id": "presion",
+     "name": "Presión",
+     "outcome": "Calcular presión"
+    }
+   ]
+  },
+  "recorded": [
+   {
+    "items": [
+     {
+      "node_id": "densidad",
+      "prompt": "Dos metales de igual tamaño: uno pesa el doble. ¿Qué cambia?",
+      "options": [
+       {
+        "id": "a",
+        "text": "La masa por unidad de volumen",
+        "misconception": "Confusión típica 0: aplica la idea hermana."
+       },
+       {
+        "id": "b",
+        "text": "La presión",
+        "misconception": ""
+       },
+       {
+        "id": "c",
+        "text": "La fuerza hacia arriba",
+        "misconception": "Confusión típica 2: aplica la idea hermana."
+       }
+      ],
+      "correct_option_id": "b",
+      "explanation": "La correcta aplica la idea y las otras no."
+     },
+     {
+      "node_id": "empuje",
+      "prompt": "Un objeto sumergido recibe una fuerza hacia arriba igual a lo que…",
+      "options": [
+       {
+        "id": "a",
+        "text": "pesa el fluido desplazado",
+        "misconception": "Confusión típica 0: aplica la idea hermana."
+       },
+       {
+        "id": "b",
+        "text": "pesa el objeto",
+        "misconception": "Confusión típica 1: aplica la idea hermana."
+       },
+       {
+        "id": "c",
+        "text": "mide su volumen en seco",
+        "misconception": ""
+       }
+      ],
+      "correct_option_id": "c",
+      "explanation": "La correcta aplica la idea y las otras no."
+     },
+     {
+      "node_id": "presion",
+      "prompt": "¿Por qué un cuchillo afilado corta mejor?",
+      "options": [
+       {
+        "id": "a",
+        "text": "Concentra la fuerza en menos área",
+        "misconception": ""
+       },
+       {
+        "id": "b",
+        "text": "Tiene mayor densidad",
+        "misconception": "Confusión típica 1: aplica la idea hermana."
+       },
+       {
+        "id": "c",
+        "text": "Desplaza más agua",
+        "misconception": "Confusión típica 2: aplica la idea hermana."
+       }
+      ],
+      "correct_option_id": "a",
+      "explanation": "La correcta aplica la idea y las otras no."
+     }
+    ]
+   }
+  ],
+  "expect": {
+   "min_accepted": 3,
+   "max_model_calls": 1
+  }
+ },
+ {
+  "id": "grafo-bien-formado",
+  "flow": "graph",
+  "source": "synthetic",
+  "input": {
+   "goal_id": "g1",
+   "node_id": "empuje",
+   "goal": "Entender por qué flotan los barcos",
+   "name": "Empuje",
+   "material": "Texto de la lección sobre empuje."
+  },
+  "recorded": [
+   {
+    "propositions": [
+     "La densidad es masa entre volumen.",
+     "Un objeto flota si su densidad media es menor que la del fluido.",
+     "Un casco hueco reduce la densidad media del barco.",
+     "Un barco de acero hueco puede flotar."
+    ],
+    "chains": [
+     {
+      "premises": [
+       0,
+       1,
+       2
+      ],
+      "conclusion": 3
+     }
+    ]
+   }
+  ],
+  "expect": {
+   "min_accepted": 4,
+   "max_model_calls": 1
+  }
+ },
+ {
+  "id": "composicion-bien-formada",
+  "flow": "composition",
+  "source": "synthetic",
+  "input": {
+   "goal_id": "g1",
+   "node_id": "empuje",
+   "goal": "Entender por qué flotan los barcos",
+   "name": "Empuje",
+   "_graph": {
+    "propositions": [
+     "La densidad es masa entre volumen.",
+     "Un objeto flota si su densidad media es menor que la del fluido.",
+     "Un casco hueco reduce la densidad media del barco.",
+     "Un barco de acero hueco puede flotar."
+    ],
+    "chains": [
+     {
+      "premises": [
+       0,
+       1,
+       2
+      ],
+      "conclusion": 3
+     }
+    ]
+   }
+  },
+  "recorded": [
+   {
+    "items": [
+     {
+      "chain_id": "__CHAIN__",
+      "prompt": "Un casco de acero hueco desplaza 100 litros y su masa total es 60 kg. ¿Qué ocurre en agua dulce?",
+      "options": [
+       {
+        "id": "a",
+        "text": "Flota, su densidad media es menor que la del agua",
+        "misconception": ""
+       },
+       {
+        "id": "b",
+        "text": "Se hunde, el acero es denso",
+        "misconception": "Confusión típica 1: aplica la idea hermana."
+       },
+       {
+        "id": "c",
+        "text": "Se hunde, desplaza poco",
+        "misconception": "Confusión típica 2: aplica la idea hermana."
+       },
+       {
+        "id": "d",
+        "text": "Flota solo si es pequeño",
+        "misconception": "Confusión típica 3: aplica la idea hermana."
+       }
+      ],
+      "correct_option_id": "a",
+      "explanation": "Cadena completa."
+     }
+    ]
+   }
+  ],
+  "expect": {
+   "min_accepted": 1,
+   "max_model_calls": 1
+  }
+ },
+ {
+  "id": "mapa-por-areas",
+  "flow": "area_map",
+  "source": "synthetic",
+  "input": {
+   "goal": "Entender por qué flotan los barcos",
+   "context": ""
+  },
+  "recorded": [
+   {
+    "scope": "Meta amplia: física de fluidos y diseño naval.",
+    "areas": [
+     {
+      "name": "Masa, volumen y densidad",
+      "outcome": "Comparar densidades",
+      "estimated_topics": 7
+     },
+     {
+      "name": "Fuerzas y equilibrio",
+      "outcome": "Analizar fuerzas",
+      "estimated_topics": 8
+     },
+     {
+      "name": "Fluidos en reposo",
+      "outcome": "Calcular presión",
+      "estimated_topics": 8
+     },
+     {
+      "name": "Empuje y flotación",
+      "outcome": "Predecir flotación",
+      "estimated_topics": 9
+     },
+     {
+      "name": "Estabilidad de barcos",
+      "outcome": "Evaluar estabilidad",
+      "estimated_topics": 8
+     }
+    ]
+   },
+   {
+    "nodes": [
+     {
+      "id": "n1",
+      "name": "Tema 1",
+      "outcome": "Resolver",
+      "level": 0,
+      "prerequisites": [],
+      "kind": "concept",
+      "probe": {
+       "prompt": "Explica el tema 1",
+       "reference": "Criterio",
+       "kind": "explanation",
+       "observable_dimensions": [
+        "conceptual"
+       ]
+      }
+     },
+     {
+      "id": "n2",
+      "name": "Tema 2",
+      "outcome": "Resolver",
+      "level": 1,
+      "prerequisites": [
+       "n1"
+      ],
+      "kind": "concept",
+      "probe": {
+       "prompt": "Explica el tema 2",
+       "reference": "Criterio",
+       "kind": "explanation",
+       "observable_dimensions": [
+        "conceptual"
+       ]
+      }
+     },
+     {
+      "id": "n3",
+      "name": "Tema 3",
+      "outcome": "Resolver",
+      "level": 2,
+      "prerequisites": [
+       "n2"
+      ],
+      "kind": "concept",
+      "probe": {
+       "prompt": "Explica el tema 3",
+       "reference": "Criterio",
+       "kind": "explanation",
+       "observable_dimensions": [
+        "conceptual"
+       ]
+      }
+     },
+     {
+      "id": "n4",
+      "name": "Tema 4",
+      "outcome": "Resolver",
+      "level": 3,
+      "prerequisites": [
+       "n3"
+      ],
+      "kind": "concept",
+      "probe": {
+       "prompt": "Explica el tema 4",
+       "reference": "Criterio",
+       "kind": "explanation",
+       "observable_dimensions": [
+        "conceptual"
+       ]
+      }
+     },
+     {
+      "id": "n5",
+      "name": "Tema 5",
+      "outcome": "Resolver",
+      "level": 4,
+      "prerequisites": [
+       "n4"
+      ],
+      "kind": "concept",
+      "probe": {
+       "prompt": "Explica el tema 5",
+       "reference": "Criterio",
+       "kind": "explanation",
+       "observable_dimensions": [
+        "conceptual"
+       ]
+      }
+     },
+     {
+      "id": "n6",
+      "name": "Tema 6",
+      "outcome": "Resolver",
+      "level": 5,
+      "prerequisites": [
+       "n5"
+      ],
+      "kind": "concept",
+      "probe": {
+       "prompt": "Explica el tema 6",
+       "reference": "Criterio",
+       "kind": "explanation",
+       "observable_dimensions": [
+        "conceptual"
+       ]
+      }
+     },
+     {
+      "id": "n7",
+      "name": "Tema 7",
+      "outcome": "Resolver",
+      "level": 6,
+      "prerequisites": [
+       "n6"
+      ],
+      "kind": "concept",
+      "probe": {
+       "prompt": "Explica el tema 7",
+       "reference": "Criterio",
+       "kind": "explanation",
+       "observable_dimensions": [
+        "conceptual"
+       ]
+      }
+     }
+    ],
+    "coverage": [
+     {
+      "id": "n1",
+      "name": "Tema 1",
+      "kind": "concept",
+      "priority": "important",
+      "prerequisites": [],
+      "contexts": [],
+      "dimensions": [
+       {
+        "id": "conceptual",
+        "name": "Comprensión",
+        "required": true
+       }
+      ]
+     },
+     {
+      "id": "n2",
+      "name": "Tema 2",
+      "kind": "concept",
+      "priority": "important",
+      "prerequisites": [
+       "n1"
+      ],
+      "contexts": [],
+      "dimensions": [
+       {
+        "id": "conceptual",
+        "name": "Comprensión",
+        "required": true
+       }
+      ]
+     },
+     {
+      "id": "n3",
+      "name": "Tema 3",
+      "kind": "concept",
+      "priority": "important",
+      "prerequisites": [
+       "n2"
+      ],
+      "contexts": [],
+      "dimensions": [
+       {
+        "id": "conceptual",
+        "name": "Comprensión",
+        "required": true
+       }
+      ]
+     },
+     {
+      "id": "n4",
+      "name": "Tema 4",
+      "kind": "concept",
+      "priority": "important",
+      "prerequisites": [
+       "n3"
+      ],
+      "contexts": [],
+      "dimensions": [
+       {
+        "id": "conceptual",
+        "name": "Comprensión",
+        "required": true
+       }
+      ]
+     },
+     {
+      "id": "n5",
+      "name": "Tema 5",
+      "kind": "concept",
+      "priority": "important",
+      "prerequisites": [
+       "n4"
+      ],
+      "contexts": [],
+      "dimensions": [
+       {
+        "id": "conceptual",
+        "name": "Comprensión",
+        "required": true
+       }
+      ]
+     },
+     {
+      "id": "n6",
+      "name": "Tema 6",
+      "kind": "concept",
+      "priority": "important",
+      "prerequisites": [
+       "n5"
+      ],
+      "contexts": [],
+      "dimensions": [
+       {
+        "id": "conceptual",
+        "name": "Comprensión",
+        "required": true
+       }
+      ]
+     },
+     {
+      "id": "n7",
+      "name": "Tema 7",
+      "kind": "concept",
+      "priority": "important",
+      "prerequisites": [
+       "n6"
+      ],
+      "contexts": [],
+      "dimensions": [
+       {
+        "id": "conceptual",
+        "name": "Comprensión",
+        "required": true
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "expect": {
+   "min_accepted": 5,
+   "max_model_calls": 2
+  }
+ }
+]

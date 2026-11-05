@@ -15,6 +15,22 @@ No se ha declarado una versión mínima formal del proyecto. Las versiones anter
 Desde la raíz del repositorio:
 
 ```text
+python tests/prompt_quality.test.py
+python tests/prompt_bench.test.py
+node tests/map_areas.test.js
+python tests/map_areas_backend.test.py
+node tests/expert_panel.test.js
+node tests/knowledge_graph.test.js
+python tests/knowledge_graph_backend.test.py
+node tests/spaced_practice.test.js
+python tests/spaced_practice_backend.test.py
+node tests/step_lessons.test.js
+python tests/step_lessons_backend.test.py
+python tests/llm_provider.test.py
+node tests/placement.test.js
+python tests/placement_backend.test.py
+node tests/learner_signals.test.js
+python tests/learner_signals_backend.test.py
 node tests/evidence_policy.test.js
 node tests/evidence_sufficiency.test.js
 python tests/evidence_confirmation.test.py
@@ -29,6 +45,8 @@ node tests/repair_teaching_v2.test.js
 python tests/repair_teaching_backend.test.py
 node tests/repair_diagnosis_recovery.test.js
 python tests/repair_diagnosis_recovery_backend.test.py
+node tests/graded_hints.test.js
+python tests/graded_hints_backend.test.py
 node --check app.js
 python app_legacy.py --self-test
 python -m py_compile app_legacy.py
@@ -53,6 +71,8 @@ Git almacena los archivos de este repositorio con LF, pero un checkout de Window
 `python tests/criterion_assessment.test.py` y `node tests/criterion_assessment_frontend.test.js` cubren la vertical `criterion_assessment_v1`: actividad de opción múltiple con explicación separada, clave privada solo en el servidor, evaluación determinista de la opción, explicación `NOT_EVALUATED` cuando el proveedor controlado no responde, ayuda que impide independencia, idempotencia por `attempt_id` y persistencia compatible. Estas pruebas usan respuestas controladas y no validan eficacia pedagógica ni Gemini real.
 
 `python tests/criterion_durability.test.py` comprueba el contrato privado completo en SQLite aislado, borradores tras reinicio, recuperación de evaluaciones ya persistidas, rechazo de fingerprints distintos, reserva concurrente, recuperación explícita de una reserva cuyo propietario pertenece a un proceso anterior, rechazo de respuestas tardías del propietario anterior, aislamiento por perfil/meta, exportación sin claves, restauración sin contrato privado, eliminación por cascada y compatibilidad con stores legacy. El registro `PENDING` no mantiene una transacción abierta durante la llamada al proveedor: la misma instancia no puede iniciar una segunda evaluación, pero una instancia nueva reclama el mismo `attempt_id` y fingerprint. Si el proceso cae durante la llamada, la recuperación no garantiza que el proveedor se ejecutara una sola vez; sí evita duplicar evidencia y evita que una respuesta tardía sobrescriba la evaluación recuperada.
+
+`node tests/graded_hints.test.js` y `python tests/graded_hints_backend.test.py` cubren `graded_hints_v1` (`docs/graded_hints_v1.md`): el evento registra `hint_level_max` (0-5), cualquier pista —incluida P0— impide independencia en el evento, la suficiencia, el cierre de reparación y `validate_store`, los valores ilegibles se tratan como 5, la huella de criterio solo cambia cuando hay nivel, y los eventos legacy sin el campo no reciben un nivel inventado. Usan proveedor controlado y SQLite temporal; no validan Gemini real ni navegador.
 
 `python tests/criterion_server_lock.test.py` usa procesos reales y SQLite temporales. Comprueba que una segunda instancia no puede servir la misma base mientras el primer proceso conserva el handle bloqueado, que la caída abrupta libera el bloqueo, que el mismo intento puede recuperarse después, que dos solicitudes del servidor activo no ejecutan dos evaluaciones, que bases distintas funcionan simultáneamente y que una respuesta HTTP perdida no duplica la evaluación. El bloqueo cubre una SQLite local en un solo equipo; no es un protocolo distribuido.
 
@@ -138,3 +158,21 @@ La prueba inyecta un reloj local y comprueba el estado antes, en y después del
 vencimiento, ayuda, fechas inválidas o futuras, contratos dirigidos y
 persistencia de los campos en una normalización v4. El reloj del equipo no se
 modifica y el resultado no demuestra retención humana.
+
+`node tests/learner_signals.test.js` y `python tests/learner_signals_backend.test.py` cubren `learner_signals_v1`: confianza ausente como `null`, matriz de calibración, que la confianza no concede independencia ni cambia cobertura, rechazo de confianza inválida antes de llamar al proveedor, «No sé» sin señal, contexto del evaluador y de la microlección, y eventos legacy sin señales. Usan respuestas controladas; no validan Gemini real ni el navegador.
+
+`node tests/placement.test.js` y `python tests/placement_backend.test.py` cubren `placement_v1`: entrada por el tema más avanzado, división de lo pendiente, deducción hacia prerrequisitos solo con acierto seguro, laguna hacia dependientes, conflicto, repregunta de temas frágiles, temas con evidencia previa excluidos, saltos que no conceden dominio y se revocan, idempotencia, una sola llamada por lote, clave privada en servidor, corrección sin proveedor, aislamiento por perfil y meta y borrado en cascada. Usan respuestas controladas; no validan Gemini real ni el navegador.
+
+`python tests/prompt_quality.test.py` y `python tests/prompt_bench.test.py` cubren `prompt_quality_v1`: la compuerta de calidad de preguntas (repetidas, «todas las anteriores», correcta delatada por longitud, enunciado que revela la respuesta, sin falsos positivos con variables), que los cinco prompts generadores incluyan las reglas, el banco en modo reproducción con 8 casos sintéticos (cumplimiento, sesgos antes de barajar, costo en llamadas y tokens) y que corra sin red ni claves.
+
+`node tests/map_areas.test.js` y `python tests/map_areas_backend.test.py` cubren `map_areas_v1`: creación en dos llamadas con la primera área abierta, límites y duplicados de áreas, renombrado de ids por área, dependencias hacia temas existentes, fusión de temas repetidos, rechazo de ciclos/ids/prerrequisitos inválidos, expansión que solo agrega sin tocar lo existente ni conceder evidencia, apertura automática no bloqueante, reintento con espera y que el mapa plano anterior siga igual.
+
+`node tests/expert_panel.test.js` cubre `expert_panel_v1`: las 7 capas con sus umbrales (`none`/`partial`/`met`), que `UNKNOWN`, el diagnóstico, las auditorías, la ayuda y otros temas no cuenten donde no deben, calibración con respuestas decisivas, sobreconfianza e infraconfianza, etiquetas y siguiente paso, y que el panel sea de solo lectura.
+
+`node tests/knowledge_graph.test.js` y `python tests/knowledge_graph_backend.test.py` cubren `knowledge_graph_v1`: validación local de proposiciones y cadenas (duplicados, premisas inválidas, topes), deduplicación por enunciado normalizado solo dentro de la meta, procedencia acumulada, extracción que no bloquea ni marca como hecha si falla, composición generada solo desde cadenas guardadas (nunca de otra meta o perfil), corrección sin proveedor, aislamiento entre versiones de pregunta y ausencia de `EVIDENCE`.
+
+`node tests/spaced_practice.test.js` y `python tests/spaced_practice_backend.test.py` cubren `spaced_practice_v1`: tabla de peldaños según ayuda y confianza, tope de la escalera, selección intercalada (vencidos primero, sin temas sin exposición, mínimo dos), ninguna creación de `EVIDENCE`, un acierto que no sube el peldaño, retroceso parcial que nunca atrasa un vencimiento, idempotencia por `attempt_id`, contrato de generación con clave privada y aislamiento entre versiones de pregunta.
+
+`node tests/step_lessons.test.js` y `python tests/step_lessons_backend.test.py` cubren `step_lessons_v1`: ciclo predecir → enseñar → comprobar, reparación con tope de 2 y paso `unresolved`, ninguna creación de `EVIDENCE`, idempotencia por `attempt_id`, reinicio si la lección cambia, pasos inválidos descartados (menos de 2 → respaldo), corrección sin proveedor, aislamiento entre diagnóstico y pasos, y reparación que toma la idea errónea del servidor y rechaza aciertos o respuestas inexistentes.
+
+`python tests/llm_provider.test.py` cubre el cambio de proveedor: contrato HTTP de Anthropic (cabeceras, modelo, herramienta forzada, esquema en JSON Schema), que todos los esquemas de la app sean objetos en raíz, salida truncada y estructura faltante rechazadas, errores en español sin eco de la clave, cuota compartida y proveedor por defecto Gemini. Usa una red simulada; no contacta a ningún proveedor.
