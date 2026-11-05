@@ -70,5 +70,7 @@ policy.setProfileForTests({ profile_id: 'p', name: 'Prueba', preferences: {} }, 
   assert.ok(!src.includes('Piensa qué dato falta para decidir'), 'la pista ya no copia el «error habitual»');
   assert.ok(src.includes("api('/api/content/report'") && src.includes('reportButton(b,goal,n.id,'), '«Esto está mal» está en la lección y en la pregunta');
   assert.ok(src.includes("depth:depthValue") && src.includes("depth:goal.depth||'experto'"), 'la profundidad viaja al crear y al abrir áreas');
+  const boot = src.slice(src.indexOf('async function bootstrap'));
+  assert.ok(boot.indexOf("getItem('ruta.page.'+selected)") < boot.indexOf('await selectProfile(selected)'), 'la pantalla guardada se lee ANTES de que selectProfile la sobrescriba con su render');
   console.log('OK: contenido confiable en el cliente (guardados agrupados, etiquetas, profundidad, cableado).');
 })();

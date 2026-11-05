@@ -33,6 +33,8 @@ node tests/content_trust.test.js
 python tests/content_trust_backend.test.py
 node tests/error_hunt.test.js
 python tests/error_hunt_backend.test.py
+node tests/teach_beto.test.js
+python tests/teach_beto_backend.test.py
 python tests/placement_backend.test.py
 node tests/learner_signals.test.js
 python tests/learner_signals_backend.test.py
@@ -190,3 +192,6 @@ Corrige lo hallado en la prueba real con Gemini: `maxOutputTokens` con margen pa
 
 ## Encuentra el error (`error_hunt_v1`)
 `python tests/error_hunt_backend.test.py` y `node tests/error_hunt.test.js` cubren: contrato local de la solución (3 a 6 pasos numerados consecutivos desde 1; cada opción cita un paso existente o es la única opción «ningún paso tiene error»), soluciones limpias que el servidor decide y una clave coherente con el tipo pedido, clave privada, descarte de ítems mal formados o repetidos, descarte de los señalados por la auditoría, corrección sin proveedor, idempotencia por `attempt_id`, aislamiento por versión, disponibilidad con un solo tema, evento `DISCRIMINATION` con `variant: 'error_hunt'`, corrección escrita calificada con rúbrica (provisional, idempotente, solo tras un diagnóstico correcto, rechazada en soluciones limpias), evento `ERROR_FIX` ignorado por el panel experto y ausencia total de `EVIDENCE`. Usan respuestas controladas; no miden si Gemini real escribe errores bien escondidos ni si el paso señalado es de verdad el erróneo (eso depende del verificador y del reporte «Esto está mal»).
+
+## Enséñale a Beto (`teach_beto_v1`)
+`python tests/teach_beto_backend.test.py` y `node tests/teach_beto.test.js` cubren: creencia e idea correcta privadas (el cliente solo recibe la apertura), auditoría de contenido al crear la actividad, estados válidos del turno, tope de 4 intercambios con cierre automático, respuesta de Beto que filtra la idea correcta rechazada sin guardar nada, idempotencia por `attempt_id` y conflicto con otro texto, aislamiento por meta y por versión, evento `BETO_SESSION` provisional que `expertOutcome` ignora, ausencia de `EVIDENCE`, y repaso que solo se adelanta (nunca se retrasa) cuando Beto no queda convencido. Usan respuestas controladas; no miden si Gemini real inventa creencias falsas verosímiles ni si califica bien una explicación: eso necesita una prueba real con temas distintos.
