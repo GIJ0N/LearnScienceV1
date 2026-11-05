@@ -35,6 +35,8 @@ node tests/error_hunt.test.js
 python tests/error_hunt_backend.test.py
 node tests/teach_beto.test.js
 python tests/teach_beto_backend.test.py
+node tests/real_world_challenges.test.js
+python tests/real_world_challenges_backend.test.py
 python tests/placement_backend.test.py
 node tests/learner_signals.test.js
 python tests/learner_signals_backend.test.py
@@ -195,3 +197,6 @@ Corrige lo hallado en la prueba real con Gemini: `maxOutputTokens` con margen pa
 
 ## Enséñale a Beto (`teach_beto_v1`)
 `python tests/teach_beto_backend.test.py` y `node tests/teach_beto.test.js` cubren: creencia e idea correcta privadas (el cliente solo recibe la apertura), auditoría de contenido al crear la actividad, estados válidos del turno, tope de 4 intercambios con cierre automático, respuesta de Beto que filtra la idea correcta rechazada sin guardar nada, idempotencia por `attempt_id` y conflicto con otro texto, aislamiento por meta y por versión, evento `BETO_SESSION` provisional que `expertOutcome` ignora, ausencia de `EVIDENCE`, y repaso que solo se adelanta (nunca se retrasa) cuando Beto no queda convencido. Usan respuestas controladas; no miden si Gemini real inventa creencias falsas verosímiles ni si califica bien una explicación: eso necesita una prueba real con temas distintos.
+
+## Retos del mundo real (`real_world_challenges_v1`)
+`python tests/real_world_challenges_backend.test.py` y `node tests/real_world_challenges.test.js` cubren: contrato del reto (2–6 pasos, 2–3 campos, 10–45 min), filtro local de seguridad, auditoría de contenido, tarea oculta hasta bloquear la predicción en el servidor, informe que exige predicción previa, puertas locales antes del modelo, valoración provisional e idempotente, INSUFFICIENT sin evento, NOT_SUPPORTED que solo adelanta el repaso, nunca EVIDENCE. Diseño en `docs/real_world_challenges_v1.md`.
