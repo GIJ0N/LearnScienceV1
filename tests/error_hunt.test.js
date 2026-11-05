@@ -43,6 +43,29 @@ const res = (status, it) => ({ status, item_id: it.item_id, node_id: it.node_id,
   assert.equal(g.events.filter(e => e.type === 'EVIDENCE').length, 0, 'encontrar un error no es evidencia de dominio');
   assert.equal(g.events.filter(e => e.type === 'DISCRIMINATION').length, 2);
 
+  // Corrección escrita: evento propio, provisional, sin EVIDENCE, sin tocar el repaso y sin entrar al panel experto.
+  g = attach(goal([{ id: 'a', due: Date.now() - DAY, step: 1, question: null, history: [] }]));
+  const hm = p.startMixed(g, 'error_hunt');
+  hm.items = [item(7)];
+  const reviewBefore = JSON.stringify(g.reviews);
+  const fixRes = (status, it, extra = {}) => ({ status, item_id: it.item_id, node_id: it.node_id, ...extra });
+  assert.equal(p.applyDiscrimination(g, hm.items[0], { ...res('CORRECT', hm.items[0]), needs_fix: true }, 'q1', 'a', 80), true);
+  assert.equal(hm.status, 'done', 'la corrección llega cuando la práctica ya avanzó: no exige que siga activa');
+  assert.equal(p.applyErrorFix(g, hm.items[0], fixRes('PARTIAL', hm.items[0]), 'fx1', '  Paso 2: 15 × 5 = 75  '), true);
+  const fx = g.events.find(e => e.type === 'ERROR_FIX');
+  assert.equal(fx.status, 'PARTIAL');
+  assert.equal(fx.provisional, true);
+  assert.equal(fx.answer_text, 'Paso 2: 15 × 5 = 75');
+  assert.equal(fx.attempt_id, 'fx1');
+  assert.equal(p.applyErrorFix(g, hm.items[0], fixRes('PARTIAL', hm.items[0]), 'fx1', 'x'), false, 'idempotente por attempt_id');
+  assert.equal(g.events.filter(e => e.type === 'ERROR_FIX').length, 1);
+  assert.equal(g.events.filter(e => e.type === 'EVIDENCE').length, 0);
+  assert.equal(JSON.stringify(g.reviews), reviewBefore, 'la corrección no mueve el repaso');
+  assert.equal(p.expertOutcome(fx), null, 'una calificación provisional no cuenta para el panel experto');
+  assert.throws(() => p.applyErrorFix(g, item(99), fixRes('CORRECT', item(99)), 'fx2', 'x'), /ya no corresponde/);
+  assert.throws(() => p.applyErrorFix(g, hm.items[0], fixRes('UNKNOWN', hm.items[0]), 'fx3', 'x'), /no corresponde a la corrección/);
+  assert.throws(() => p.applyErrorFix(g, hm.items[0], { ...fixRes('CORRECT', hm.items[0]), node_id: 'zzz' }, 'fx4', 'x'), /no corresponde a la corrección/);
+
   // Una práctica de discriminación normal no lleva variante.
   g = attach(goal([{ id: 'a', due: Date.now() - DAY, step: 1, question: null, history: [] }, { id: 'b', due: Date.now() - DAY, step: 1, question: null, history: [] }]));
   g.events.push({ type: 'TEACHING_EXPOSURE', node_id: 'b', at: Date.now() - 4 * DAY });
@@ -54,5 +77,6 @@ const res = (status, it) => ({ status, item_id: it.item_id, node_id: it.node_id,
   const src = require('node:fs').readFileSync(__dirname + '/../app.js', 'utf8');
   assert.ok(src.includes("'/api/practice/error'") && src.includes("'/api/practice/error/answer'"), 'las rutas están cableadas');
   assert.ok(src.includes("B('Encuentra el error'"), 'el botón existe en el mapa');
+  assert.ok(src.includes("'/api/practice/error/fix'") && src.includes('after:errorFixPanel'), 'el panel de corrección está cableado');
   console.log('OK: Encuentra el error (disponibilidad, evento con variante, sin evidencia).');
 })();
