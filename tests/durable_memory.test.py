@@ -10,6 +10,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import app_legacy
+app_legacy.CONTENT_VERIFY = False  # estas pruebas cuentan llamadas al proveedor; la auditoría tiene su propia prueba
 from memory_store import DurableMemory
 
 
