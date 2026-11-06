@@ -376,6 +376,8 @@ def validate_store(raw, profile_id, allow_profile_rebind=False):
 def _question_for(goal, event):
     if isinstance(event.get("question"), dict) and event["question"].get("prompt"):
         return _copy(event["question"])
+    if event.get("criterion_assessment"):
+        return None  # una actividad de criterios no usa las preguntas de la lección actual
     node_id = event.get("node_id")
     phase = event.get("phase")
     if phase == "DIAGNOSTIC":

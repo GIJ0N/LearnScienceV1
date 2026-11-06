@@ -32,7 +32,8 @@ assert.equal(all(roots.app).filter(x=>String(x.className||'').includes('criterio
 assert.match(text(roots.app),/Opción validada por clave privada/);
 assert.match(text(roots.app),/Proveedor semántico no disponible/);
 assert.match(text(roots.app),/no produjo evidencia positiva/);
-assert.match(text(roots.app),/Método: deterministic_option_key/);
+assert.match(text(roots.app),/Método: clave local de la opción/);
+assert.doesNotMatch(text(roots.app),/deterministic_option_key|option_choice ·|SATISFIED/);
 assert.doesNotMatch(text(roots.app),/correct_option_id|PRIVATE_REFERENCE/);
 const repairingGoal={...renderedGoal,contextStack:[{context_id:'context-1',episode_id:'episode-1',status:'ACTIVE'}]};
 policy.setStoreForTests({active:'goal',goals:[repairingGoal]});
