@@ -41,6 +41,8 @@ jobs:
           python tests/error_hunt_backend.test.py
           node tests/teach_beto.test.js
           python tests/teach_beto_backend.test.py
+          node tests/real_world_challenges.test.js
+          python tests/real_world_challenges_backend.test.py
           python tests/placement_backend.test.py
       - name: Run step lesson tests
         run: |
