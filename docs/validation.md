@@ -37,6 +37,8 @@ node tests/teach_beto.test.js
 python tests/teach_beto_backend.test.py
 node tests/real_world_challenges.test.js
 python tests/real_world_challenges_backend.test.py
+node tests/qa_round2.test.js
+python tests/qa_round2_backend.test.py
 python tests/placement_backend.test.py
 node tests/learner_signals.test.js
 python tests/learner_signals_backend.test.py
@@ -200,3 +202,6 @@ Corrige lo hallado en la prueba real con Gemini: `maxOutputTokens` con margen pa
 
 ## Retos del mundo real (`real_world_challenges_v1`)
 `python tests/real_world_challenges_backend.test.py` y `node tests/real_world_challenges.test.js` cubren: contrato del reto (2–6 pasos, 2–3 campos, 10–45 min), filtro local de seguridad, auditoría de contenido, tarea oculta hasta bloquear la predicción en el servidor, informe que exige predicción previa, puertas locales antes del modelo, valoración provisional e idempotente, INSUFFICIENT sin evento, NOT_SUPPORTED que solo adelanta el repaso, nunca EVIDENCE. Diseño en `docs/real_world_challenges_v1.md`.
+
+## Ronda QA 2 (`fix/qa-round-2`)
+`python tests/qa_round2_backend.test.py` y `node tests/qa_round2.test.js` cubren los hallazgos de la primera prueba con Gemini real: Encuentra el error normaliza pasos en negritas o en una sola línea, ya no penaliza la opción fija «ningún paso» al medir la longitud, reintenta una vez con los motivos y los informa si falla; la pista 3 se descarta si reutiliza los números de la pregunta; el reto reintenta una vez ante contrato, seguridad o auditoría y acepta mediciones cortas con dígito (p. ej. «20»); Beto no da por convencido con una sola línea; ninguna etiqueta interna llega a pantalla; la pista de la práctica de criterios nunca queda muda y siempre cuenta como ayuda. No se probó de nuevo con Gemini real (BLOCKED en el sandbox).
