@@ -39,6 +39,8 @@ node tests/real_world_challenges.test.js
 python tests/real_world_challenges_backend.test.py
 node tests/qa_round2.test.js
 python tests/qa_round2_backend.test.py
+node tests/qa_round3.test.js
+python tests/qa_round3_backend.test.py
 python tests/placement_backend.test.py
 node tests/learner_signals.test.js
 python tests/learner_signals_backend.test.py
@@ -205,3 +207,6 @@ Corrige lo hallado en la prueba real con Gemini: `maxOutputTokens` con margen pa
 
 ## Ronda QA 2 (`fix/qa-round-2`)
 `python tests/qa_round2_backend.test.py` y `node tests/qa_round2.test.js` cubren los hallazgos de la primera prueba con Gemini real: Encuentra el error normaliza pasos en negritas o en una sola línea, ya no penaliza la opción fija «ningún paso» al medir la longitud, reintenta una vez con los motivos y los informa si falla; la pista 3 se descarta si reutiliza los números de la pregunta; el reto reintenta una vez ante contrato, seguridad o auditoría y acepta mediciones cortas con dígito (p. ej. «20»); Beto no da por convencido con una sola línea; ninguna etiqueta interna llega a pantalla; la pista de la práctica de criterios nunca queda muda y siempre cuenta como ayuda. No se probó de nuevo con Gemini real (BLOCKED en el sandbox).
+
+## Ronda QA 3 (`fix/qa-round-3`)
+`node tests/qa_round3.test.js` y `python tests/qa_round3_backend.test.py` cubren la segunda prueba con Gemini real: la auditoría de Beto sabe que la creencia es falsa a propósito y Beto reintenta una vez con el motivo (además se corrigió un error que hacía fallar en silencio la auditoría cuando recibía contexto); los enunciados conservan los saltos de línea («Paso 1:» en su propia línea); la pista de criterios se ve junto al aviso «Ayuda usada» y se recupera al recargar; la práctica de criterios sobrevive a la recarga; etiquetas de reparación, fases y dimensiones en español; el mapa explica por qué faltan prácticas mientras hay una en curso; «Esto está mal» confirma el reporte; el estado «Corrigiendo…» ya no se queda pegado mientras se guarda; los retos piden materiales coherentes con los pasos y marcan datos inverosímiles como insuficientes. No se volvió a probar con Gemini real (BLOCKED en el sandbox).

@@ -68,9 +68,19 @@ class TeachBeto(unittest.TestCase):
             self.start(node={})
 
     def test_start_is_audited_and_nothing_is_saved_when_it_fails(self):
-        with patch.object(app, 'CONTENT_VERIFY', True), patch.object(app, 'gemini', side_effect=[START, {'issues': [{'item': 0, 'problem': 'La idea correcta es falsa.'}]}]):
-            with self.assertRaisesRegex(ValueError, 'revisión de contenido'):
+        bad = {'issues': [{'item': 0, 'problem': 'La idea correcta es falsa.'}]}
+        with patch.object(app, 'CONTENT_VERIFY', True), patch.object(app, 'gemini', side_effect=[START, bad, START, bad]) as g:
+            with self.assertRaisesRegex(ValueError, 'revisión de contenido.*La idea correcta es falsa'):
                 app.beto_start({'profile_id': self.profile, 'goal_id': 'g1', 'goal': 'Entender barcos', 'node': NODE})
+        self.assertEqual(g.call_count, 4, 'un reintento con el motivo')
+        self.assertIn('Corrección', g.call_args_list[2][0][0])
+
+    def test_audit_knows_the_belief_is_false_on_purpose_and_retry_can_succeed(self):
+        bad = {'issues': [{'item': 0, 'problem': 'La creencia es falsa.'}]}
+        with patch.object(app, 'CONTENT_VERIFY', True), patch.object(app, 'gemini', side_effect=[START, bad, START, {'issues': []}]) as g:
+            out = app.beto_start({'profile_id': self.profile, 'goal_id': 'g1', 'goal': 'Entender barcos', 'node': NODE})
+        self.assertTrue(out['item_id'].startswith('beto-'))
+        self.assertIn('PUESTA A PROPÓSITO', g.call_args_list[1][0][0])
 
     # --- turnos ---
     def test_intermediate_turn_hides_the_private_data(self):
