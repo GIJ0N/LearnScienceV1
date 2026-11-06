@@ -45,6 +45,8 @@ jobs:
           python tests/real_world_challenges_backend.test.py
           node tests/qa_round2.test.js
           python tests/qa_round2_backend.test.py
+          node tests/qa_round3.test.js
+          python tests/qa_round3_backend.test.py
           python tests/placement_backend.test.py
       - name: Run step lesson tests
         run: |
