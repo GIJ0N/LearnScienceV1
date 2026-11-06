@@ -42,3 +42,9 @@ NOT_SUPPORTED→MISCONCEPTION; incluye `prediction_confidence` y `prediction_mat
 - El informe es autodeclarado; el modelo valora coherencia, no veracidad.
 - La seguridad es un filtro local por palabras más la nota del modelo; no sustituye el
   criterio del aprendiz. Los pasos son de bajo riesgo y con materiales cotidianos.
+
+## Ajustes tras la primera prueba real
+
+- La generación se reintenta una vez con el motivo del descarte (contrato, seguridad o auditoría).
+- El prompt exige que los datos a registrar cubran todo lo que piden los pasos, que los materiales coincidan con los pasos y que el tiempo sea realista.
+- Una medición corta cuenta si tiene al menos 2 caracteres y un dígito («20»); el resto de los campos sigue exigiendo 12 caracteres.
