@@ -41,6 +41,8 @@ node tests/qa_round2.test.js
 python tests/qa_round2_backend.test.py
 node tests/qa_round3.test.js
 python tests/qa_round3_backend.test.py
+node tests/qa_round4.test.js
+python tests/qa_round4_backend.test.py
 python tests/placement_backend.test.py
 node tests/learner_signals.test.js
 python tests/learner_signals_backend.test.py
@@ -210,3 +212,6 @@ Corrige lo hallado en la prueba real con Gemini: `maxOutputTokens` con margen pa
 
 ## Ronda QA 3 (`fix/qa-round-3`)
 `node tests/qa_round3.test.js` y `python tests/qa_round3_backend.test.py` cubren la segunda prueba con Gemini real: la auditoría de Beto sabe que la creencia es falsa a propósito y Beto reintenta una vez con el motivo (además se corrigió un error que hacía fallar en silencio la auditoría cuando recibía contexto); los enunciados conservan los saltos de línea («Paso 1:» en su propia línea); la pista de criterios se ve junto al aviso «Ayuda usada» y se recupera al recargar; la práctica de criterios sobrevive a la recarga; etiquetas de reparación, fases y dimensiones en español; el mapa explica por qué faltan prácticas mientras hay una en curso; «Esto está mal» confirma el reporte; el estado «Corrigiendo…» ya no se queda pegado mientras se guarda; los retos piden materiales coherentes con los pasos y marcan datos inverosímiles como insuficientes. No se volvió a probar con Gemini real (BLOCKED en el sandbox).
+
+## Ronda QA 4 (`fix/qa-round-4`)
+`node tests/qa_round4.test.js` y `python tests/qa_round4_backend.test.py` cubren la tercera prueba con Gemini real: el historial ya no asigna a un intento de criterios la pregunta vigente de la lección (el intento guarda su propia pregunta) y resume su evaluación por criterio; la pantalla «Resultado por criterio» y el historial no muestran códigos (`option_choice`, `SATISFIED`, `recognition`, `deterministic_option_key`); razones guardadas antes de la corrección («El intento mostró conceptual») se muestran traducidas; «Listo.» se apaga a los 3 s; una práctica terminada ya no aparece como «en curso»; si falla la microlección se muestra el motivo; «¿Hay un error?» va en su propia línea; los retos exigen papel y lápiz si hay que anotar, comparan los números explícitamente y aceptan una medición de un dígito; la observación de criterios se dirige a la persona en segunda persona. No se volvió a probar con Gemini real (BLOCKED en el sandbox).
