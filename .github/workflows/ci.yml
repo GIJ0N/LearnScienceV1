@@ -54,6 +54,8 @@ jobs:
           node tests/reported_items.test.js
           python tests/local_confirmation_backend.test.py
           node tests/local_confirmation.test.js
+          python tests/challenge_photos_backend.test.py
+          node tests/challenge_photos.test.js
           python tests/placement_backend.test.py
       - name: Run step lesson tests
         run: |

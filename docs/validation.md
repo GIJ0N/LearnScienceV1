@@ -48,6 +48,8 @@ python tests/reported_items_backend.test.py
 node tests/reported_items.test.js
 python tests/local_confirmation_backend.test.py
 node tests/local_confirmation.test.js
+python tests/challenge_photos_backend.test.py
+node tests/challenge_photos.test.js
 python tests/placement_backend.test.py
 node tests/learner_signals.test.js
 python tests/learner_signals_backend.test.py
@@ -230,3 +232,7 @@ Corrige lo hallado en la prueba real con Gemini: `maxOutputTokens` con margen pa
 ## Confirmación local (`feat/local-confirmation`)
 
 `python tests/local_confirmation_backend.test.py` y `node tests/local_confirmation.test.js` cubren: la pregunta de confirmación nace con prefijo `conf-` y guarda su origen; origen o tema inválidos fallan sin llamar al modelo; un primer intento inválido se reintenta con el motivo («Corrección») y dos fallos no guardan nada; una observación de la auditoría descarta y reintenta; la calificación es local e idempotente y una pregunta de otra actividad no se responde por esta ruta; `startMixed(goal,'confirm',src)` exige origen y rechaza una segunda confirmación del mismo intento; el resultado crea `CONFIRMATION` (nunca `EVIDENCE`); reto CORRECT + confirmación CORRECT da transferencia `met`, reto PARCIAL da `partial`, sin reto de origen o solo el reto no cambia la capa; Beto o corrección confirmados suman comprensión y «No lo sé» no suma; un fallo adelanta el repaso. Diseño en `docs/local_confirmation_v1.md`.
+
+## Fotos en los retos (`feat/challenge-photos`)
+
+`python tests/challenge_photos_backend.test.py` y `node tests/challenge_photos.test.js` cubren: sin fotos la llamada al modelo no cambia (`images=None`); fotos válidas (JPEG, PNG, WebP) llegan al modelo y su base64 no aparece ni en el resultado ni en la base; más de 2, tipo no permitido, base64 inválido, firma incorrecta, vacía o > 1 MB se rechazan sin llamar al modelo; cambiar la foto con el mismo `attempt_id` es conflicto; `_gemini_call` y `_anthropic_call` ponen la imagen antes del texto (sin red); el cliente valida el payload, muestra el aviso de privacidad y no guarda las fotos en la meta ni en `localStorage`. Diseño en `docs/real_world_challenges_v1.md`.
