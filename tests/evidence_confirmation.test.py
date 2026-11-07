@@ -30,6 +30,8 @@ class ConfirmationTests(unittest.TestCase):
                 self.assertEqual(result['question'], question(dimension))
                 self.assertEqual(generate.call_count, 1)
                 self.assertIn('No declares transferencia', generate.call_args.args[0])
+                self.assertIn('debe valer exactamente "' + app.CONFIRMATION_KINDS[dimension] + '"', generate.call_args.args[0])
+                self.assertIn('no escribas ahí el nombre de la dimensión', generate.call_args.args[0])
 
     def test_incompatible_or_repeated_output_never_becomes_an_activity(self):
         for raw in [None, {}, {'question': {}}, {'question': {**question(), 'kind': 'explanation'}},

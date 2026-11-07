@@ -57,3 +57,5 @@ Una explicación pedagógicamente buena pero falsa es peor que una simple.
 - Un modelo auditándose a sí mismo no ve todos sus errores. Red de seguridad: el botón
   «Esto está mal» y el uso real.
 - No sustituye una revisión humana de una muestra de preguntas.
+
+Si la revisión descarta todas las preguntas del diagnóstico, se regenera una vez con el motivo; un descarte parcial no reintenta (ronda QA 7).

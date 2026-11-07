@@ -246,3 +246,9 @@ Corrige lo hallado en la prueba real con Gemini: `maxOutputTokens` con margen pa
 ## Ajustes de la ronda QA 6 (`fix/qa-round-6`)
 
 Causa comprobada del fallo «No pude preparar una pregunta» tras «Esto está mal»: la acción posterior al reporte se ejecutaba dentro de la tarea «Enviando reporte…», que mantenía la app ocupada, y la tarea de pedir otra pregunta se descartaba sin llamar al servidor (por eso no había ninguna petición fallida). `reportButton` ahora ejecuta esa acción cuando la tarea de envío ya terminó, y solo si el envío tuvo éxito. `node tests/qa_round6.test.js` lo reproduce (falla si se restablece el orden anterior). El mensaje de rechazo de `/api/confirmation` ahora indica la familia y dimensión pedidas y las recibidas, sin añadir reintentos automáticos (la prueba `evidence_confirmation` sigue exigiendo una sola llamada).
+
+## Ajustes de la ronda QA 7 (`fix/qa-round-7`)
+
+- Diagnóstico: si la revisión de contenido descarta **todas** las preguntas de un lote, se regenera una vez con el motivo (mismo patrón que lecciones y retos); si se descarta solo una parte, no se reintenta. Máximo 4 llamadas (generar, auditar, generar, auditar). Lo cubren `tests/content_trust_backend.test.py`.
+- Comprobación de evidencia: la prueba real mostró que el modelo escribía la dimensión en el campo de familia («pedí explanation / conceptual; recibí conceptual / conceptual»). El prompt ahora separa los dos campos explícitamente. El contrato y la regla de una sola llamada no cambian (`tests/evidence_confirmation.test.py`).
+- «Aprendizaje» aclara que las modalidades nuevas se resumen en «Informe» (su historial viene de las respuestas guardadas en el servidor).

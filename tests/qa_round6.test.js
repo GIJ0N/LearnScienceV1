@@ -38,5 +38,7 @@ const p = require('../app.js');
   await box2.children[1].children[1].onclick();
   console.error = realError;
   assert.equal(sent, false, 'si falla el envío no se ejecuta la acción posterior');
+  const src = require('node:fs').readFileSync(require.resolve('../app.js'), 'utf8');
+  assert.ok(src.includes('Encuentra el error, Enséñale a Beto, los retos y las confirmaciones se resumen en «Informe».'), 'Aprendizaje explica dónde están las otras modalidades');
   console.log('qa_round6: OK');
 })();

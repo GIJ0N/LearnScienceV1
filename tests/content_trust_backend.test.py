@@ -101,18 +101,35 @@ class ContentTrust(unittest.TestCase):
         self.assertEqual(out['content_check'], {'checked': False, 'attempts': 1})
 
     # --- diagnóstico ---
-    def generate(self, audit):
-        replies = [{'items': [choice('a'), choice('b')]}, audit]
-        with patch.object(app, 'gemini', side_effect=replies):
+    def generate(self, audit, *more):
+        replies = [{'items': [choice('a'), choice('b')]}, audit, *more]
+        self.prompts = []
+        def fake(prompt, schema, max_tokens):
+            self.prompts.append(prompt)
+            return replies.pop(0)
+        with patch.object(app, 'gemini', side_effect=fake):
             return app.make_placement_items({'profile_id': self.profile, 'goal_id': 'g1', 'goal': 'Aritmética', 'nodes': NODES, 'node_ids': ['a', 'b']})
 
     def test_placement_drops_only_the_flagged_questions(self):
         out = self.generate(issues((2, 'Ambigua')))
         self.assertEqual([i['node_id'] for i in out['items']], ['a'])
 
-    def test_placement_all_flagged_raises_and_saves_nothing(self):
+    def test_placement_all_flagged_twice_raises_and_saves_nothing(self):
+        bad = issues((1, 'Mala'), (2, 'Peor'))
         with self.assertRaisesRegex(ValueError, 'revisión de contenido'):
-            self.generate(issues((1, 'Mala'), (2, 'Peor')))
+            self.generate(bad, {'items': [choice('a'), choice('b')]}, bad)
+        self.assertEqual(len(self.prompts), 4, 'una sola regeneración: generar, auditar, generar, auditar')
+
+    def test_placement_all_flagged_once_retries_with_the_reasons(self):
+        out = self.generate(issues((1, 'Clave dudosa'), (2, 'Ambigua')), {'items': [choice('a'), choice('b')]}, issues())
+        self.assertEqual(len(out['items']), 2)
+        self.assertNotIn('Corrección', self.prompts[0])
+        self.assertIn('Corrección', self.prompts[2])
+        self.assertIn('Clave dudosa', self.prompts[2])
+
+    def test_placement_partial_flag_does_not_retry(self):
+        self.generate(issues((2, 'Ambigua')))
+        self.assertEqual(len(self.prompts), 2)
 
     def test_placement_whole_batch_note_does_not_drop_questions(self):
         out = self.generate(issues((0, 'Comentario general')))
