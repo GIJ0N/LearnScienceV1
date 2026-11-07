@@ -46,6 +46,8 @@ python tests/qa_round4_backend.test.py
 node tests/usage_report.test.js
 python tests/reported_items_backend.test.py
 node tests/reported_items.test.js
+python tests/local_confirmation_backend.test.py
+node tests/local_confirmation.test.js
 python tests/placement_backend.test.py
 node tests/learner_signals.test.js
 python tests/learner_signals_backend.test.py
@@ -224,3 +226,7 @@ Corrige lo hallado en la prueba real con Gemini: `maxOutputTokens` con margen pa
 
 ## Preguntas reportadas (`feat/reported-items`)
 `python tests/reported_items_backend.test.py` y `node tests/reported_items.test.js` cubren: «Esto está mal» en el diagnóstico excluye la pregunta en el servidor (`excluded_items`); una pregunta excluida no se puede responder (`ITEM_EXCLUDED`) pero un intento ya registrado se repite igual (la evidencia previa no se retira); reportar desde otra meta, con otro tipo o con un id desconocido no excluye nada; otro perfil no se ve afectado; el extracto reportado se añade a lo que el generador debe evitar; borrar el perfil borra las exclusiones; el botón solo aparece en el diagnóstico y la pregunta reportada sale de la cola sin contar como respuesta. Diseño en `docs/reported_items_v1.md`.
+
+## Confirmación local (`feat/local-confirmation`)
+
+`python tests/local_confirmation_backend.test.py` y `node tests/local_confirmation.test.js` cubren: la pregunta de confirmación nace con prefijo `conf-` y guarda su origen; origen o tema inválidos fallan sin llamar al modelo; un primer intento inválido se reintenta con el motivo («Corrección») y dos fallos no guardan nada; una observación de la auditoría descarta y reintenta; la calificación es local e idempotente y una pregunta de otra actividad no se responde por esta ruta; `startMixed(goal,'confirm',src)` exige origen y rechaza una segunda confirmación del mismo intento; el resultado crea `CONFIRMATION` (nunca `EVIDENCE`); reto CORRECT + confirmación CORRECT da transferencia `met`, reto PARCIAL da `partial`, sin reto de origen o solo el reto no cambia la capa; Beto o corrección confirmados suman comprensión y «No lo sé» no suma; un fallo adelanta el repaso. Diseño en `docs/local_confirmation_v1.md`.

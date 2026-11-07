@@ -54,3 +54,5 @@ explicación** que desarme esa idea. Es la forma más directa de medir y ejercit
   exista una actividad calificada localmente que la respalde.
 - Una sola creencia errónea por sesión.
 - La calidad de la creencia de Beto depende del verificador y del reporte «Esto está mal».
+
+Un resultado positivo puede confirmarse con una pregunta local (`local_confirmation_v1`).
