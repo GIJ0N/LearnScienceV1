@@ -50,6 +50,7 @@ python tests/local_confirmation_backend.test.py
 node tests/local_confirmation.test.js
 python tests/challenge_photos_backend.test.py
 node tests/challenge_photos.test.js
+node tests/qa_round5.test.js
 python tests/placement_backend.test.py
 node tests/learner_signals.test.js
 python tests/learner_signals_backend.test.py
@@ -236,3 +237,7 @@ Corrige lo hallado en la prueba real con Gemini: `maxOutputTokens` con margen pa
 ## Fotos en los retos (`feat/challenge-photos`)
 
 `python tests/challenge_photos_backend.test.py` y `node tests/challenge_photos.test.js` cubren: sin fotos la llamada al modelo no cambia (`images=None`); fotos válidas (JPEG, PNG, WebP) llegan al modelo y su base64 no aparece ni en el resultado ni en la base; más de 2, tipo no permitido, base64 inválido, firma incorrecta, vacía o > 1 MB se rechazan sin llamar al modelo; cambiar la foto con el mismo `attempt_id` es conflicto; `_gemini_call` y `_anthropic_call` ponen la imagen antes del texto (sin red); el cliente valida el payload, muestra el aviso de privacidad y no guarda las fotos en la meta ni en `localStorage`. Diseño en `docs/real_world_challenges_v1.md`.
+
+## Ajustes de la ronda QA 5 (`fix/qa-round-5`)
+
+`node tests/qa_round5.test.js` cubre: si Gemini no devuelve la pregunta del diagnóstico (respuesta vacía o error), la app reintenta una vez sola antes de mostrar el mensaje, con un máximo de dos llamadas; con una pregunta ya lista no llama al modelo; una pregunta usada o reportada no cuenta como disponible. También comprueba que las vistas de cobertura (lista del objetivo, «Ahora», cobertura del perfil, mapa de habilidades y sus registros) usan etiquetas en español para las dimensiones (`conceptual`, `interpretation`, `equation_manipulation`…) y no las claves técnicas. El historial de «Aprendizaje» es del perfil completo por diseño («Historial auditable del perfil seleccionado»), mientras que el Informe es de la meta activa: por eso sus contadores de ayuda pueden diferir. Los identificadores `attempt-…` se mantienen dentro del desplegable de auditoría «Registros de la habilidad».
