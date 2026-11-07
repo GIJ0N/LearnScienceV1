@@ -43,6 +43,7 @@ node tests/qa_round3.test.js
 python tests/qa_round3_backend.test.py
 node tests/qa_round4.test.js
 python tests/qa_round4_backend.test.py
+node tests/usage_report.test.js
 python tests/placement_backend.test.py
 node tests/learner_signals.test.js
 python tests/learner_signals_backend.test.py
@@ -215,3 +216,6 @@ Corrige lo hallado en la prueba real con Gemini: `maxOutputTokens` con margen pa
 
 ## Ronda QA 4 (`fix/qa-round-4`)
 `node tests/qa_round4.test.js` y `python tests/qa_round4_backend.test.py` cubren la tercera prueba con Gemini real: el historial ya no asigna a un intento de criterios la pregunta vigente de la lección (el intento guarda su propia pregunta) y resume su evaluación por criterio; la pantalla «Resultado por criterio» y el historial no muestran códigos (`option_choice`, `SATISFIED`, `recognition`, `deterministic_option_key`); razones guardadas antes de la corrección («El intento mostró conceptual») se muestran traducidas; «Listo.» se apaga a los 3 s; una práctica terminada ya no aparece como «en curso»; si falla la microlección se muestra el motivo; «¿Hay un error?» va en su propia línea; los retos exigen papel y lápiz si hay que anotar, comparan los números explícitamente y aceptan una medición de un dígito; la observación de criterios se dirige a la persona en segunda persona. No se volvió a probar con Gemini real (BLOCKED en el sandbox).
+
+## Informe de uso (`feat/usage-report`)
+`node tests/usage_report.test.js` cubre `usageReport`: meta vacía o sin campos sin lanzar; retención por 5 franjas con porcentaje solo si n ≥ 3 y repasos con ayuda excluidos; modalidades con lo provisional marcado y las vacías omitidas; días activos, eventos de 7 días, repasos vencidos y contenidos reportados; la meta no se muta; el JSON no incluye respuestas escritas; la página `report` se restaura al recargar. Diseño en `docs/usage_report_v1.md`. No se probó con Gemini real: es solo lectura de datos locales.
