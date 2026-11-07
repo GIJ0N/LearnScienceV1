@@ -57,6 +57,7 @@ jobs:
           python tests/challenge_photos_backend.test.py
           node tests/challenge_photos.test.js
           node tests/qa_round5.test.js
+          node tests/qa_round6.test.js
           python tests/placement_backend.test.py
       - name: Run step lesson tests
         run: |
