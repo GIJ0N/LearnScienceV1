@@ -51,6 +51,7 @@ node tests/local_confirmation.test.js
 python tests/challenge_photos_backend.test.py
 node tests/challenge_photos.test.js
 node tests/qa_round5.test.js
+node tests/qa_round6.test.js
 python tests/placement_backend.test.py
 node tests/learner_signals.test.js
 python tests/learner_signals_backend.test.py
@@ -241,3 +242,7 @@ Corrige lo hallado en la prueba real con Gemini: `maxOutputTokens` con margen pa
 ## Ajustes de la ronda QA 5 (`fix/qa-round-5`)
 
 `node tests/qa_round5.test.js` cubre: si Gemini no devuelve la pregunta del diagnóstico (respuesta vacía o error), la app reintenta una vez sola antes de mostrar el mensaje, con un máximo de dos llamadas; con una pregunta ya lista no llama al modelo; una pregunta usada o reportada no cuenta como disponible. También comprueba que las vistas de cobertura (lista del objetivo, «Ahora», cobertura del perfil, mapa de habilidades y sus registros) usan etiquetas en español para las dimensiones (`conceptual`, `interpretation`, `equation_manipulation`…) y no las claves técnicas. El historial de «Aprendizaje» es del perfil completo por diseño («Historial auditable del perfil seleccionado»), mientras que el Informe es de la meta activa: por eso sus contadores de ayuda pueden diferir. Los identificadores `attempt-…` se mantienen dentro del desplegable de auditoría «Registros de la habilidad».
+
+## Ajustes de la ronda QA 6 (`fix/qa-round-6`)
+
+Causa comprobada del fallo «No pude preparar una pregunta» tras «Esto está mal»: la acción posterior al reporte se ejecutaba dentro de la tarea «Enviando reporte…», que mantenía la app ocupada, y la tarea de pedir otra pregunta se descartaba sin llamar al servidor (por eso no había ninguna petición fallida). `reportButton` ahora ejecuta esa acción cuando la tarea de envío ya terminó, y solo si el envío tuvo éxito. `node tests/qa_round6.test.js` lo reproduce (falla si se restablece el orden anterior). El mensaje de rechazo de `/api/confirmation` ahora indica la familia y dimensión pedidas y las recibidas, sin añadir reintentos automáticos (la prueba `evidence_confirmation` sigue exigiendo una sola llamada).

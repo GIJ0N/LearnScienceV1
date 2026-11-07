@@ -40,6 +40,17 @@ class ConfirmationTests(unittest.TestCase):
                     app.evidence_confirmation({'goal': 'Aprender', 'concept': 'Competencia', 'target_dimension': 'units', 'previous': ['Caso repetido']})
                 self.assertEqual(generate.call_count, 1, 'no automatic retry loop')
 
+    def test_rejection_message_says_what_was_asked_and_received(self):
+        raw = {'question': {**question('units'), 'kind': 'explanation', 'observable_dimensions': ['conceptual']}}
+        with patch.object(app, 'gemini', return_value=raw) as generate:
+            with self.assertRaises(ValueError) as caught:
+                app.evidence_confirmation({'goal': 'Aprender', 'concept': 'Competencia', 'target_dimension': 'units'})
+        message = str(caught.exception)
+        self.assertIn('no respeta la dimensión y familia solicitadas', message)
+        self.assertIn(app.CONFIRMATION_KINDS['units'] + ' / units', message)
+        self.assertIn('recibí explanation / conceptual', message)
+        self.assertEqual(generate.call_count, 1, 'sigue sin haber reintento automático')
+
     def test_invalid_request_makes_no_provider_call(self):
         for changes in [{'target_dimension': 'transfer'}, {'target_dimension': 'unknown'}, {'previous': 'texto'},
                         {'previous': ['x'] * 21}, {'previous': ['x' * 701]}, {'previous': [None]}]:
