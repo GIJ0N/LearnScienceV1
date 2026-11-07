@@ -50,3 +50,12 @@ NOT_SUPPORTED→MISCONCEPTION; incluye `prediction_confidence` y `prediction_mat
 - Una medición corta cuenta si tiene al menos 2 caracteres y un dígito («20»); el resto de los campos sigue exigiendo 12 caracteres.
 
 Un resultado positivo puede confirmarse con una pregunta local (`local_confirmation_v1`).
+
+## Fotos (challenge_photos_v1)
+
+- Hasta **2 fotos** por informe, opcionales. Se redimensionan en el navegador (lado mayor 1024 px, JPEG calidad 0.8) y se envían en base64 en `/api/challenge/report`.
+- **No se guardan**: ni en SQLite, ni en `localStorage`, ni en el estado de la meta. Solo queda su huella `sha256` y el número de fotos en el resultado (`photo_sha256`, `photo_count`). Tampoco se escriben en logs.
+- Se envían al modelo en la misma llamada de valoración (sin llamada extra). Una foto **no verifica** nada: la valoración sigue siendo provisional.
+- Aviso visible: «Las fotos se envían a Gemini (Google) solo para valorar este informe y no se guardan. No incluyas personas ni datos personales.»
+- Límites del servidor: máximo 2 fotos, ≤ 1 000 000 bytes cada una ya decodificada, tipos `image/jpeg`, `image/png`, `image/webp`, con comprobación de la firma del archivo. Cualquier incumplimiento se rechaza antes de llamar al modelo.
+- La huella de las fotos entra en la huella del informe: cambiar la foto con el mismo `attempt_id` es conflicto.
