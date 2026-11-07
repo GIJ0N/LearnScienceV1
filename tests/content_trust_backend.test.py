@@ -144,7 +144,7 @@ class ContentTrust(unittest.TestCase):
     # --- reportes ---
     def test_report_is_stored_and_cascades_with_the_profile(self):
         r = app.report_content({'profile_id': self.profile, 'goal_id': 'g1', 'node_id': 'a', 'kind': 'lesson', 'excerpt': 'texto', 'note': 'Está mal'})
-        self.assertEqual(r, {'saved': True})
+        self.assertEqual(r, {'saved': True, 'excluded': False})
         rows = self.memory.load_content_reports(self.profile, 'g1')
         self.assertEqual([(x['kind'], x['note']) for x in rows], [('lesson', 'Está mal')])
         self.memory.delete_profile(self.profile)

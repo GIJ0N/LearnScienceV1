@@ -50,6 +50,8 @@ jobs:
           node tests/qa_round4.test.js
           python tests/qa_round4_backend.test.py
           node tests/usage_report.test.js
+          python tests/reported_items_backend.test.py
+          node tests/reported_items.test.js
           python tests/placement_backend.test.py
       - name: Run step lesson tests
         run: |

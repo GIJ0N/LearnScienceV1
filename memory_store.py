@@ -500,6 +500,13 @@ class DurableMemory:
               note TEXT NOT NULL,
               created_at INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS excluded_items(
+              profile_id TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+              item_id TEXT NOT NULL,
+              reason TEXT NOT NULL DEFAULT '',
+              created_at INTEGER NOT NULL,
+              PRIMARY KEY(profile_id, item_id)
+            );
             CREATE TABLE IF NOT EXISTS placement_answers(
               profile_id TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
               attempt_id TEXT NOT NULL,
@@ -585,6 +592,24 @@ class DurableMemory:
                 raise ValueError("El perfil local no existe.")
             db.execute("INSERT INTO content_reports(profile_id,goal_id,node_id,kind,excerpt,note,created_at) VALUES(?,?,?,?,?,?,?)",
                        (profile_id, goal_id, str(node_id or ""), kind, str(excerpt or "")[:600], str(note or "")[:400], time.time_ns()))
+
+    def exclude_item(self, profile_id, item_id, reason=""):
+        """A reported question stops being answerable. Existing evidence is untouched."""
+        profile_id = _profile_id(profile_id)
+        item_id = str(item_id or "").strip()
+        if not item_id:
+            raise ValueError("Falta la pregunta a excluir.")
+        with self._lock, self._connect() as db:
+            if not db.execute("SELECT 1 FROM profiles WHERE profile_id=?", (profile_id,)).fetchone():
+                raise ValueError("El perfil local no existe.")
+            db.execute("INSERT OR IGNORE INTO excluded_items(profile_id,item_id,reason,created_at) VALUES(?,?,?,?)",
+                       (profile_id, item_id, str(reason or "")[:400], time.time_ns()))
+        return True
+
+    def is_item_excluded(self, profile_id, item_id):
+        profile_id = _profile_id(profile_id)
+        with self._lock, self._connect() as db:
+            return db.execute("SELECT 1 FROM excluded_items WHERE profile_id=? AND item_id=?", (profile_id, str(item_id or ""))).fetchone() is not None
 
     def load_content_reports(self, profile_id, goal_id=None):
         profile_id = _profile_id(profile_id)
