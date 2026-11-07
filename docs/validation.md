@@ -44,6 +44,8 @@ python tests/qa_round3_backend.test.py
 node tests/qa_round4.test.js
 python tests/qa_round4_backend.test.py
 node tests/usage_report.test.js
+python tests/reported_items_backend.test.py
+node tests/reported_items.test.js
 python tests/placement_backend.test.py
 node tests/learner_signals.test.js
 python tests/learner_signals_backend.test.py
@@ -219,3 +221,6 @@ Corrige lo hallado en la prueba real con Gemini: `maxOutputTokens` con margen pa
 
 ## Informe de uso (`feat/usage-report`)
 `node tests/usage_report.test.js` cubre `usageReport`: meta vacía o sin campos sin lanzar; retención por 5 franjas con porcentaje solo si n ≥ 3 y repasos con ayuda excluidos; modalidades con lo provisional marcado y las vacías omitidas; días activos, eventos de 7 días, repasos vencidos y contenidos reportados; la meta no se muta; el JSON no incluye respuestas escritas; la página `report` se restaura al recargar. Diseño en `docs/usage_report_v1.md`. No se probó con Gemini real: es solo lectura de datos locales.
+
+## Preguntas reportadas (`feat/reported-items`)
+`python tests/reported_items_backend.test.py` y `node tests/reported_items.test.js` cubren: «Esto está mal» en el diagnóstico excluye la pregunta en el servidor (`excluded_items`); una pregunta excluida no se puede responder (`ITEM_EXCLUDED`) pero un intento ya registrado se repite igual (la evidencia previa no se retira); reportar desde otra meta, con otro tipo o con un id desconocido no excluye nada; otro perfil no se ve afectado; el extracto reportado se añade a lo que el generador debe evitar; borrar el perfil borra las exclusiones; el botón solo aparece en el diagnóstico y la pregunta reportada sale de la cola sin contar como respuesta. Diseño en `docs/reported_items_v1.md`.
