@@ -78,3 +78,5 @@ experto (revisar, depurar, criticar) y alimenta la capa de **discriminación** d
 - Gemini devolvía los pasos en negritas o en una sola línea y el contrato local los rechazaba: ahora se normalizan antes de validar.
 - La opción fija «ningún paso» es corta; ya no cuenta para decidir si la opción correcta «se delata por larga».
 - Se reintenta una vez con los motivos; si falla, el error los muestra (y se imprimen en el servidor).
+
+Un resultado positivo puede confirmarse con una pregunta local (`local_confirmation_v1`).

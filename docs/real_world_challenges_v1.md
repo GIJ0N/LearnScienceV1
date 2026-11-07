@@ -48,3 +48,5 @@ NOT_SUPPORTED→MISCONCEPTION; incluye `prediction_confidence` y `prediction_mat
 - La generación se reintenta una vez con el motivo del descarte (contrato, seguridad o auditoría).
 - El prompt exige que los datos a registrar cubran todo lo que piden los pasos, que los materiales coincidan con los pasos y que el tiempo sea realista.
 - Una medición corta cuenta si tiene al menos 2 caracteres y un dígito («20»); el resto de los campos sigue exigiendo 12 caracteres.
+
+Un resultado positivo puede confirmarse con una pregunta local (`local_confirmation_v1`).
