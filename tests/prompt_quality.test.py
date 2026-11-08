@@ -36,12 +36,16 @@ class Gate(unittest.TestCase):
         self.rejects(item(['Flota más alto', 'Se hunde', 'a y b']), 'todas/ninguna')
 
     def test_variable_names_in_options_are_not_confused_with_combinations(self):
-        build(item(['Si a y b son positivos, el producto es positivo', 'El producto es siempre negativo', 'No se puede saber']))
+        build(item(['Si a y b son positivos, el producto es positivo', 'Si a y b son positivos, el producto es negativo', 'No se puede saber sin conocer a ni b']))
 
     def test_much_longer_correct_option_rejected_but_moderately_longer_allowed(self):
         long_right = 'Flota más alto porque el agua de mar es más densa y el empuje aumenta con la densidad'
         self.rejects(item([long_right, 'Flota igual', 'Se hunde un poco']), 'más larga')
-        build(item(['Flota más alto porque la densidad sube', 'Flota igual que en el río', 'Se hunde un poco más abajo']))
+        build(item(['Flota más alto porque la densidad sube', 'Flota igual porque su peso no cambia', 'Se hunde más porque el agua salada pesa']))
+
+    def test_correct_option_clearly_longest_rejected(self):
+        self.rejects(item(['Flota más alto porque la densidad sube', 'Flota igual que en el río', 'Se hunde un poco más abajo']), 'más larga')
+        build(item(['Flota más alto porque sube la densidad', 'Flota igual porque su peso no cambia', 'Se hunde']), )
 
     def test_short_options_are_never_flagged_by_length(self):
         build(item(['75', '3', '150']))

@@ -543,12 +543,12 @@
        },
        {
         "id": "b",
-        "text": "Tiene mayor densidad",
+        "text": "Tiene mayor densidad que el agua",
         "misconception": "Confusión típica 1: aplica la idea hermana."
        },
        {
         "id": "c",
-        "text": "Desplaza más agua",
+        "text": "Desplaza más agua al apoyarse",
         "misconception": "Confusión típica 2: aplica la idea hermana."
        }
       ],
@@ -641,17 +641,17 @@
        },
        {
         "id": "b",
-        "text": "Se hunde, el acero es denso",
+        "text": "Se hunde, porque el acero es más denso que el agua",
         "misconception": "Confusión típica 1: aplica la idea hermana."
        },
        {
         "id": "c",
-        "text": "Se hunde, desplaza poco",
+        "text": "Se hunde, porque desplaza muy poca agua al entrar",
         "misconception": "Confusión típica 2: aplica la idea hermana."
        },
        {
         "id": "d",
-        "text": "Flota solo si es pequeño",
+        "text": "Flota solo si el objeto es pequeño y ligero",
         "misconception": "Confusión típica 3: aplica la idea hermana."
        }
       ],
