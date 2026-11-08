@@ -1,5 +1,5 @@
 """Tutor adaptativo v4. Python 3, sin dependencias externas."""
-import base64, hashlib, json, os, re, socket, sys, threading, time, unicodedata, urllib.error, urllib.request, uuid
+import base64, hashlib, ipaddress, json, os, re, socket, sys, threading, time, unicodedata, urllib.error, urllib.request, uuid
 from collections import defaultdict
 from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -8,6 +8,35 @@ if str(Path(__file__).resolve().parent) not in sys.path:sys.path.insert(0,str(Pa
 from memory_store import DurableMemory, LocalDatabaseServerLock, database_path, normalize_hint_level, HINT_LADDER_VERSION
 
 HOST, PORT = '127.0.0.1', int(os.getenv('PORT','8765'))
+# Private-network access (private_network_access_v1). Both settings are optional; unset = today's behaviour (local only).
+_ORIGIN_RE=re.compile(r'^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?$')
+
+def network_settings(env=None):
+    """Returns (host, extra_origins) from LEARNSCIENCE_HOST and LEARNSCIENCE_ORIGINS. Raises ValueError on a bad value."""
+    env=os.environ if env is None else env
+    host=(env.get('LEARNSCIENCE_HOST') or '127.0.0.1').strip()
+    try:addr=ipaddress.ip_address(host)
+    except ValueError:raise ValueError('LEARNSCIENCE_HOST debe ser una dirección IP (por ejemplo la de Tailscale, 100.x.x.x).')
+    if addr.version!=4:raise ValueError('LEARNSCIENCE_HOST debe ser una dirección IPv4.')
+    extra=[]
+    for raw in (env.get('LEARNSCIENCE_ORIGINS') or '').split(','):
+        origin=raw.strip().rstrip('/')
+        if not origin:continue
+        if not _ORIGIN_RE.match(origin):raise ValueError('LEARNSCIENCE_ORIGINS solo admite orígenes como http://nombre:8765, separados por comas, sin rutas.')
+        extra.append(origin)
+    return host,tuple(dict.fromkeys(extra))
+
+def allowed_origins():
+    """Evaluated per request (like before), so HOST/PORT set after import still apply. Default: only http://127.0.0.1:PORT."""
+    origins=[f'http://127.0.0.1:{PORT}']
+    try:addr=ipaddress.ip_address(HOST)
+    except ValueError:addr=None
+    if addr is not None and not addr.is_loopback and not addr.is_unspecified:origins.append(f'http://{HOST}:{PORT}')
+    elif addr is None:origins.append(f'http://{HOST}:{PORT}')
+    return tuple(dict.fromkeys(origins+list(EXTRA_ORIGINS)))
+
+try:HOST,EXTRA_ORIGINS=network_settings();NETWORK_ERROR=''
+except ValueError as _exc:EXTRA_ORIGINS=();NETWORK_ERROR=str(_exc)
 PROVIDER = os.getenv('LLM_PROVIDER','gemini').strip().lower()
 MODEL = os.getenv('GEMINI_MODEL','gemini-3.1-flash-lite')
 # Gemini thinking models count reasoning tokens against maxOutputTokens: a budget sized for the JSON alone ends in MAX_TOKENS.
@@ -1751,7 +1780,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path not in ROUTES:self.respond(404,{'error':'No existe esta ruta.'});return
         if not _TEST_MEMORY and not (_SERVER_DB_LOCK and _SERVER_DB_LOCK.acquired):
             self.respond(503,{'error':'La SQLite local no tiene un bloqueo exclusivo de servidor.'});return
-        if self.headers.get('Origin') not in (None,f'http://{HOST}:{PORT}'):
+        if self.headers.get('Origin') not in (None,*allowed_origins()):
             self.respond(403,{'error':'Origen no autorizado.'});return
         try:
             size=int(self.headers.get('Content-Length','0'))
@@ -1788,6 +1817,9 @@ if __name__=='__main__':
     import sys
     if '--self-test' in sys.argv:self_test()
     else:
+        if NETWORK_ERROR:
+            print(NETWORK_ERROR,file=sys.stderr,flush=True)
+            raise SystemExit(2)
         try:
             _SERVER_DB_LOCK=LocalDatabaseServerLock(database_path()).acquire()
         except RuntimeError as exc:
@@ -1796,6 +1828,7 @@ if __name__=='__main__':
         try:
             memory()
             print(f'Tutor en http://{HOST}:{PORT}; proveedor {PROVIDER}; modelo {active_model()}')
+            if HOST!='127.0.0.1':print('Aviso: el tutor acepta conexiones de otros dispositivos de esa red y no tiene inicio de sesión. Úsalo solo en una red privada (por ejemplo Tailscale).',flush=True)
             ThreadingHTTPServer((HOST,PORT),Handler).serve_forever()
         finally:
             _SERVER_DB_LOCK.release()
