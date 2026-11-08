@@ -17,7 +17,7 @@ LONG_RIGHT = 'El error está en el paso 2: 15 × 5 es 75, no 70, porque al multi
 def err_item(prompt=MD_PROMPT, right=LONG_RIGHT):
     return {'node_id': 'n1', 'prompt': prompt, 'correct_option_id': 'a', 'explanation': '15 × 5 = 75.', 'fix_reference': 'Paso 2: 15 × 5 = 75.',
             'options': [{'id': 'a', 'text': right, 'misconception': ''},
-                        {'id': 'b', 'text': 'El error está en el paso 1: debió multiplicar 30 × 2, porque la relación es proporcional.', 'misconception': 'Confunde operaciones.'},
+                        {'id': 'b', 'text': 'El error está en el paso 1: debió multiplicar 30 × 2 y no dividir, porque la relación entre kilos y precio es proporcional.', 'misconception': 'Confunde operaciones.'},
                         {'id': 'c', 'text': app.ERR_CLEAN_EXAMPLE, 'misconception': 'Cree que el resultado es válido.'}]}
 
 
@@ -51,13 +51,20 @@ class ErrorHuntFormat(Base):
         self.assertEqual(sum(1 for line in prompt.split('\n') if line.startswith('Paso ')), 3)
 
     def test_long_correct_diagnosis_is_not_flagged_by_the_short_clean_option(self):
+        # The fixed short «no error» option is ignored: the key is compared with the real distractors only.
         right = 'El error está en el paso 2: 15 × 5 es 75 y no 70, porque al multiplicar el precio unitario por los kilogramos se calculó mal el producto final.'
-        wrong_len = len('El error está en el paso 1: debió multiplicar 30 × 2, porque la relación es proporcional.')
-        self.assertGreater(len(right), 1.4 * wrong_len)
-        self.assertLess(len(right), 2.0 * wrong_len)
-        self.assertGreaterEqual(len(right), 2.0 * (wrong_len + len(app.ERR_CLEAN_EXAMPLE)) / 2)
+        wrong_len = len('El error está en el paso 1: debió multiplicar 30 × 2 y no dividir, porque la relación entre kilos y precio es proporcional.')
+        self.assertLess(len(right), app.CHOICE_LONGEST_RATIO * wrong_len)
+        self.assertGreater(len(right), 2.0 * len(app.ERR_CLEAN_EXAMPLE))
         out, _ = self.hunt({'items': [err_item(right=right)]})
         self.assertEqual(len(out['items']), 1)
+
+    def test_diagnosis_that_is_clearly_the_longest_is_rejected(self):
+        right = 'El error está en el paso 2: 15 × 5 es 75 y no 70, porque al multiplicar el precio unitario por los kilogramos se calculó mal el producto final, que debía ser 75 y no 70 como aparece.'
+        wrong_len = len('El error está en el paso 1: debió multiplicar 30 × 2 y no dividir, porque la relación entre kilos y precio es proporcional.')
+        self.assertGreater(len(right), app.CHOICE_LONGEST_RATIO * wrong_len)
+        with self.assertRaisesRegex(ValueError, 'más larga'):
+            self.hunt({'items': [err_item(right=right)]}, {'items': [err_item(right=right)]})
 
     def test_retry_with_reasons_then_success(self):
         bad = err_item(prompt='Sin pasos numerados.')

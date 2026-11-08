@@ -30,8 +30,9 @@ class Replay(unittest.TestCase):
         self.assertGreater(result['bias_before_shuffle']['key_first_rate'], 0.5)
         self.assertGreater(result['bias_before_shuffle']['correct_longest_rate'], 0.5)
         self.assertEqual(result['proposed_items'], 4)
-        self.assertEqual(result['accepted'], 2)
+        self.assertEqual(result['accepted'], 1)
         self.assertTrue(any('más larga' in r for r in result['rejected']))
+        self.assertTrue(any('claramente la más larga' in r for r in result['rejected']), 'la correcta que destaca por largo se descarta')
 
     def test_evaluate_flags_violated_expectations(self):
         case = {'id': 'x', 'flow': 'placement', 'expect': {'min_accepted': 3, 'max_model_calls': 0, 'min_rejected': {'repetidas': 1}}}

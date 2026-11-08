@@ -55,6 +55,7 @@ jobs:
           python tests/local_confirmation_backend.test.py
           node tests/local_confirmation.test.js
           python tests/challenge_photos_backend.test.py
+          python tests/choice_balance_backend.test.py
           node tests/challenge_photos.test.js
           node tests/qa_round5.test.js
           node tests/qa_round6.test.js

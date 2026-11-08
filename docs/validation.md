@@ -49,6 +49,7 @@ node tests/reported_items.test.js
 python tests/local_confirmation_backend.test.py
 node tests/local_confirmation.test.js
 python tests/challenge_photos_backend.test.py
+python tests/choice_balance_backend.test.py
 node tests/challenge_photos.test.js
 node tests/qa_round5.test.js
 node tests/qa_round6.test.js
@@ -252,3 +253,7 @@ Causa comprobada del fallo «No pude preparar una pregunta» tras «Esto está m
 - Diagnóstico: si la revisión de contenido descarta **todas** las preguntas de un lote, se regenera una vez con el motivo (mismo patrón que lecciones y retos); si se descarta solo una parte, no se reintenta. Máximo 4 llamadas (generar, auditar, generar, auditar). Lo cubren `tests/content_trust_backend.test.py`.
 - Comprobación de evidencia: la prueba real mostró que el modelo escribía la dimensión en el campo de familia («pedí explanation / conceptual; recibí conceptual / conceptual»). El prompt ahora separa los dos campos explícitamente. El contrato y la regla de una sola llamada no cambian (`tests/evidence_confirmation.test.py`).
 - «Aprendizaje» aclara que las modalidades nuevas se resumen en «Informe» (su historial viene de las respuestas guardadas en el servidor).
+
+## Opciones sin pistas de longitud (`fix/choice-balance`)
+
+La respuesta correcta se descarta si es claramente la opción más larga: al menos 12 caracteres y 25 % más larga que la opción incorrecta más larga (`CHOICE_LONGEST_GAP`, `CHOICE_LONGEST_RATIO`). Se suma a la regla anterior (el doble del promedio). Las opciones cortas, como cifras, nunca se descartan por longitud, y en Encuentra el error la opción fija «no hay error» no cuenta para la comparación. El prompt pide que cada opción incorrecta tenga la misma precisión, vocabulario y estructura que la correcta, que al menos una sea tan larga y específica como ella, y que la correcta no sea la única con cifras, unidades o matices. Como la regla es más estricta, el diagnóstico (también cuando falla el contrato, no solo la revisión), la práctica intercalada y la composición se regeneran una vez con el motivo del descarte, igual que lecciones, retos, Encuentra el error y confirmaciones; máximo dos generaciones. La lección por pasos conserva su respaldo (la explicación completa). Lo cubren `tests/choice_balance_backend.test.py`, `tests/prompt_quality.test.py`, `tests/qa_round2_backend.test.py` y `tests/prompt_bench.test.py` (los casos sintéticos «bien formados» se reequilibraron).
