@@ -50,6 +50,7 @@ python tests/local_confirmation_backend.test.py
 node tests/local_confirmation.test.js
 python tests/challenge_photos_backend.test.py
 python tests/choice_balance_backend.test.py
+python tests/private_network_access.test.py
 node tests/challenge_photos.test.js
 node tests/qa_round5.test.js
 node tests/qa_round6.test.js
@@ -257,3 +258,7 @@ Causa comprobada del fallo «No pude preparar una pregunta» tras «Esto está m
 ## Opciones sin pistas de longitud (`fix/choice-balance`)
 
 La respuesta correcta se descarta si es claramente la opción más larga: al menos 12 caracteres y 25 % más larga que la opción incorrecta más larga (`CHOICE_LONGEST_GAP`, `CHOICE_LONGEST_RATIO`). Se suma a la regla anterior (el doble del promedio). Las opciones cortas, como cifras, nunca se descartan por longitud, y en Encuentra el error la opción fija «no hay error» no cuenta para la comparación. El prompt pide que cada opción incorrecta tenga la misma precisión, vocabulario y estructura que la correcta, que al menos una sea tan larga y específica como ella, y que la correcta no sea la única con cifras, unidades o matices. Como la regla es más estricta, el diagnóstico (también cuando falla el contrato, no solo la revisión), la práctica intercalada y la composición se regeneran una vez con el motivo del descarte, igual que lecciones, retos, Encuentra el error y confirmaciones; máximo dos generaciones. La lección por pasos conserva su respaldo (la explicación completa). Lo cubren `tests/choice_balance_backend.test.py`, `tests/prompt_quality.test.py`, `tests/qa_round2_backend.test.py` y `tests/prompt_bench.test.py` (los casos sintéticos «bien formados» se reequilibraron).
+
+## Acceso en red privada (`feat/private-network-access`)
+
+`python tests/private_network_access.test.py` comprueba que sin configurar nada el servidor queda igual (solo `127.0.0.1` y su origen), que `LEARNSCIENCE_HOST` y `LEARNSCIENCE_ORIGINS` añaden solo orígenes exactos, que los valores inválidos detienen el arranque, y con un servidor HTTP real que otro origen recibe 403 salvo que esté en la lista. Diseño en `docs/private_network_access_v1.md`.
