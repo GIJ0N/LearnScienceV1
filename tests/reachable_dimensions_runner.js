@@ -38,7 +38,7 @@ function positivePath(dimension, question) {
   assert.equal(policy.lessonRequest(goal, goal.nodes[0]).target_dimension, dimension);
   const activity = policy.activityContract(question, 'n1', 'independent_practice');
   assert.deepEqual(activity.observable_dimensions, [dimension]);
-  const result = { status: 'CORRECT', error_type: 'none', feedback: 'Correcto', hint: '', _activity: activity, _attempt_id: `attempt-${dimension}` };
+  const result = { status: 'CORRECT', evaluator_version: 'local-fixture', error_type: 'none', feedback: 'Correcto', hint: '', _activity: activity, _attempt_id: `attempt-${dimension}` };
   assert.equal(policy.applyResult(goal, 'n1', 'INDEPENDENT', 'respuesta', result), true);
   const event = goal.events.find(x => x.type === 'EVIDENCE' && x.attempt_id === result._attempt_id);
   assert.deepEqual(event.observed_dimensions, [dimension]);
@@ -48,7 +48,7 @@ function positivePath(dimension, question) {
   assert.equal(goal.coverage[0].dimensions[0].evidence.length, 1);
   const additional = policy.acceptConfirmation(goal, 'n1', { ...question, prompt: `Justifica una situación distinta para ${dimension}` }, dimension);
   const confirmation = policy.activityContract(additional, 'n1', 'evidence_confirmation');
-  policy.record(goal, 'n1', 'CONFIRMATION', 'respuesta adicional', { status: 'CORRECT' }, 0, confirmation, `confirmation-${dimension}`);
+  policy.record(goal, 'n1', 'CONFIRMATION', 'respuesta adicional', { status: 'CORRECT', evaluator_version: 'local-fixture' }, 0, confirmation, `confirmation-${dimension}`);
   assert.equal(goal.coverage[0].dimensions[0].status, 'MASTERED');
   return { kind: question.kind, observed: event.observed_dimensions, evidence: 2, status: 'MASTERED' };
 }

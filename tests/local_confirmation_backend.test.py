@@ -71,6 +71,15 @@ class LocalConfirmation(unittest.TestCase):
         stored = self.memory.load_placement_item(self.profile, item['item_id'])
         self.assertEqual(stored['public']['source_type'], 'CHALLENGE_REPORT')
 
+    def test_open_answer_source_accepted(self):
+        self.replies = [good()]
+        out = self.make(source_type='OPEN_ANSWER')
+        item = out['items'][0]
+        self.assertTrue(item['item_id'].startswith('conf-'))
+        self.assertEqual(item['source_type'], 'OPEN_ANSWER')
+        self.assertIn('OPEN_ANSWER', app.CONF_SOURCES)
+        self.assertNotIn('correct_option_id', item)
+
     def test_invalid_input_raises(self):
         self.replies = [good()]
         with self.assertRaises(ValueError):

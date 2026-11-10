@@ -20,7 +20,7 @@ global.confirm = () => true;
 const policy = require('../app.js');
 
 function assessment(status = 'CORRECT', overrides = {}) {
-  return { status, error_type: 'none', feedback: 'feedback', hint: '', ...overrides };
+  return { status, error_type: 'none', feedback: 'feedback', hint: '', evaluator_version: 'local-fixture', ...overrides };
 }
 
 function contract(nodeId = 'n1', overrides = {}) {

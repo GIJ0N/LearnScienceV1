@@ -79,7 +79,9 @@ const verdict = (status, extra = {}) => ({ schema_version: 'local_production_v1'
   assert.equal(ev[0].evaluator_version, 'local-production-v1');
   assert.equal(ev[0].learner_confidence, 85);
   assert.deepEqual(ev[0].observed_dimensions, ['direct_application']);
-  assert.equal(g.coverage[0].dimensions.find(d => d.id === 'direct_application').evidence.length, 1);
+  assert.equal(g.coverage[0].dimensions.find(d => d.id === 'direct_application').evidence.filter(x => x.type !== 'TRUST').length, 1);
+  assert.equal(g.coverage[0].dimensions.every(d => d.evidence.some(x => x.type === 'TRUST')), true, 'ancla creada por producción correcta');
+  assert.equal(g.events.filter(e => e.type === 'TRUST_ANCHOR' && e.source === 'PRODUCTION').length, 1);
   assert.equal(g.production.status, 'done');
   // Idempotente: aplicar de nuevo no duplica evidencia.
   assert.equal(p.applyProductionResult(g, verdict('CORRECT'), 'att-1', '60 g/m²', 85), false);
@@ -113,7 +115,7 @@ const verdict = (status, extra = {}) => ({ schema_version: 'local_production_v1'
   g = attach(goal(['conceptual'])); p.startProduction(g); script = { numeric: numericRes() }; await p.fetchProduction(g);
   p.applyProductionResult(g, verdict('CORRECT'), 'att-5', '60 g/m²', 80);
   assert.equal(g.events.filter(e => e.type === 'EVIDENCE').length, 1);
-  assert.ok(g.coverage.every(c => c.dimensions.every(d => d.evidence.length === 0)), 'ninguna dimensión recibió evidencia');
+  assert.ok(g.coverage.every(c => c.dimensions.every(d => d.evidence.filter(x => x.type !== 'TRUST').length === 0)), 'ninguna dimensión recibió evidencia');
   assert.equal(p.verified(g, 'a'), false);
 
   // Resultado que no corresponde a la práctica: se rechaza sin registrar nada.

@@ -131,6 +131,12 @@ Para volver a una versión anterior, primero salir de CONFIRMATION mediante cont
 guardar y exportar respaldo; el frontend anterior no reconoce esa fase nueva. Conservar
 siempre la base actual antes de una restauración.
 
+## Ancla local
+Desde `open_answer_trust_v1`, los aciertos independientes con `evaluator_trust:'model_single'` y `trust_policy_version` solo cuentan
+para suficiencia si el tema tiene un ancla (acierto corregido localmente posterior a la última contradicción: práctica de cálculo
+o confirmación `OPEN_ANSWER`). Los aciertos deterministas cuentan sin ancla y los eventos anteriores a la política cuentan como antes.
+Una contradicción posterior invalida el ancla. Ver `docs/open_answer_trust_v1.md`.
+
 ## Alcance pendiente
 
 No hay verificación semántica de paráfrasis, calibración científica del umbral de dos,

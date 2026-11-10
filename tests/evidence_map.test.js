@@ -26,7 +26,7 @@ function observation(id, prompt, extra = {}) {
   const activity = policy.activityContract({ activity_id: `activity-${id}`, prompt,
     reference: 'PRIVATE REFERENCE MUST NOT RENDER', kind: 'explanation',
     observable_dimensions: ['conceptual'] }, 'n1', 'evidence_confirmation');
-  return { type: 'EVIDENCE', ...policy.activityEvidence(activity, { status: extra.result || 'CORRECT' }, 0,
+  return { type: 'EVIDENCE', ...policy.activityEvidence(activity, { status: extra.result || 'CORRECT', evaluator_version: 'local-fixture' }, 0,
     { attempt_id: id, timestamp: 1000 }), ...extra };
 }
 function goal(evidence = []) {
