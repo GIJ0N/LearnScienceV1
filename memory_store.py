@@ -1,6 +1,7 @@
 """SQLite persistence for Ruta's local profiles and durable learning memory."""
 
 import copy
+import datetime
 import hashlib
 import json
 import os
@@ -541,11 +542,54 @@ class DurableMemory:
               PRIMARY KEY(profile_id, chain_id),
               UNIQUE(profile_id, goal_id, chain_key)
             );
+            CREATE TABLE IF NOT EXISTS llm_calls(
+              call_id INTEGER PRIMARY KEY AUTOINCREMENT,
+              day TEXT NOT NULL,
+              provider TEXT NOT NULL,
+              model TEXT NOT NULL,
+              route TEXT NOT NULL,
+              input_tokens INTEGER,
+              output_tokens INTEGER,
+              thinking_tokens INTEGER,
+              latency_ms INTEGER NOT NULL,
+              ok INTEGER NOT NULL,
+              created_at INTEGER NOT NULL
+            );
             """)
             columns = {row[1] for row in db.execute("PRAGMA table_info(criterion_evaluations)").fetchall()}
             if "owner_token" not in columns:
                 db.execute("ALTER TABLE criterion_evaluations ADD COLUMN owner_token TEXT")
             db.execute("INSERT OR REPLACE INTO metadata(key,value) VALUES('schema_version',?)", (str(SCHEMA_VERSION),))
+
+    def record_llm_call(self, day, provider, model, route, input_tokens, output_tokens, thinking_tokens, latency_ms, ok):
+        """usage_telemetry_v1: counts and timings only; never prompts, answers, keys or profile ids."""
+        def count(value):
+            return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0 else None
+        with self._lock, self._connect() as db:
+            db.execute(
+                "INSERT INTO llm_calls(day,provider,model,route,input_tokens,output_tokens,thinking_tokens,latency_ms,ok,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (str(day), str(provider)[:40], str(model)[:80], str(route or "unknown")[:120], count(input_tokens), count(output_tokens),
+                 count(thinking_tokens), max(0, int(latency_ms or 0)), 1 if ok else 0, time.time_ns()))
+
+    def llm_calls_on(self, day):
+        with self._lock, self._connect() as db:
+            return int(db.execute("SELECT COUNT(*) FROM llm_calls WHERE day=?", (str(day),)).fetchone()[0])
+
+    def tokens_on(self, day):
+        with self._lock, self._connect() as db:
+            row = db.execute(
+                "SELECT COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0), COALESCE(SUM(thinking_tokens),0) FROM llm_calls WHERE day=?",
+                (str(day),)).fetchone()
+        return {"input": int(row[0]), "output": int(row[1]), "thinking": int(row[2])}
+
+    def usage_summary(self, days=7):
+        days = min(30, max(1, int(days or 7)))
+        since = (datetime.date.today() - datetime.timedelta(days=days - 1)).isoformat()
+        with self._lock, self._connect() as db:
+            rows = db.execute(
+                "SELECT day, route, COUNT(*) AS calls, COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0), COALESCE(SUM(thinking_tokens),0) "
+                "FROM llm_calls WHERE day>=? GROUP BY day, route ORDER BY day DESC, route", (since,)).fetchall()
+        return [{"day": r[0], "route": r[1], "calls": int(r[2]), "input_tokens": int(r[3]), "output_tokens": int(r[4]), "thinking_tokens": int(r[5])} for r in rows]
 
     def create_profile(self, name):
         name = str(name or "").strip()[:80]
