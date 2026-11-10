@@ -85,6 +85,8 @@ node tests/integration_novelty.test.js
 node tests/placement_skip_review.test.js
 node tests/expert_staleness.test.js
 node tests/selector_confidence.test.js
+python tests/local_production_backend.test.py
+node tests/local_production.test.js
 ```
 
 `python tools/check_parity.py` extrae el valor de `HTML` con el parser AST de Python y exige una única pareja `<script>...</script>`. Compara `app.js` con ese bloque en una representación canónica LF: convierte únicamente `CRLF` y `CR` aislados en `LF`, sin ignorar espacios, tabulaciones, comillas, etiquetas ni ningún otro byte.
@@ -293,3 +295,7 @@ La respuesta correcta se descarta si es claramente la opción más larga: al men
 ## Confianza en el selector (`feat/selector-confidence`)
 
 `node tests/selector_confidence.test.js` comprueba que un fallo con confianza 90 produce `REPAIR` con el motivo nuevo; que con confianza 30 la decisión no cambia; que un acierto posterior, una evaluación supersedida o un evento legacy sin `learner_signal_version` desactivan la regla; que un `UNKNOWN` posterior no la borra; que la reparación abierta conserva prioridad (`RESUME_REPAIR`); y que el selector no modifica sus entradas. Diseño en `docs/selector_confidence_v1.md`. No se probó en navegador.
+
+## Producción corregida localmente (`feat/local-production`)
+
+`python tests/local_production_backend.test.py` y `node tests/local_production.test.js` comprueban con modelo simulado la corrección numérica (tolerancia del 2 %, unidad normalizada, coma decimal, número correcto con unidad distinta = fallo `units`, sin valor = `UNKNOWN`) y de orden (dos pasos intercambiados = fallo; pasos publicados barajados); que la clave no sale en la respuesta pública; la idempotencia por `attempt_id` y el conflicto con otra respuesta; el rechazo de ítems de otra meta, otro perfil u otra versión; `applicable:false` y la auditoría fallida dos veces sin guardar nada; y, en JS, la disponibilidad, el respaldo de numérico a orden, el registro como `EVIDENCE` independiente por el camino central con `evaluator_trust:'deterministic'`, que el fallo cuenta y `UNKNOWN` no suma, que un tema sin la dimensión en su cobertura no acredita ninguna y un humo de la vista. Diseño en `docs/local_production_v1.md`. No se probó con Gemini real ni en navegador.
