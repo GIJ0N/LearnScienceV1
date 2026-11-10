@@ -62,6 +62,7 @@ jobs:
           node tests/qa_round5.test.js
           node tests/qa_round6.test.js
           python tests/placement_backend.test.py
+          python tests/evaluate_data_delimiters.test.py
       - name: Run step lesson tests
         run: |
           node tests/step_lessons.test.js

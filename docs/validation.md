@@ -79,6 +79,7 @@ python app_legacy.py --self-test
 python -m py_compile app_legacy.py
 python tools/check_parity.py
 python tests/check_parity.test.py
+python tests/evaluate_data_delimiters.test.py
 ```
 
 `python tools/check_parity.py` extrae el valor de `HTML` con el parser AST de Python y exige una única pareja `<script>...</script>`. Compara `app.js` con ese bloque en una representación canónica LF: convierte únicamente `CRLF` y `CR` aislados en `LF`, sin ignorar espacios, tabulaciones, comillas, etiquetas ni ningún otro byte.
@@ -267,3 +268,7 @@ La respuesta correcta se descarta si es claramente la opción más larga: al men
 ## Telemetría de uso (`feat/usage-telemetry`)
 
 `python tests/usage_telemetry.test.py` comprueba con respuestas simuladas que cada llamada al modelo deja una fila en `llm_calls` con tokens de entrada, salida y razonamiento (Gemini y Anthropic); que sin `usageMetadata` la fila queda con `NULL` y la llamada funciona; que un 429 o una salida incompleta se registran con `ok=0`; que un error al registrar nunca rompe la llamada; que el rechazo por límite o por falta de clave no se registra; que la tabla no guarda clave, prompt ni perfil; que tras reiniciar sobre la misma SQLite el contador diario parte de las filas guardadas y nunca baja; y que `/api/usage/summary` agrupa por ruta y acota los días. Diseño en `docs/usage_telemetry_v1.md`. No se probó con Gemini real ni en navegador: el bloque «Costo de IA» del informe es solo lectura y no se ejercitó en pantalla.
+
+## Respuesta como dato (`fix/evaluate-data-delimiters`)
+
+`python tests/evaluate_data_delimiters.test.py` captura el prompt que recibe el modelo en `evaluate`, `micro_start`, `micro_repair`, `repair_diagnosis` y `micro_zoom` y comprueba que una respuesta que intenta dar órdenes aparece solo entre `<<< >>>`, que un `>>>` o `<<<` escrito por la persona se elimina y no puede cerrar el cerco, y que «No sé» sigue devolviendo `UNKNOWN` sin llamar al modelo. No hay contrato nuevo de evidencia. No se probó con Gemini real: una instrucción dentro del cerco reduce, pero no elimina, el riesgo de que un modelo la obedezca.
