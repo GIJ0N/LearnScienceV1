@@ -556,7 +556,9 @@ function learningState(goal,id,now){
    evidence_ids:events.map(e=>e.evidence_id||e.attempt_id).filter(Boolean)};
  });
  const review=(goal.reviews||[]).find(r=>r.id===id),exposure=lastExposure(goal,id);
- return {node_id:id,dimensions,sufficient:dimensions.length>0&&dimensions.every(d=>d.sufficient),review_due:Boolean(review&&Number.isFinite(review.due)&&review.due<=now),review_due_at:review?.due??null,last_exposure:exposure};
+ // selector_confidence_v1: the last effective learning result is a failure given with high declared confidence (new-style events only).
+ const lastLearning=effectiveEvidence((goal.events||[]).filter(e=>e&&e.node_id===id&&e.type==='EVIDENCE'&&e.evidence_role==='learning'&&e.evidence_scope!=='repair_episode')).filter(e=>resultStatus(e.result??e.status)!=='UNKNOWN').at(-1),committed=Boolean(lastLearning&&lastLearning.learner_signal_version&&lastLearning.calibration_signal==='committed_misconception'&&resultStatus(lastLearning.result??lastLearning.status)!=='CORRECT');
+ return {node_id:id,committed_misconception:committed,dimensions,sufficient:dimensions.length>0&&dimensions.every(d=>d.sufficient),review_due:Boolean(review&&Number.isFinite(review.due)&&review.due<=now),review_due_at:review?.due??null,last_exposure:exposure};
 }
 function selectTutorAction(goal,now,options={}){
  const s=goal.session||{},models=goal.nodes.map(n=>learningState(goal,n.id,now)),model=id=>models.find(m=>m.node_id===id),budget=s.adaptive||{};
@@ -577,7 +579,7 @@ function selectTutorAction(goal,now,options={}){
  const dep=(node.prerequisites||[]).find(id=>model(id)?.dimensions.some(d=>d.difficulty)&&!curriculumContinued(goal,id));
  if(dep)return decision('PREREQUISITE',dep,'Un prerrequisito del grafo presenta una dificultad observada; lo reforzamos antes de esta habilidad.',model(dep).dimensions.find(d=>d.difficulty).id);
  const m=model(node.id),difficulty=m.dimensions.find(d=>d.difficulty);
- if(difficulty)return decision('REPAIR',node.id,'El resultado reciente contradice la evidencia en '+difficulty.id+'. Necesitas una intervención sobre ese error.',difficulty.id);
+ if(difficulty||model(node.id).committed_misconception)return decision('REPAIR',node.id,model(node.id).committed_misconception?'Respondiste con mucha seguridad algo incorrecto: lo revisamos antes de avanzar.':'El resultado reciente contradice la evidencia en '+difficulty.id+'. Necesitas una intervención sobre ese error.',difficulty?difficulty.id:null);
  const check=m.dimensions.find(d=>!d.sufficient&&d.independent_successes&&CONFIRMATION_KINDS[d.id]&&d.id!=='memory');
  if(check)return decision('CONFIRM',node.id,'Ya hay un acierto independiente en '+check.id+'; falta comprobarlo con otra pregunta sin repetir la explicación.',check.id);
  if(m.sufficient){const target=m.dimensions.find(d=>CONFIRMATION_KINDS[d.id]);return target&&!(budget.challenged||[]).includes(node.id)?decision('CHALLENGE',node.id,'La evidencia inicial es suficiente. Probaremos una restricción o justificación más exigente, sin atribuir transferencia.',target.id):decision('CONTINUE',node.id,'Ya existe evidencia inicial suficiente; continuamos sin repetir los fundamentos.')}
