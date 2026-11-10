@@ -16,7 +16,7 @@ Que las lecciones se apoyen en documentos de la persona y lo digan. Alcance v1: 
 ## Cliente
 - Página «Fuentes» (en la navegación de la meta): lista (título, fecha, tamaño), formulario para pegar texto y borrar. Aviso fijo: «El texto se envía a Gemini (Google) para preparar tus lecciones. No pegues información confidencial de tu empresa sin permiso.»
 - En la lección: «Con fuente: <título> (<fecha>)» con las citas desplegables; «Sin fuente en este punto» si `uncited`; «Generado por el modelo: verifícalo» si `no_sources`. Las lecciones antiguas sin `grounding` no muestran nada.
-- Al añadir una fuente, las lecciones ya guardadas no se regeneran; cada una ofrece «Regenerar con mis fuentes» (vía `regenerateLesson`) si la meta tiene fuentes y la lección no está ya citada.
+- Al añadir una fuente, las lecciones ya guardadas no se regeneran; cada una ofrece «Regenerar con mis fuentes» (borra la lección guardada igual que `regenerateLesson`, con su propio mensaje; `regenerateLesson` no cambia) si la meta tiene fuentes y la lección no está ya citada.
 - `lessonRequest` ahora envía también `outcome` del tema.
 
 ## Evidencia

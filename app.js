@@ -899,7 +899,7 @@ function groundingBadge(box,lesson){
  }
  const p=E('p',gr.status==='uncited'?'Sin fuente en este punto':'Generado por el modelo: verifícalo');box.append(p);return p
 }
-function regenerateWithSources(goal,n){const l=goal.lessons?.[n.id];if(!l)return false;regenerateLesson(goal,n,'Preparo otra versión de esta lección con tus fuentes.');return true}
+function regenerateWithSources(goal,n){const l=goal.lessons?.[n.id];if(!l)return false;delete goal.lessons[n.id];goal.session.mode='TEACH';save();render();note('Preparo otra versión de esta lección con tus fuentes.');return true}
 function sourcesOffer(box,goal,n){
  const l=goal.lessons?.[n.id];if(!l||!(goal.sources_count>0))return null;const status=l.grounding?.status;if(status==='cited')return null;
  const b=B('Regenerar con mis fuentes',()=>regenerateWithSources(goal,n),true);box.append(b);return b
@@ -915,7 +915,7 @@ async function sourcesView(){
  if(!sources.length)list.append(E('p','Aún no hay fuentes.'));
  for(const x of sources){list.append(E('p',`${x.title}${x.source_date?' · '+x.source_date:''} · ${Math.max(1,Math.round(x.chars/1000))} mil caracteres`),B('Borrar',()=>task('Borrando…',async()=>{if(!confirm('¿Borrar esta fuente?'))return;await removeSource(goal,x.source_id);render()}),true))}
 }
-function regenerateLesson(goal,n,message='Reporte guardado. Preparo otra versión de esta lección sin ese error.'){delete goal.lessons[n.id];goal.session.mode='TEACH';save();render();note(message)}
+function regenerateLesson(goal,n){delete goal.lessons[n.id];goal.session.mode='TEACH';save();render();note('Reporte guardado. Preparo otra versión de esta lección sin ese error.')}
 function renderQuestion(box,question,id,phase,role='unspecified'){
  if(!question||typeof question!=='object'||!String(question.prompt||'').trim()){box.append(E('p','La actividad no está disponible porque sus datos están incompletos.'));return {ok:false,error:'INVALID_QUESTION'}}
  let goal=g(),answer=E('textarea'),feedback=E('div'),activity=activityContract(question,id,role),attemptId=newId('attempt');box.append(E('h3',question.prompt));
