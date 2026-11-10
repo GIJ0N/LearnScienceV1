@@ -51,6 +51,7 @@ node tests/local_confirmation.test.js
 python tests/challenge_photos_backend.test.py
 python tests/choice_balance_backend.test.py
 python tests/private_network_access.test.py
+python tests/usage_telemetry.test.py
 node tests/challenge_photos.test.js
 node tests/qa_round5.test.js
 node tests/qa_round6.test.js
@@ -262,3 +263,7 @@ La respuesta correcta se descarta si es claramente la opción más larga: al men
 ## Acceso en red privada (`feat/private-network-access`)
 
 `python tests/private_network_access.test.py` comprueba que sin configurar nada el servidor queda igual (solo `127.0.0.1` y su origen), que `LEARNSCIENCE_HOST` y `LEARNSCIENCE_ORIGINS` añaden solo orígenes exactos, que los valores inválidos detienen el arranque, y con un servidor HTTP real que otro origen recibe 403 salvo que esté en la lista. Diseño en `docs/private_network_access_v1.md`.
+
+## Telemetría de uso (`feat/usage-telemetry`)
+
+`python tests/usage_telemetry.test.py` comprueba con respuestas simuladas que cada llamada al modelo deja una fila en `llm_calls` con tokens de entrada, salida y razonamiento (Gemini y Anthropic); que sin `usageMetadata` la fila queda con `NULL` y la llamada funciona; que un 429 o una salida incompleta se registran con `ok=0`; que un error al registrar nunca rompe la llamada; que el rechazo por límite o por falta de clave no se registra; que la tabla no guarda clave, prompt ni perfil; que tras reiniciar sobre la misma SQLite el contador diario parte de las filas guardadas y nunca baja; y que `/api/usage/summary` agrupa por ruta y acota los días. Diseño en `docs/usage_telemetry_v1.md`. No se probó con Gemini real ni en navegador: el bloque «Costo de IA» del informe es solo lectura y no se ejercitó en pantalla.
