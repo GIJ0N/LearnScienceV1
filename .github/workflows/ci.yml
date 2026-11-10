@@ -74,6 +74,8 @@ jobs:
           node tests/faded_examples.test.js
           node tests/open_answer_trust.test.js
           node tests/daily_session.test.js
+          python tests/expert_profile_backend.test.py
+          node tests/expert_profile.test.js
       - name: Run step lesson tests
         run: |
           node tests/step_lessons.test.js

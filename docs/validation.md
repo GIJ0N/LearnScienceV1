@@ -91,6 +91,8 @@ python tests/faded_examples_backend.test.py
 node tests/faded_examples.test.js
 node tests/open_answer_trust.test.js
 node tests/daily_session.test.js
+python tests/expert_profile_backend.test.py
+node tests/expert_profile.test.js
 ```
 
 `python tools/check_parity.py` extrae el valor de `HTML` con el parser AST de Python y exige una única pareja `<script>...</script>`. Compara `app.js` con ese bloque en una representación canónica LF: convierte únicamente `CRLF` y `CR` aislados en `LF`, sin ignorar espacios, tabulaciones, comillas, etiquetas ni ningún otro byte.
@@ -311,3 +313,7 @@ La respuesta correcta se descarta si es claramente la opción más larga: al men
 `node tests/open_answer_trust.test.js` comprueba que los aciertos calificados solo por el modelo exigen un ancla local (sin ancla no es suficiente; con ancla sí; una contradicción posterior la invalida), que los eventos anteriores y los deterministas cuentan como hoy, y que el marcador `TRUST` no es intento, acierto ni contradicción.
 
 `node tests/daily_session.test.js` comprueba que el plan diario es determinista, que respeta reparación abierta y poca cuota, que un tema sin enseñanza no entra en práctica mixta ni de cálculo, que cambiar de fecha crea un plan nuevo conservando el anterior en eventos, y que construir o saltar el plan no cambia cobertura, `verified()` ni calendario.
+
+## Perfil de experto por dominio
+
+`python tests/expert_profile_backend.test.py` y `node tests/expert_profile.test.js` comprueban con modelo simulado que el perfil se rechaza con 3 o 9 competencias, nombres repetidos, `area_ids` vacío o ajeno, riesgo inválido y criterio fuera de 20–220 caracteres; que una competencia con un área sin abrir nunca es «Demostrada», que una capa caducada no cuenta, y que `EXTERNAL_VALIDATION` no cambia `verified()`, cobertura ni capas.
