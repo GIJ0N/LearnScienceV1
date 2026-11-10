@@ -82,6 +82,7 @@ python tests/check_parity.test.py
 python tests/evaluate_data_delimiters.test.py
 python tests/integration_novelty.test.py
 node tests/integration_novelty.test.js
+node tests/placement_skip_review.test.js
 ```
 
 `python tools/check_parity.py` extrae el valor de `HTML` con el parser AST de Python y exige una única pareja `<script>...</script>`. Compara `app.js` con ese bloque en una representación canónica LF: convierte únicamente `CRLF` y `CR` aislados en `LF`, sin ignorar espacios, tabulaciones, comillas, etiquetas ni ningún otro byte.
@@ -278,3 +279,7 @@ La respuesta correcta se descarta si es claramente la opción más larga: al men
 ## Novedad en la integración (`feat/integration-novelty`)
 
 `python tests/integration_novelty.test.py` y `node tests/integration_novelty.test.js` comprueban que `_lesson_from_raw` declara novedad solo con `novelty_basis` de al menos 15 caracteres y un enunciado distinto de `check`, `guided` e `independent`; que sin base, con base corta o con el mismo enunciado no se añade ningún campo; que la base se acota; que el esquema y el prompt la piden solo en la integración; y, en JS, que una integración correcta sin ayuda con novedad cuenta como variante nueva independiente, que con ayuda no es independiente, que un rol guiado no obtiene transferencia y que una lección legacy conserva el contrato actual. Diseño en `docs/integration_novelty_v1.md`. No se probó con Gemini real: no sabemos aún con qué frecuencia el modelo declara una novedad verdadera.
+
+## Repaso de temas saltados (`feat/placement-skip-review`)
+
+`node tests/placement_skip_review.test.js` comprueba que al terminar el diagnóstico seis temas saltados reciben seis repasos con vencimientos repartidos entre 1 y 5 días y un evento `PLACEMENT_REVIEW_SCHEDULED` cada uno; que un tema con repaso previo no cambia; que sin temas saltados no se programa nada; y que programar no cambia `verified()`, la cobertura ni los eventos de evidencia. Diseño en `docs/placement_skip_review_v1.md`. No se probó en navegador ni con Gemini real.
