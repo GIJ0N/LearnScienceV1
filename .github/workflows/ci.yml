@@ -140,6 +140,9 @@ jobs:
       - name: Run durable frontend tests
         run: node tests/durable_memory_frontend.test.js
 
+      - name: Run insecure context ID tests
+        run: node tests/insecure_context_ids.test.js
+
       - name: Run microtutoring repair episode tests
         run: node tests/microtutoring_repair_episode.test.js
 
