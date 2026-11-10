@@ -109,8 +109,10 @@ NODE = obj_schema({'id':T,'name':T,'outcome':T,'level':{'type':'INTEGER'},
 DIM = obj_schema({'id':T,'name':T,'required':{'type':'BOOLEAN'}})
 COVER = obj_schema({'id':T,'name':T,'kind':T,'priority':T,'prerequisites':{'type':'ARRAY','items':T},'contexts':{'type':'ARRAY','items':T},'dimensions':{'type':'ARRAY','items':DIM}})
 MAP_SCHEMA = obj_schema({'nodes':{'type':'ARRAY','items':NODE},'coverage':{'type':'ARRAY','items':COVER}})
+INTEGRATION_Q = obj_schema({'prompt':T,'reference':T,'kind':T,'observable_dimensions':DIMENSION_LIST,'novelty_basis':T},
+                           ['prompt','reference','kind'])
 STAGE_SCHEMA = obj_schema({'explanation':T,'example':T,'common_error':T,
-                            'check':Q,'guided':Q,'independent':Q,'integration':Q})
+                            'check':Q,'guided':Q,'independent':Q,'integration':INTEGRATION_Q})
 EVAL_SCHEMA = obj_schema({'status':T,'feedback':T,'error_type':T,'hint':T})
 AUDIT_SCHEMA = obj_schema({'issues':{'type':'ARRAY','items':obj_schema({'item':{'type':'INTEGER'},'problem':T})}})
 HINT_SCHEMA = obj_schema({'hint':T})
@@ -614,6 +616,15 @@ def _lesson_from_raw(raw, target_dimension):
         out['target_dimension']=target_dimension
     if not all(out[k] for k in ('explanation','example','common_error')) or not all(q['prompt'] and q['reference'] for q in (out[k] for k in ('check','guided','independent','integration'))):
         raise ValueError('Microlección incompleta; no se guardó.')
+    # integration_novelty_v1: novelty is only declared when the model states what changes AND the prompt really differs.
+    integration_raw=raw.get('integration') if isinstance(raw.get('integration'),dict) else {}
+    basis=compact(integration_raw.get('novelty_basis'),300)
+    prompt_key=normalized_repair_text(out['integration']['prompt'])
+    distinct=bool(prompt_key) and all(prompt_key!=normalized_repair_text(out[k]['prompt']) for k in ('check','guided','independent'))
+    if len(basis)>=15 and distinct:
+        out['integration']['is_novel_variant']=True
+        out['integration']['novelty_basis']=basis
+        out['integration']['supports_transfer']=True
     return out
 
 def make_lesson(data):
@@ -640,7 +651,8 @@ def make_lesson(data):
     base_prompt=(f'Meta: {goal}; aprender ahora: {name}; concepto al que regresaremos: {parent or goal}. '
             f'{lesson_depth}: 1 explicaci\u00f3n intuitiva de m\u00e1ximo 70 palabras, '
       '2 ejemplo resuelto en pasos, 3 error común, 4 pregunta de comprensión simple, '
-      '5 ejercicio guiado, 6 caso independiente diferente, 7 pregunta de integración con la meta. '
+      '5 ejercicio guiado, 6 caso independiente diferente, '
+      '7 pregunta de integración con la meta en un contexto o representación que NO aparezca en la explicación, el ejemplo ni las otras preguntas; en novelty_basis di en una frase qué cambia (contexto, representación o decisión). '
       'Cada pregunta debe tener criterios de respuesta, kind y observable_dimensions limitadas a lo que realmente observa.'+target_instruction+
       ' Adapta el método si es fórmula, idioma o procedimiento. '+
       memory_context+'No inventes detalles técnicos locales.')

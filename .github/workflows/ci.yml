@@ -63,6 +63,8 @@ jobs:
           node tests/qa_round6.test.js
           python tests/placement_backend.test.py
           python tests/evaluate_data_delimiters.test.py
+          python tests/integration_novelty.test.py
+          node tests/integration_novelty.test.js
       - name: Run step lesson tests
         run: |
           node tests/step_lessons.test.js
