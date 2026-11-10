@@ -491,6 +491,25 @@ class DurableMemory:
               created_at INTEGER NOT NULL,
               PRIMARY KEY(profile_id, item_id)
             );
+            CREATE TABLE IF NOT EXISTS sources(
+              profile_id TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+              goal_id TEXT NOT NULL,
+              source_id TEXT NOT NULL,
+              title TEXT NOT NULL,
+              source_date TEXT NOT NULL,
+              sha256 TEXT NOT NULL,
+              chars INTEGER NOT NULL,
+              created_at INTEGER NOT NULL,
+              PRIMARY KEY(profile_id, source_id)
+            );
+            CREATE TABLE IF NOT EXISTS source_chunks(
+              profile_id TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+              source_id TEXT NOT NULL,
+              chunk_index INTEGER NOT NULL,
+              text TEXT NOT NULL,
+              norm TEXT NOT NULL,
+              PRIMARY KEY(profile_id, source_id, chunk_index)
+            );
             CREATE TABLE IF NOT EXISTS content_reports(
               report_id INTEGER PRIMARY KEY AUTOINCREMENT,
               profile_id TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
@@ -624,6 +643,48 @@ class DurableMemory:
             for public, private in items:
                 db.execute("INSERT INTO placement_items VALUES(?,?,?,?,?,?,?)",
                            (profile_id, goal_id, public["item_id"], public["node_id"], _json(public), _json(private), now))
+
+    # grounded_sources_v1: texto pegado por la persona; se trocea y se recupera sin modelo.
+    def add_source(self, profile_id, goal_id, title, source_date, sha256, chars, chunks, max_sources=20):
+        profile_id = _profile_id(profile_id)
+        goal_id = str(goal_id or "").strip()
+        if not goal_id:
+            raise ValueError("Falta la meta de la fuente.")
+        with self._lock, self._connect() as db:
+            if not db.execute("SELECT 1 FROM profiles WHERE profile_id=?", (profile_id,)).fetchone():
+                raise ValueError("El perfil local no existe.")
+            row = db.execute("SELECT source_id,title,source_date,chars,created_at FROM sources WHERE profile_id=? AND goal_id=? AND sha256=?", (profile_id, goal_id, sha256)).fetchone()
+            if row:
+                return {"source_id": row[0], "title": row[1], "source_date": row[2], "chars": row[3], "created_at": row[4]}, False
+            if db.execute("SELECT COUNT(*) FROM sources WHERE profile_id=? AND goal_id=?", (profile_id, goal_id)).fetchone()[0] >= max_sources:
+                raise ValueError("Esta meta ya tiene el máximo de %d fuentes; borra una antes de añadir otra." % max_sources)
+            source_id = "src-" + uuid.uuid4().hex
+            created = time.time_ns()
+            db.execute("INSERT INTO sources VALUES(?,?,?,?,?,?,?,?)", (profile_id, goal_id, source_id, title, source_date, sha256, int(chars), created))
+            for index, (text, norm) in enumerate(chunks):
+                db.execute("INSERT INTO source_chunks VALUES(?,?,?,?,?)", (profile_id, source_id, index, text, norm))
+            return {"source_id": source_id, "title": title, "source_date": source_date, "chars": int(chars), "created_at": created}, True
+
+    def list_sources(self, profile_id, goal_id):
+        profile_id = _profile_id(profile_id)
+        with self._lock, self._connect() as db:
+            rows = db.execute("SELECT source_id,title,source_date,chars,created_at FROM sources WHERE profile_id=? AND goal_id=? ORDER BY created_at, source_id", (profile_id, str(goal_id or ""))).fetchall()
+        return [{"source_id": r[0], "title": r[1], "source_date": r[2], "chars": r[3], "created_at": r[4]} for r in rows]
+
+    def delete_source(self, profile_id, goal_id, source_id):
+        profile_id = _profile_id(profile_id)
+        with self._lock, self._connect() as db:
+            if not db.execute("SELECT 1 FROM sources WHERE profile_id=? AND goal_id=? AND source_id=?", (profile_id, str(goal_id or ""), str(source_id or ""))).fetchone():
+                raise ValueError("La fuente no existe en esta meta.")
+            db.execute("DELETE FROM source_chunks WHERE profile_id=? AND source_id=?", (profile_id, str(source_id)))
+            db.execute("DELETE FROM sources WHERE profile_id=? AND source_id=?", (profile_id, str(source_id)))
+        return {"deleted": True, "source_id": str(source_id)}
+
+    def source_chunks_for_goal(self, profile_id, goal_id):
+        profile_id = _profile_id(profile_id)
+        with self._lock, self._connect() as db:
+            rows = db.execute("SELECT s.source_id,s.title,s.source_date,c.chunk_index,c.text,c.norm FROM sources s JOIN source_chunks c ON c.profile_id=s.profile_id AND c.source_id=s.source_id WHERE s.profile_id=? AND s.goal_id=? ORDER BY s.source_id, c.chunk_index", (profile_id, str(goal_id or ""))).fetchall()
+        return [{"source_id": r[0], "title": r[1], "source_date": r[2], "chunk_index": r[3], "text": r[4], "norm": r[5]} for r in rows]
 
     def save_content_report(self, profile_id, goal_id, node_id, kind, excerpt, note):
         """Learner flag on generated content. It never creates or removes evidence."""

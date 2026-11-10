@@ -85,7 +85,7 @@ for (const level of [0, 1, 2, 3, 4, 5]) {
 // 5. Un evento con hint_level_max pero is_independent=true forzado (dato manipulado o
 //    importado) no cuenta para suficiencia.
 {
-  const make = (id, at, extra = {}) => ({ ...policy.activityEvidence(independentContract(`activity-${id}`), { status: 'CORRECT' }, 0, { attempt_id: id, timestamp: at }), question: { prompt: `Pregunta ${id}`, reference: 'r', kind: 'application', observable_dimensions: ['direct_application'] }, ...extra });
+  const make = (id, at, extra = {}) => ({ ...policy.activityEvidence(independentContract(`activity-${id}`), { status: 'CORRECT', evaluator_version: 'local-fixture' }, 0, { attempt_id: id, timestamp: at }), question: { prompt: `Pregunta ${id}`, reference: 'r', kind: 'application', observable_dimensions: ['direct_application'] }, ...extra });
   const dim = evidence => ({ id: 'direct_application', required: true, evidence });
   const clean = dim([make('c1', 1 * DAY), make('c2', 3 * DAY)]);
   assert.equal(policy.independentSuccesses(clean).length, 2, 'control positivo: dos aciertos independientes distintos');

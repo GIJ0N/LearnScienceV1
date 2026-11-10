@@ -14,7 +14,7 @@ const settle=()=>new Promise(r=>setImmediate(r));
 async function waitFor(label,predicate,limit=40){for(let i=0;i<limit;i++){if(predicate())return;await settle()}throw new Error(`Timeout esperando ${label}`)}
 function record(g,status='CORRECT',help=0,dimension='units',id='a'){
  const question=q('Pregunta registrada '+(++serial),dimension),activity=p.activityContract(question,id,'evidence_confirmation');
- return p.record(g,id,'CONFIRMATION','Respuesta',{status,error_type:status==='MISCONCEPTION'?'units':'none'},help,activity,'attempt-'+serial)
+ return p.record(g,id,'CONFIRMATION','Respuesta',{status,evaluator_version:'local-fixture',error_type:status==='MISCONCEPTION'?'units':'none'},help,activity,'attempt-'+serial)
 }
 global.fetch=async(route,options)=>{const body=JSON.parse(options.body);calls.push({route,body});
  if(route==='/api/confirmation'||route==='/api/review'){
@@ -23,7 +23,7 @@ global.fetch=async(route,options)=>{const body=JSON.parse(options.body);calls.pu
  }
  if(route==='/api/profile/save'){assert.equal(body.profile_id,'profile-test');assert.ok(body.store?.active);assert.ok(body.store.goals.some(g=>g.id===body.store.active));return {ok:true,json:async()=>({revision:1})}}
  if(route==='/api/lesson')return {ok:true,json:async()=>lesson()};
- if(route==='/api/evaluate')return {ok:true,json:async()=>({status:'CORRECT',feedback:'Correcto'})};
+ if(route==='/api/evaluate')return {ok:true,json:async()=>({status:'CORRECT',feedback:'Correcto',evaluator_version:'local-fixture'})};
  if(route==='/api/context/create')throw Error('Reparación simulada no disponible');
  throw Error('Ruta inesperada '+route)
 };

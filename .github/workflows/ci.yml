@@ -62,6 +62,22 @@ jobs:
           node tests/qa_round5.test.js
           node tests/qa_round6.test.js
           python tests/placement_backend.test.py
+          python tests/evaluate_data_delimiters.test.py
+          python tests/integration_novelty.test.py
+          node tests/integration_novelty.test.js
+          node tests/placement_skip_review.test.js
+          node tests/expert_staleness.test.js
+          node tests/selector_confidence.test.js
+          python tests/local_production_backend.test.py
+          node tests/local_production.test.js
+          python tests/faded_examples_backend.test.py
+          node tests/faded_examples.test.js
+          node tests/open_answer_trust.test.js
+          node tests/daily_session.test.js
+          python tests/expert_profile_backend.test.py
+          node tests/expert_profile.test.js
+          python tests/grounded_sources_backend.test.py
+          node tests/grounded_sources.test.js
       - name: Run step lesson tests
         run: |
           node tests/step_lessons.test.js

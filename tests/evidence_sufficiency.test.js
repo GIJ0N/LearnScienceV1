@@ -18,7 +18,7 @@ function observation(dimension, prompt, extra = {}) {
   const activity = policy.activityContract({ prompt, reference: 'Criterio', kind,
     observable_dimensions: [dimension], supports_transfer: dimension === 'transfer',
     is_novel_variant: dimension === 'transfer' }, 'n1', dimension === 'transfer' ? 'transfer_check' : 'evidence_confirmation');
-  return { ...policy.activityEvidence(activity, { status: 'CORRECT' }, 0,
+  return { ...policy.activityEvidence(activity, { status: 'CORRECT', evaluator_version: 'local-fixture' }, 0,
     { attempt_id: `attempt-${id}`, timestamp: id * DAY }), ...extra };
 }
 function dimension(id, evidence) { return { id, required: true, evidence }; }
@@ -90,11 +90,11 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
       return { ok: true, json: async () => ({ question: { prompt: 'Detecta y corrige una conversión inválida', reference: 'Criterio', kind: 'units', observable_dimensions: ['units'] } }) };
     }
     assert.equal(route, '/api/evaluate'); evaluationCalls++;
-    return { ok: true, json: async () => ({ status: 'CORRECT', feedback: 'Correcto', hint: '' }) };
+    return { ok: true, json: async () => ({ status: 'CORRECT', feedback: 'Correcto', hint: '', evaluator_version: 'local-fixture' }) };
   };
   for (const [phase, key, role] of [['COMPREHENSION','check','comprehension_check'], ['GUIDED','guided','guided_practice'], ['INDEPENDENT','independent','independent_practice'], ['INTEGRATE','integration','integration']]) {
     value.session.mode = phase;
-    policy.applyResult(value, 'n1', phase, 'Respuesta', { status: 'CORRECT', _activity: policy.activityContract(value.lessons.n1[key], 'n1', role), _attempt_id: `flow-${phase}` });
+    policy.applyResult(value, 'n1', phase, 'Respuesta', { status: 'CORRECT', evaluator_version: 'local-fixture', _activity: policy.activityContract(value.lessons.n1[key], 'n1', role), _attempt_id: `flow-${phase}` });
   }
   await settle();
   assert.equal(value.session.mode, 'CONFIRMATION');
@@ -130,7 +130,7 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   assert.equal(limited.session.confirmation.attempts, 3);
   assert.ok(find(roots.app, 'Terminamos las tres comprobaciones de esta visita. Puedes continuar y volver desde la cobertura, sin marcar dominio.'));
   const eventCount = limited.events.length;
-  assert.throws(() => policy.applyResult(limited, 'n1', 'CONFIRMATION', 'Reuso', { status: 'CORRECT', _activity: staleActivity, _attempt_id: 'stale-attempt' }), e => e.code === 'STALE_CONFIRMATION');
+  assert.throws(() => policy.applyResult(limited, 'n1', 'CONFIRMATION', 'Reuso', { status: 'CORRECT', evaluator_version: 'local-fixture', _activity: staleActivity, _attempt_id: 'stale-attempt' }), e => e.code === 'STALE_CONFIRMATION');
   assert.equal(limited.events.length, eventCount);
   find(roots.app, 'Continuar la ruta con pendientes visibles').onclick();
   assert.equal(policy.verified(limited, 'n1'), false);

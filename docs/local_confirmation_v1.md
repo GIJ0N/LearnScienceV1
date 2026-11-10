@@ -6,6 +6,7 @@ distinta, que se ofrece después de un resultado provisional positivo. Lo provis
 solo, pero puede abrir la puerta a evidencia firme.
 
 ## Cuándo se ofrece
+- Tras una respuesta abierta calificada solo por el modelo (origen `OPEN_ANSWER`, ver `open_answer_trust_v1`): una confirmación CORRECT crea el ancla local del tema; no suma a ninguna capa del panel.
 - Tras un resultado provisional positivo: `BETO_SESSION` CORRECT, `CHALLENGE_REPORT` CORRECT o
   PARTIAL, `ERROR_FIX` CORRECT.
 - Una confirmación por cada intento provisional (`confirms_attempt_id` único; para Beto se usa el

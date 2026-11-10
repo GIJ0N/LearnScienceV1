@@ -37,8 +37,8 @@ assert.equal(layers([ev({ is_independent: true, activity_id: 'x' }), ev({ is_ind
 assert.equal(layers([ev({ is_independent: false }), ev({ is_independent: false })]).layers.independence, 'none');
 
 // 3 Retención: demora y sin ayuda.
-assert.equal(layers([ev({ phase: 'REVIEW', delay_ms_from_last_exposure: 8 * DAY })]).layers.retention, 'met');
-assert.equal(layers([ev({ phase: 'REVIEW', delay_ms_from_last_exposure: 2 * DAY })]).layers.retention, 'partial');
+assert.equal(layers([ev({ phase: 'REVIEW', delay_ms_from_last_exposure: 31 * DAY })]).layers.retention, 'met');
+assert.equal(layers([ev({ phase: 'REVIEW', delay_ms_from_last_exposure: 8 * DAY })]).layers.retention, 'partial');
 assert.equal(layers([ev({ phase: 'REVIEW', delay_ms_from_last_exposure: 30 * DAY, help_used: 1 })]).layers.retention, 'none', 'con ayuda no cuenta');
 assert.equal(layers([ev({ phase: 'REVIEW', delay_ms_from_last_exposure: 30 * DAY, result: 'MISCONCEPTION', status: 'MISCONCEPTION' })]).layers.retention, 'none');
 assert.equal(layers([ev({ phase: 'REVIEW' })]).layers.retention, 'none', 'sin demora verificable no cuenta');
@@ -79,7 +79,7 @@ assert.equal(p.calibrationSummary(goal([diag])).answered, 1);
 assert.equal(p.calibrationSummary(goal([{ ...diag, evidence_role: 'evaluation' }])).answered, 0, 'las auditorías no cuentan');
 
 // Etiquetas por cantidad de capas y siguiente paso.
-const full = [ev({ phase: 'COMPREHENSION' }), ev({ is_independent: true }), ev({ is_independent: true }), ev({ phase: 'REVIEW', delay_ms_from_last_exposure: 9 * DAY }),
+const full = [ev({ phase: 'COMPREHENSION' }), ev({ is_independent: true }), ev({ is_independent: true }), ev({ phase: 'REVIEW', delay_ms_from_last_exposure: 31 * DAY }),
   d('CORRECT'), d('CORRECT'), d('CORRECT', 'COMPOSITION'), d('CORRECT', 'COMPOSITION'), ev({ is_novel_variant: true, is_independent: true }),
   c('CORRECT', 90), c('CORRECT', 95), c('MISCONCEPTION', 10), c('MISCONCEPTION', 5)];
 r = layers(full);

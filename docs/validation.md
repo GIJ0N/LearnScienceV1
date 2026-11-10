@@ -79,6 +79,22 @@ python app_legacy.py --self-test
 python -m py_compile app_legacy.py
 python tools/check_parity.py
 python tests/check_parity.test.py
+python tests/evaluate_data_delimiters.test.py
+python tests/integration_novelty.test.py
+node tests/integration_novelty.test.js
+node tests/placement_skip_review.test.js
+node tests/expert_staleness.test.js
+node tests/selector_confidence.test.js
+python tests/local_production_backend.test.py
+node tests/local_production.test.js
+python tests/faded_examples_backend.test.py
+node tests/faded_examples.test.js
+node tests/open_answer_trust.test.js
+node tests/daily_session.test.js
+python tests/expert_profile_backend.test.py
+node tests/expert_profile.test.js
+python tests/grounded_sources_backend.test.py
+node tests/grounded_sources.test.js
 ```
 
 `python tools/check_parity.py` extrae el valor de `HTML` con el parser AST de Python y exige una única pareja `<script>...</script>`. Compara `app.js` con ese bloque en una representación canónica LF: convierte únicamente `CRLF` y `CR` aislados en `LF`, sin ignorar espacios, tabulaciones, comillas, etiquetas ni ningún otro byte.
@@ -267,3 +283,43 @@ La respuesta correcta se descarta si es claramente la opción más larga: al men
 ## Telemetría de uso (`feat/usage-telemetry`)
 
 `python tests/usage_telemetry.test.py` comprueba con respuestas simuladas que cada llamada al modelo deja una fila en `llm_calls` con tokens de entrada, salida y razonamiento (Gemini y Anthropic); que sin `usageMetadata` la fila queda con `NULL` y la llamada funciona; que un 429 o una salida incompleta se registran con `ok=0`; que un error al registrar nunca rompe la llamada; que el rechazo por límite o por falta de clave no se registra; que la tabla no guarda clave, prompt ni perfil; que tras reiniciar sobre la misma SQLite el contador diario parte de las filas guardadas y nunca baja; y que `/api/usage/summary` agrupa por ruta y acota los días. Diseño en `docs/usage_telemetry_v1.md`. No se probó con Gemini real ni en navegador: el bloque «Costo de IA» del informe es solo lectura y no se ejercitó en pantalla.
+
+## Respuesta como dato (`fix/evaluate-data-delimiters`)
+
+`python tests/evaluate_data_delimiters.test.py` captura el prompt que recibe el modelo en `evaluate`, `micro_start`, `micro_repair`, `repair_diagnosis` y `micro_zoom` y comprueba que una respuesta que intenta dar órdenes aparece solo entre `<<< >>>`, que un `>>>` o `<<<` escrito por la persona se elimina y no puede cerrar el cerco, y que «No sé» sigue devolviendo `UNKNOWN` sin llamar al modelo. No hay contrato nuevo de evidencia. No se probó con Gemini real: una instrucción dentro del cerco reduce, pero no elimina, el riesgo de que un modelo la obedezca.
+
+## Novedad en la integración (`feat/integration-novelty`)
+
+`python tests/integration_novelty.test.py` y `node tests/integration_novelty.test.js` comprueban que `_lesson_from_raw` declara novedad solo con `novelty_basis` de al menos 15 caracteres y un enunciado distinto de `check`, `guided` e `independent`; que sin base, con base corta o con el mismo enunciado no se añade ningún campo; que la base se acota; que el esquema y el prompt la piden solo en la integración; y, en JS, que una integración correcta sin ayuda con novedad cuenta como variante nueva independiente, que con ayuda no es independiente, que un rol guiado no obtiene transferencia y que una lección legacy conserva el contrato actual. Diseño en `docs/integration_novelty_v1.md`. No se probó con Gemini real: no sabemos aún con qué frecuencia el modelo declara una novedad verdadera.
+
+## Repaso de temas saltados (`feat/placement-skip-review`)
+
+`node tests/placement_skip_review.test.js` comprueba que al terminar el diagnóstico seis temas saltados reciben seis repasos con vencimientos repartidos entre 1 y 5 días y un evento `PLACEMENT_REVIEW_SCHEDULED` cada uno; que un tema con repaso previo no cambia; que sin temas saltados no se programa nada; y que programar no cambia `verified()`, la cobertura ni los eventos de evidencia. Diseño en `docs/placement_skip_review_v1.md`. No se probó en navegador ni con Gemini real.
+
+## Caducidad del panel experto (`feat/expert-staleness`)
+
+`node tests/expert_staleness.test.js` (con reloj simulado) comprueba que una capa cumplida hace 61 días pasa a `stale` y la etiqueta del tema baja, que a los 59 sigue `met`, que el repaso correcto a 10 días es parcial y a 30 cumplido, que un repaso sin ayuda reciente evita la caducidad de retención y uno con ayuda no, que sin eventos la capa es `none`, que los eventos sin fecha no caducan, que la discriminación también caduca y que el panel no escribe eventos. `tests/expert_panel.test.js` actualizó sus umbrales de retención (7 → 30 y 1 → 7 días). Diseño en `docs/expert_panel_v1.md`. No se probó en navegador.
+
+## Confianza en el selector (`feat/selector-confidence`)
+
+`node tests/selector_confidence.test.js` comprueba que un fallo con confianza 90 produce `REPAIR` con el motivo nuevo; que con confianza 30 la decisión no cambia; que un acierto posterior, una evaluación supersedida o un evento legacy sin `learner_signal_version` desactivan la regla; que un `UNKNOWN` posterior no la borra; que la reparación abierta conserva prioridad (`RESUME_REPAIR`); y que el selector no modifica sus entradas. Diseño en `docs/selector_confidence_v1.md`. No se probó en navegador.
+
+## Producción corregida localmente (`feat/local-production`)
+
+`python tests/local_production_backend.test.py` y `node tests/local_production.test.js` comprueban con modelo simulado la corrección numérica (tolerancia del 2 %, unidad normalizada, coma decimal, número correcto con unidad distinta = fallo `units`, sin valor = `UNKNOWN`) y de orden (dos pasos intercambiados = fallo; pasos publicados barajados); que la clave no sale en la respuesta pública; la idempotencia por `attempt_id` y el conflicto con otra respuesta; el rechazo de ítems de otra meta, otro perfil u otra versión; `applicable:false` y la auditoría fallida dos veces sin guardar nada; y, en JS, la disponibilidad, el respaldo de numérico a orden, el registro como `EVIDENCE` independiente por el camino central con `evaluator_trust:'deterministic'`, que el fallo cuenta y `UNKNOWN` no suma, que un tema sin la dimensión en su cobertura no acredita ninguna y un humo de la vista. Diseño en `docs/local_production_v1.md`. No se probó con Gemini real ni en navegador.
+
+## Ejemplo que se desvanece (`feat/faded-examples`)
+
+`python tests/faded_examples_backend.test.py` y `node tests/faded_examples.test.js` comprueban con modelo simulado que el paquete (resuelto + huecos) se valida y guarda con ids `fade-`, sin clave pública; que 2 o 6 pasos, 0 o 3 huecos, un hueco que no pasa el filtro de calidad, enunciados iguales, pasos vacíos y la auditoría fallida dos veces rechazan todo sin guardar nada; que un ítem `fade-` no se responde por otras rutas ni al revés; y, en JS, que en modo `consolidate`, `repair` o sin modo no se pide, que un fallo de la ruta o un paquete inválido deja la lección continuar sin aviso, que el ejemplo se puede saltar y que responder huecos registra `FADED_STEP` sin ningún `EVIDENCE`, ni cobertura ni repasos. Diseño en `docs/faded_examples_v1.md`. No se probó con Gemini real ni en navegador.
+
+`node tests/open_answer_trust.test.js` comprueba que los aciertos calificados solo por el modelo exigen un ancla local (sin ancla no es suficiente; con ancla sí; una contradicción posterior la invalida), que los eventos anteriores y los deterministas cuentan como hoy, y que el marcador `TRUST` no es intento, acierto ni contradicción.
+
+`node tests/daily_session.test.js` comprueba que el plan diario es determinista, que respeta reparación abierta y poca cuota, que un tema sin enseñanza no entra en práctica mixta ni de cálculo, que cambiar de fecha crea un plan nuevo conservando el anterior en eventos, y que construir o saltar el plan no cambia cobertura, `verified()` ni calendario.
+
+## Perfil de experto por dominio
+
+`python tests/expert_profile_backend.test.py` y `node tests/expert_profile.test.js` comprueban con modelo simulado que el perfil se rechaza con 3 o 9 competencias, nombres repetidos, `area_ids` vacío o ajeno, riesgo inválido y criterio fuera de 20–220 caracteres; que una competencia con un área sin abrir nunca es «Demostrada», que una capa caducada no cuenta, y que `EXTERNAL_VALIDATION` no cambia `verified()`, cobertura ni capas.
+
+## Fuentes del aprendiz
+
+`python tests/grounded_sources_backend.test.py` y `node tests/grounded_sources.test.js` comprueban con modelo simulado que una cita ausente del fragmento o de menos de 20 caracteres se descarta (y sin citas válidas el estado es `uncited`), que una fuente de otro perfil o meta nunca se recupera, que el texto de la fuente queda dentro de `<<< >>>` sin delimitadores propios, los límites de longitud y de 20 fuentes, el duplicado, la recuperación determinista, el borrado en cascada y que sin fuentes el prompt no cambia. En JS, las tres insignias y que ninguna operación escribe evidencia.
