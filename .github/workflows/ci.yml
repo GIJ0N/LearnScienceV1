@@ -73,6 +73,7 @@ jobs:
           python tests/faded_examples_backend.test.py
           node tests/faded_examples.test.js
           node tests/open_answer_trust.test.js
+          node tests/daily_session.test.js
       - name: Run step lesson tests
         run: |
           node tests/step_lessons.test.js
