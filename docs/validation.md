@@ -67,6 +67,7 @@ node tests/delayed_review.test.js
 python tests/delayed_review_backend.test.py
 python tests/durable_memory.test.py
 node tests/durable_memory_frontend.test.js
+node tests/insecure_context_ids.test.js
 node tests/microtutoring_repair_episode.test.js
 node tests/repair_teaching_v2.test.js
 python tests/repair_teaching_backend.test.py

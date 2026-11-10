@@ -35,6 +35,13 @@ La app no tiene inicio de sesión. Quien pueda alcanzar la dirección puede usar
 Por eso se recomienda Tailscale (solo tus dispositivos) y no la Wi-Fi compartida ni una URL pública.
 Al arrancar con una dirección distinta de `127.0.0.1`, el servidor muestra un aviso.
 
+## Contexto no seguro (HTTP en IP)
+
+Por HTTP en una IP (p. ej. Tailscale) el navegador no está en contexto seguro (`window.isSecureContext === false`) y
+no expone APIs exclusivas de HTTPS como `crypto.randomUUID`. La app no debe usarlas sin respaldo: los IDs se generan con
+`uuid()` (usa `randomUUID` si existe, si no `getRandomValues`, y como último recurso tiempo + `Math.random`); el
+portapapeles ya degrada con un mensaje en español. `tests/insecure_context_ids.test.js` cubre este caso.
+
 ## Pruebas
 
 `tests/private_network_access.test.py`: valores por defecto idénticos, origen de Tailscale añadido, `0.0.0.0` sin
