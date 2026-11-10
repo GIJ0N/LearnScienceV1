@@ -76,6 +76,8 @@ jobs:
           node tests/daily_session.test.js
           python tests/expert_profile_backend.test.py
           node tests/expert_profile.test.js
+          python tests/grounded_sources_backend.test.py
+          node tests/grounded_sources.test.js
       - name: Run step lesson tests
         run: |
           node tests/step_lessons.test.js

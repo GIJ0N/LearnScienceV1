@@ -93,6 +93,8 @@ node tests/open_answer_trust.test.js
 node tests/daily_session.test.js
 python tests/expert_profile_backend.test.py
 node tests/expert_profile.test.js
+python tests/grounded_sources_backend.test.py
+node tests/grounded_sources.test.js
 ```
 
 `python tools/check_parity.py` extrae el valor de `HTML` con el parser AST de Python y exige una única pareja `<script>...</script>`. Compara `app.js` con ese bloque en una representación canónica LF: convierte únicamente `CRLF` y `CR` aislados en `LF`, sin ignorar espacios, tabulaciones, comillas, etiquetas ni ningún otro byte.
@@ -317,3 +319,7 @@ La respuesta correcta se descarta si es claramente la opción más larga: al men
 ## Perfil de experto por dominio
 
 `python tests/expert_profile_backend.test.py` y `node tests/expert_profile.test.js` comprueban con modelo simulado que el perfil se rechaza con 3 o 9 competencias, nombres repetidos, `area_ids` vacío o ajeno, riesgo inválido y criterio fuera de 20–220 caracteres; que una competencia con un área sin abrir nunca es «Demostrada», que una capa caducada no cuenta, y que `EXTERNAL_VALIDATION` no cambia `verified()`, cobertura ni capas.
+
+## Fuentes del aprendiz
+
+`python tests/grounded_sources_backend.test.py` y `node tests/grounded_sources.test.js` comprueban con modelo simulado que una cita ausente del fragmento o de menos de 20 caracteres se descarta (y sin citas válidas el estado es `uncited`), que una fuente de otro perfil o meta nunca se recupera, que el texto de la fuente queda dentro de `<<< >>>` sin delimitadores propios, los límites de longitud y de 20 fuentes, el duplicado, la recuperación determinista, el borrado en cascada y que sin fuentes el prompt no cambia. En JS, las tres insignias y que ninguna operación escribe evidencia.
