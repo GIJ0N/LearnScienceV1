@@ -83,6 +83,7 @@ python tests/evaluate_data_delimiters.test.py
 python tests/integration_novelty.test.py
 node tests/integration_novelty.test.js
 node tests/placement_skip_review.test.js
+node tests/expert_staleness.test.js
 ```
 
 `python tools/check_parity.py` extrae el valor de `HTML` con el parser AST de Python y exige una única pareja `<script>...</script>`. Compara `app.js` con ese bloque en una representación canónica LF: convierte únicamente `CRLF` y `CR` aislados en `LF`, sin ignorar espacios, tabulaciones, comillas, etiquetas ni ningún otro byte.
@@ -283,3 +284,7 @@ La respuesta correcta se descarta si es claramente la opción más larga: al men
 ## Repaso de temas saltados (`feat/placement-skip-review`)
 
 `node tests/placement_skip_review.test.js` comprueba que al terminar el diagnóstico seis temas saltados reciben seis repasos con vencimientos repartidos entre 1 y 5 días y un evento `PLACEMENT_REVIEW_SCHEDULED` cada uno; que un tema con repaso previo no cambia; que sin temas saltados no se programa nada; y que programar no cambia `verified()`, la cobertura ni los eventos de evidencia. Diseño en `docs/placement_skip_review_v1.md`. No se probó en navegador ni con Gemini real.
+
+## Caducidad del panel experto (`feat/expert-staleness`)
+
+`node tests/expert_staleness.test.js` (con reloj simulado) comprueba que una capa cumplida hace 61 días pasa a `stale` y la etiqueta del tema baja, que a los 59 sigue `met`, que el repaso correcto a 10 días es parcial y a 30 cumplido, que un repaso sin ayuda reciente evita la caducidad de retención y uno con ayuda no, que sin eventos la capa es `none`, que los eventos sin fecha no caducan, que la discriminación también caduca y que el panel no escribe eventos. `tests/expert_panel.test.js` actualizó sus umbrales de retención (7 → 30 y 1 → 7 días). Diseño en `docs/expert_panel_v1.md`. No se probó en navegador.

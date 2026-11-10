@@ -66,6 +66,7 @@ jobs:
           python tests/integration_novelty.test.py
           node tests/integration_novelty.test.js
           node tests/placement_skip_review.test.js
+          node tests/expert_staleness.test.js
       - name: Run step lesson tests
         run: |
           node tests/step_lessons.test.js

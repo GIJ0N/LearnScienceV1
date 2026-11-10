@@ -10,7 +10,7 @@ Mostrar con honestidad qué tan cerca está la persona de un nivel experto en ca
 |---|---|---|---|---|
 | 1 | Comprensión | Un acierto en la comprobación de comprensión | Hubo intentos, ninguno correcto | `EVIDENCE` de aprendizaje, fase `COMPREHENSION` |
 | 2 | Independencia | Dos aciertos independientes en actividades distintas | Uno | `EVIDENCE` con `is_independent` |
-| 3 | Retención | Repaso acertado sin ayuda tras ≥ 7 días desde la última exposición | Repaso acertado sin ayuda tras ≥ 1 día | `EVIDENCE` fase `REVIEW`, `help_used = 0` |
+| 3 | Retención | Repaso acertado sin ayuda tras ≥ 30 días desde la última exposición (v1.1; antes 7) | Repaso acertado sin ayuda tras ≥ 7 días (v1.1; antes 1) | `EVIDENCE` fase `REVIEW`, `help_used = 0` |
 | 4 | Discriminación | Dos aciertos y el último acierto | Un acierto, o último intento fallido | `DISCRIMINATION` |
 | 5 | Composición | Igual que discriminación | Igual | `COMPOSITION` |
 | 6 | Transferencia | Un acierto independiente en una variante nueva | Un acierto con ayuda en variante nueva | `EVIDENCE` con `is_novel_variant` |
@@ -47,3 +47,18 @@ Solo lectura en el cliente. Revertir elimina la vista; ningún dato se pierde ni
 ## Fuera de alcance
 
 Ponderar por antigüedad (olvido), comparar entre metas y exportar el panel.
+
+## v1.1: caducidad (`expert_panel_v1.1`)
+
+«Experto» no es para siempre. Cada capa calcula `last_at`: la fecha del evento más reciente que la sostiene. Si una capa estaría
+cumplida (`met`) y han pasado más de `EXPERT_STALE_DAYS = 60` desde `last_at`, su estado es `stale` y se muestra «Por revalidar» (↻).
+`stale` no cuenta en `met`, así que la etiqueta del tema baja; si no queda ninguna capa cumplida pero hay alguna parcial o caducada,
+la etiqueta es «Iniciando». La acción siguiente de una capa caducada es «Haz un repaso para revalidar».
+
+- Retención: un repaso correcto sin ayuda en los últimos 60 días la mantiene; un repaso con ayuda no la revalida.
+- Los umbrales de retención suben a 30 días (cumplida) y 7 días (parcial), antes 7 y 1.
+- Un evento sin fecha (datos legacy) no caduca: no se inventa antigüedad.
+- Sin eventos la capa sigue en `none`, nunca `stale`.
+- Solo lectura: el panel no escribe eventos ni cambia dominio, evidencia ni calendario de repasos.
+
+Rollback: revertir la vista; no hay datos nuevos. Límite: 60 días es un valor de ingeniería, no un umbral científico universal.
