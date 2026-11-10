@@ -87,6 +87,8 @@ node tests/expert_staleness.test.js
 node tests/selector_confidence.test.js
 python tests/local_production_backend.test.py
 node tests/local_production.test.js
+python tests/faded_examples_backend.test.py
+node tests/faded_examples.test.js
 ```
 
 `python tools/check_parity.py` extrae el valor de `HTML` con el parser AST de Python y exige una única pareja `<script>...</script>`. Compara `app.js` con ese bloque en una representación canónica LF: convierte únicamente `CRLF` y `CR` aislados en `LF`, sin ignorar espacios, tabulaciones, comillas, etiquetas ni ningún otro byte.
@@ -299,3 +301,7 @@ La respuesta correcta se descarta si es claramente la opción más larga: al men
 ## Producción corregida localmente (`feat/local-production`)
 
 `python tests/local_production_backend.test.py` y `node tests/local_production.test.js` comprueban con modelo simulado la corrección numérica (tolerancia del 2 %, unidad normalizada, coma decimal, número correcto con unidad distinta = fallo `units`, sin valor = `UNKNOWN`) y de orden (dos pasos intercambiados = fallo; pasos publicados barajados); que la clave no sale en la respuesta pública; la idempotencia por `attempt_id` y el conflicto con otra respuesta; el rechazo de ítems de otra meta, otro perfil u otra versión; `applicable:false` y la auditoría fallida dos veces sin guardar nada; y, en JS, la disponibilidad, el respaldo de numérico a orden, el registro como `EVIDENCE` independiente por el camino central con `evaluator_trust:'deterministic'`, que el fallo cuenta y `UNKNOWN` no suma, que un tema sin la dimensión en su cobertura no acredita ninguna y un humo de la vista. Diseño en `docs/local_production_v1.md`. No se probó con Gemini real ni en navegador.
+
+## Ejemplo que se desvanece (`feat/faded-examples`)
+
+`python tests/faded_examples_backend.test.py` y `node tests/faded_examples.test.js` comprueban con modelo simulado que el paquete (resuelto + huecos) se valida y guarda con ids `fade-`, sin clave pública; que 2 o 6 pasos, 0 o 3 huecos, un hueco que no pasa el filtro de calidad, enunciados iguales, pasos vacíos y la auditoría fallida dos veces rechazan todo sin guardar nada; que un ítem `fade-` no se responde por otras rutas ni al revés; y, en JS, que en modo `consolidate`, `repair` o sin modo no se pide, que un fallo de la ruta o un paquete inválido deja la lección continuar sin aviso, que el ejemplo se puede saltar y que responder huecos registra `FADED_STEP` sin ningún `EVIDENCE`, ni cobertura ni repasos. Diseño en `docs/faded_examples_v1.md`. No se probó con Gemini real ni en navegador.

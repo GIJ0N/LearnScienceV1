@@ -70,6 +70,8 @@ jobs:
           node tests/selector_confidence.test.js
           python tests/local_production_backend.test.py
           node tests/local_production.test.js
+          python tests/faded_examples_backend.test.py
+          node tests/faded_examples.test.js
       - name: Run step lesson tests
         run: |
           node tests/step_lessons.test.js
