@@ -100,6 +100,7 @@ python tests/direct_teaching_backend.test.py
 node tests/direct_teaching.test.js
 node tests/stuck_exits.test.js
 node tests/study_plan.test.js
+node tests/visual_theme.test.js
 node tests/qa_round8.test.js
 ```
 
@@ -349,3 +350,7 @@ La respuesta correcta se descarta si es claramente la opción más larga: al men
 ## Plan de estudios (`feat/study-plan`, fase 5 T4)
 
 `node tests/study_plan.test.js` comprueba con estado sintético que `studyPlan(goal, at)` es determinista y no escribe nada; que un tema con prerrequisito sin completar queda `locked` con `missing` y pasa a `ready` al completarlo (o al continuar con pendientes, sin declarar dominio); que `next` coincide con `selectTutorAction` y, si este no devuelve tema, cae al primer `ready`; que un tema saltado por diagnóstico es `skipped` y nunca `done`; que un repaso vencido se marca (`review` o `review_due`); que una meta sin áreas es un solo grupo «Ruta» y los temas fuera de toda área abierta no se pierden; que `unlocks` nunca supera 3 ni incluye dependientes indirectos; que la vista muestra la recomendación, los estados en palabras y, al elegir un tema bloqueado, «Te conviene primero» con «Ir a» y «Aprender este de todos modos» sin `confirm()`; que este último solo añade `PLAN_OVERRIDE` (más la decisión del tutor) y deja cobertura, `verified()` y repasos intactos; y que el inicio de la meta resume el plan y enlaza a la página completa. Diseño en `docs/study_plan_v1.md`. No se probó en navegador.
+
+## Sistema visual v2 (`feat/visual-theme-v2`, fase 5 T5)
+
+`node tests/visual_theme.test.js` comprueba que los 14 tokens existen con los valores del plan en el tema claro y en el oscuro; que los pares de texto (`--ink`/`--bg`, `--ink`/`--surface`, `--muted`/`--surface`, `--on-go`/`--go`, `--bad`/`--bad-bg`, `--sun`/`--surface`, `--info`/`--surface`) cumplen contraste WCAG ≥ 4.5 en ambos; que `VISUAL_CSS` incluye `prefers-reduced-motion`, `:focus-visible`, altura táctil de 44 px y la regla de 640 px; que toda clase asignada con `className=` en `app.js` tiene estilo; que el estilo se instala una sola vez con id `ruta-visual-v2`; y que el selector de tema recuerda la elección, ignora valores inválidos, no se rompe si `localStorage` lanza y no modifica la meta. No valida el aspecto real en un navegador.
