@@ -78,6 +78,14 @@ jobs:
           node tests/expert_profile.test.js
           python tests/grounded_sources_backend.test.py
           node tests/grounded_sources.test.js
+          python tests/direct_teaching_backend.test.py
+          node tests/direct_teaching.test.js
+          node tests/stuck_exits.test.js
+          node tests/study_plan.test.js
+          node tests/visual_theme.test.js
+          node tests/lesson_ui.test.js
+          node tests/path_ui.test.js
+          node tests/motivation.test.js
           node tests/qa_round8.test.js
       - name: Run step lesson tests
         run: |

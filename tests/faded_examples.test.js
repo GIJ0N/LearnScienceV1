@@ -106,5 +106,56 @@ const evidenceCount = g => g.events.filter(e => e.type === 'EVIDENCE').length;
     find('Saltar ejemplo').onclick(); roots.app.children = []; await p.session();
     assert.equal(g.lessons.a.faded_skipped, true); assert.ok(find('Ahora lo intento')); assert.ok(!has('Un ejemplo resuelto')); assert.equal(evidenceCount(g), 0); }
 
+  // T3 (fase 5): también tras la explicación completa. El botón «Ahora lo intento» lleva primero al ejemplo con huecos.
+  const settle = async (n = 12) => { for (let i = 0; i < n; i++) await new Promise(r => setImmediate(r)); };
+  const openFull = async g => { g.lessons.a.steps_skipped = true; roots.app.children = []; await settle(); await p.session(); };
+  const faded = () => calls.filter(c => c.route === '/api/lesson/faded').length;
+  for (const mode of ['initial', 'scaffold']) {
+    const g = attach(goal(mode)); calls = []; fadedResponse = goodPackage(); fadedError = null;
+    await openFull(g);
+    assert.ok(has('Una idea a la vez'), 'explicación completa'); assert.equal(faded(), 0, 'no se pide antes de pulsar');
+    find('Ahora lo intento').onclick(); await settle(); roots.app.children = []; await p.session();
+    assert.equal(faded(), 1, 'se pide el ejemplo antes de la comprobación (' + mode + ')');
+    assert.equal(g.session.mode, 'TEACH', 'aún no pasa a la comprobación');
+    assert.ok(has('Un ejemplo resuelto') && has('Problema con huecos')); assert.ok(find('Saltar ejemplo'), 'saltar siempre visible');
+    assert.equal(evidenceCount(g), 0, 'formativo: sin EVIDENCE');
+    // Saltar lleva a la comprobación y no vuelve a ofrecerse.
+    find('Saltar ejemplo').onclick(); await settle(); roots.app.children = []; await p.session(); await settle();
+    assert.equal(g.session.mode, 'COMPREHENSION'); assert.equal(g.lessons.a.faded_skipped, true); assert.equal(faded(), 1);
+    assert.equal(g.lessons.a.faded_requested, false);
+  }
+  { // Terminar los huecos y pulsar «Continuar» también lleva a la comprobación.
+    const g = attach(goal('initial')); calls = []; fadedResponse = goodPackage(); fadedError = null;
+    await openFull(g); find('Ahora lo intento').onclick(); await settle(); roots.app.children = []; await p.session();
+    const item = g.lessons.a.faded.faded.steps[1].check;
+    p.applyFadedStep(g, 'a', item, { status: 'CORRECT', item_id: item.item_id, node_id: 'a' }, 'att-t3', 'a', 70);
+    roots.app.children = []; await p.session(); assert.ok(has('Completaste el ejemplo con huecos'));
+    find('Continuar').onclick(); await settle(); roots.app.children = []; await p.session(); await settle();
+    assert.equal(g.lessons.a.faded_done, true); assert.equal(g.session.mode, 'COMPREHENSION'); assert.equal(faded(), 1);
+    assert.equal(evidenceCount(g), 0); assert.equal(p.verified(g, 'a'), false);
+  }
+  for (const mode of ['consolidate', 'repair', undefined]) {
+    const g = attach(goal(mode)); calls = []; fadedResponse = goodPackage(); fadedError = null;
+    await openFull(g); find('Ahora lo intento').onclick(); await settle(); roots.app.children = []; await p.session(); await settle();
+    assert.equal(faded(), 0, 'no se pide en modo ' + mode); assert.equal(g.session.mode, 'COMPREHENSION');
+  }
+  { // Ya mostrado tras la lección por pasos (hecho, saltado o visto): no se repite.
+    for (const flag of ['faded_done', 'faded_skipped', 'faded_exposed']) {
+      const g = attach(goal('initial')); calls = []; fadedResponse = goodPackage(); fadedError = null; g.lessons.a[flag] = true; g.lessons.a.faded = goodPackage();
+      await openFull(g); find('Ahora lo intento').onclick(); await settle(); roots.app.children = []; await p.session(); await settle();
+      assert.equal(faded(), 0, 'no se repite con ' + flag); assert.equal(g.session.mode, 'COMPREHENSION');
+    }
+  }
+  for (const failure of ['El servidor falló', 'No cumplió el contrato']) { // Fallo de la ruta: se continúa sin aviso de error.
+    const g = attach(goal('initial')); calls = []; fadedResponse = goodPackage(); fadedError = failure; roots.status.textContent = '';
+    await openFull(g); find('Ahora lo intento').onclick(); await settle(); roots.app.children = []; await p.session(); await settle(40);
+    assert.equal(g.lessons.a.faded, null); assert.equal(faded(), 1, 'un solo intento');
+    assert.equal(g.session.mode, 'COMPREHENSION', 'pasa a la comprobación'); assert.ok(!has('No pude'));
+  }
+  { // Paquete inválido: se descarta y se continúa.
+    const g = attach(goal('scaffold')); calls = []; fadedError = null; fadedResponse = { schema_version: 'faded_examples_v1', worked: { prompt: 'a', steps: ['x'] }, faded: { prompt: 'b', steps: [] } };
+    await openFull(g); find('Ahora lo intento').onclick(); await settle(); roots.app.children = []; await p.session(); await settle(40);
+    assert.equal(g.lessons.a.faded, null); assert.equal(g.session.mode, 'COMPREHENSION');
+  }
   console.log('faded_examples: OK');
 })().catch(e => { console.error(e); process.exit(1); });

@@ -137,6 +137,11 @@ para suficiencia si el tema tiene un ancla (acierto corregido localmente posteri
 o confirmación `OPEN_ANSWER`). Los aciertos deterministas cuentan sin ancla y los eventos anteriores a la política cuentan como antes.
 Una contradicción posterior invalida el ancla. Ver `docs/open_answer_trust_v1.md`.
 
+## Enseñanza directa
+Desde `direct_teaching_v1`, un «No sé» declarado en la práctica principal abre una explicación corta. Leerla es exposición y su comprobación
+(`DIRECT_CHECK`) es formativa: ninguna crea `EVIDENCE` ni toca cobertura, calendario o panel. La respuesta posterior a esa pregunta cuenta con
+ayuda (`help_used>=1`, no independiente). Ver `docs/direct_teaching_v1.md`.
+
 ## Alcance pendiente
 
 No hay verificación semántica de paráfrasis, calibración científica del umbral de dos,

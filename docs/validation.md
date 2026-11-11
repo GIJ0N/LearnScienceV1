@@ -96,6 +96,14 @@ python tests/expert_profile_backend.test.py
 node tests/expert_profile.test.js
 python tests/grounded_sources_backend.test.py
 node tests/grounded_sources.test.js
+python tests/direct_teaching_backend.test.py
+node tests/direct_teaching.test.js
+node tests/stuck_exits.test.js
+node tests/study_plan.test.js
+node tests/visual_theme.test.js
+node tests/lesson_ui.test.js
+node tests/path_ui.test.js
+node tests/motivation.test.js
 node tests/qa_round8.test.js
 ```
 
@@ -329,3 +337,36 @@ La respuesta correcta se descarta si es claramente la opción más larga: al men
 ## QA ronda 8: etiquetas en español, selector seguro y tamaño de fuentes
 
 `node tests/qa_round8.test.js` comprueba que todos los tipos de error del evaluador tienen etiqueta en español (sin «attention» visible). `selector_confidence.test.js` cubre ahora que un fallo seguro en un tema posterior al primer pendiente repara ese tema, y `grounded_sources.test.js` que una fuente corta no se rotula «1 mil caracteres».
+
+## Enseñanza directa (`feat/direct-teaching`, fase 5 T1)
+
+`python tests/direct_teaching_backend.test.py` y `node tests/direct_teaching.test.js` comprueban con modelo simulado que el paquete (ideas, pasos, ejemplo análogo y comprobación) se valida y guarda con ids `direct-`, sin clave pública; que 1 o 5 pasos, ideas vacías o de más de tres, pasos fuera de 20–450 caracteres, un ejemplo con el enunciado de la pregunta, un paso que contiene el criterio interno, una comprobación que no pasa el filtro de calidad o que repite la pregunta, y la auditoría fallida dos veces rechazan todo sin guardar nada (una sola falla reintenta con el motivo); que la pregunta y el criterio viajan entre `<<< >>>`; y que un ítem `direct-` no se responde por otras rutas ni al revés, ni desde otro perfil o meta. En JS: que el botón «No sé» existe en las fases de práctica y no en el diagnóstico ni la confirmación; que un «No sé» declarado crea `s.direct` y `DIRECT_TEACHING` con el `UNKNOWN` como único `EVIDENCE`; que un `UNKNOWN` con otro `error_type` conserva el comportamiento anterior; que la enseñanza avanza un paso por pantalla y `DIRECT_CHECK` no crea `EVIDENCE`; que, tras volver, el acierto a esa pregunta no es independiente (la línea base sin enseñanza sí lo es); que en `REVIEW` el calendario no cambia; que un segundo «No sé» ofrece la lección completa sin otra llamada; y que un fallo de la ruta o un paquete mal formado deja la sesión utilizable. Diseño en `docs/direct_teaching_v1.md`. No se probó con Gemini real ni en navegador.
+
+## Salidas cuando la reparación no ayuda (`feat/stuck-exits`, fase 5 T2)
+
+`node tests/stuck_exits.test.js` comprueba con modelo simulado que un diagnóstico de reparación terminado sin laguna confirmada (cierre `PARTIAL`) deja `s.stuck` con el intento padre y ofrece «Enséñamelo» sin crear `EVIDENCE` extra; que aceptar abre la enseñanza directa de esa pregunta con `source_attempt_id` del intento que abrió la reparación y registra `STUCK_OFFER` con `accepted:true` (y `false` con «Ahora no»); que una laguna confirmada, `closeRepairEpisode` directo o un abandono no ofrecen nada; que contestar la pregunta o elegir otro tema borra la oferta; y que «Abandonar reparación» desde el inicio de la meta deja el mismo estado (episodio, pila de contextos, sesión, eventos, evidencia y cobertura) que el «Abandonar episodio» existente, y no aparece sin episodio abierto. Diseño en `docs/stuck_exits_v1.md`. No se probó con Gemini real ni en navegador.
+
+## Ejemplo con huecos tras la explicación completa (`feat/faded-after-explanation`, fase 5 T3)
+
+`node tests/faded_examples.test.js` cubre ahora, además de lo anterior, que con la explicación completa y modo `initial` o `scaffold` «Ahora lo intento» pide el ejemplo antes de la comprobación (y que saltarlo o terminarlo lleva a ella sin volver a ofrecerlo); que en modo `consolidate`, `repair` o sin modo no se pide; que un ejemplo ya hecho, saltado o visto no se repite; y que un fallo de la ruta o un paquete inválido pasa a la comprobación sin aviso de error. Diseño en `docs/faded_examples_v1.md`. No se probó con Gemini real ni en navegador.
+
+## Plan de estudios (`feat/study-plan`, fase 5 T4)
+
+`node tests/study_plan.test.js` comprueba con estado sintético que `studyPlan(goal, at)` es determinista y no escribe nada; que un tema con prerrequisito sin completar queda `locked` con `missing` y pasa a `ready` al completarlo (o al continuar con pendientes, sin declarar dominio); que `next` coincide con `selectTutorAction` y, si este no devuelve tema, cae al primer `ready`; que un tema saltado por diagnóstico es `skipped` y nunca `done`; que un repaso vencido se marca (`review` o `review_due`); que una meta sin áreas es un solo grupo «Ruta» y los temas fuera de toda área abierta no se pierden; que `unlocks` nunca supera 3 ni incluye dependientes indirectos; que la vista muestra la recomendación, los estados en palabras y, al elegir un tema bloqueado, «Te conviene primero» con «Ir a» y «Aprender este de todos modos» sin `confirm()`; que este último solo añade `PLAN_OVERRIDE` (más la decisión del tutor) y deja cobertura, `verified()` y repasos intactos; y que el inicio de la meta resume el plan y enlaza a la página completa. Diseño en `docs/study_plan_v1.md`. No se probó en navegador.
+
+## Sistema visual v2 (`feat/visual-theme-v2`, fase 5 T5)
+
+`node tests/visual_theme.test.js` comprueba que los 14 tokens existen con los valores del plan en el tema claro y en el oscuro; que los pares de texto (`--ink`/`--bg`, `--ink`/`--surface`, `--muted`/`--surface`, `--on-go`/`--go`, `--bad`/`--bad-bg`, `--sun`/`--surface`, `--info`/`--surface`) cumplen contraste WCAG ≥ 4.5 en ambos; que `VISUAL_CSS` incluye `prefers-reduced-motion`, `:focus-visible`, altura táctil de 44 px y la regla de 640 px; que toda clase asignada con `className=` en `app.js` tiene estilo; que el estilo se instala una sola vez con id `ruta-visual-v2`; y que el selector de tema recuerda la elección, ignora valores inválidos, no se rompe si `localStorage` lanza y no modifica la meta. No valida el aspecto real en un navegador.
+
+## Pantalla de lección (`feat/lesson-ui`, fase 5 T6)
+
+`node tests/lesson_ui.test.js` comprueba que `lessonProgress` devuelve las cinco etapas en orden sin marcar `done` ninguna posterior a la actual y una sola etapa en los demás modos; que `verdictInfo` mapea `CORRECT`→`.good`, `PARTIAL`→`.bad` «Casi: falta una parte», `MISCONCEPTION`→`.bad` «No es correcto» y cualquier otro estado (incluido `UNKNOWN`) →`.unknown` «Sin evaluar», con el feedback íntegro; que la sesión muestra el progreso en texto, mueve «Cobertura», «Por qué se eligió» y «Adaptación» a «Por qué esta actividad» y conserva todos los textos y botones de antes; que tras responder solo «Continuar» es principal; y que el hito solo aparece tras un acierto con el tema verificado, dice «Completado con apoyo» si hubo ayuda, no aparece tras `PARTIAL`, `MISCONCEPTION`, `UNKNOWN` ni sin verificación, queda obsoleto con evidencia posterior y no escribe eventos al cerrarlo. No valida el aspecto real en un navegador.
+
+## Inicio como camino (`feat/path-ui`, fase 5 T7)
+
+`node tests/path_ui.test.js` comprueba que el inicio de la meta tiene exactamente un nodo `is-next`, el recomendado por `studyPlan`, con el único botón principal «Seguir: <tema>»; que un tema con prerrequisito sin completar es `is-locked`, uno verificado `is-done` y uno saltado `is-skipped` y nunca `is-done`; que las áreas sin abrir van al final atenuadas con «≈N temas»; que el orden es encabezado, camino, «Más práctica» plegado y cifras; que todos los botones del inicio anterior (lista medida con el código de T6) siguen en el árbol; que la línea se dibuja una sola vez por carga; y que pintar el inicio no escribe evidencia. No valida el aspecto real en un navegador.
+
+## Racha y meta diaria (`feat/motivation`, fase 5 T8)
+
+`node tests/motivation.test.js` comprueba qué cuenta como respuesta de estudio (aciertos y fallos sí; exposición, «No sé», auditoría, correcciones y eventos de registro no); la racha (3 respuestas por día, un hueco por cada 7 días, dos huecos cercanos la rompen, hoy sin estudiar no rompe, racha rota vuelve a 1, cruce de medianoche con fecha local, varias metas suman); la meta diaria 5/10/20 con valores inválidos rechazados y guardada solo en `store.motivation` sin tocar las metas; la pantalla (racha en la navegación, anillo, selector, hito una vez por día y sin escribir eventos, sin las palabras «dominio», «nivel» ni «experto»); y que plan y cobertura no cambian. No valida la sensación de uso en un teléfono.
+
