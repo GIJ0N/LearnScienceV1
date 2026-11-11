@@ -62,25 +62,27 @@ function attach(g) { p.setProfileForTests({ profile_id: 'profile-test', name: 'S
   assert.equal(g.lessons.a, undefined);
 
   // Página «Fuentes»: lista, aviso fijo, formulario, alta, duplicado y borrado.
-  sources = [{ source_id: 'src-1', title: 'Ficha técnica', source_date: '2026-10-01', chars: 4200 }];
+  sources = [{ source_id: 'src-1', title: 'Ficha técnica', source_date: '2026-10-01', chars: 4200 }, { source_id: 'src-2', title: 'Nota breve', source_date: '', chars: 312 }];
   g = attach(goal()); calls = [];
   await p.sourcesView();
   const page = roots.app;
   assert.match(texts(page), /El texto se envía a Gemini \(Google\)/);
   assert.match(texts(page), /Ficha técnica · 2026-10-01 · 4 mil caracteres/);
   assert.ok(find(page, 'Añadir fuente') && find(page, 'Borrar'));
-  assert.equal(g.sources_count, 1);
+  assert.match(texts(page), /Nota breve · 312 caracteres/, 'una fuente corta no se muestra como «1 mil»');
+  assert.doesNotMatch(texts(page), /1 mil caracteres/);
+  assert.equal(g.sources_count, 2);
   assert.deepEqual(calls.filter(c => c.route === '/api/sources/list').map(c => c.body.goal_id), ['g']);
   assert.equal(calls.find(c => c.route === '/api/sources/list').body.profile_id, 'profile-test');
 
   const added = await p.addSource(g, { title: 'Norma', source_date: '', text: 'x'.repeat(300) });
   assert.equal(added.duplicate, false);
   assert.equal(calls.find(c => c.route === '/api/sources/add').body.goal_id, 'g');
-  assert.equal((await p.fetchSources(g)).length, 2);
-  assert.equal(g.sources_count, 2);
+  assert.equal((await p.fetchSources(g)).length, 3);
+  assert.equal(g.sources_count, 3);
   assert.equal((await p.addSource(g, { title: 'dup', text: 'y' })).duplicate, true);
   await p.removeSource(g, 'src-1');
-  assert.equal((await p.fetchSources(g)).length, 1);
+  assert.equal((await p.fetchSources(g)).length, 2);
 
   // Fallo al listar: mensaje, sin romper.
   failList = true; attach(goal()); await p.sourcesView();
