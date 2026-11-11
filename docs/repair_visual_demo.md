@@ -25,5 +25,6 @@ Abre `http://127.0.0.1:8907/`, selecciona **DEMO VISUAL SINTÉTICA**, abre la me
 7. Responde INDEPENDENT, el reintento padre y la transferencia con texto que contenga `correcta`, sin pedir ayuda.
 8. Recarga. Debe existir un solo episodio `COMPLETED`, sin diagnóstico pendiente y sin intentos duplicados.
 9. Para comprobar abstención admitida por la política, responde exactamente `No sé`: se registra `UNKNOWN` sin evidencia positiva ni apertura automática de otra reparación.
+10. En la actividad principal (fuera de una reparación) pulsa **No sé** o escribe `No sé`: se registra el mismo `UNKNOWN` sin evidencia positiva y, al continuar, se abre la enseñanza directa (`direct_teaching_v1`). El demo controlado no implementa `/api/teach/direct`, así que esa pantalla termina en «No pude preparar la explicación ahora.» con las opciones «Ver la lección completa» y «Reintentar».
 
 Los textos `correcta`, `respuesta incorrecta` y `no comprendo` son controles explícitos del proveedor simulado; no demuestran calidad de evaluación semántica. Las claves y referencias privadas de la actividad por criterios permanecen en SQLite y no se incluyen en el perfil cargado por la interfaz.
