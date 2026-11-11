@@ -103,6 +103,7 @@ node tests/study_plan.test.js
 node tests/visual_theme.test.js
 node tests/lesson_ui.test.js
 node tests/path_ui.test.js
+node tests/motivation.test.js
 node tests/qa_round8.test.js
 ```
 
@@ -364,4 +365,8 @@ La respuesta correcta se descarta si es claramente la opción más larga: al men
 ## Inicio como camino (`feat/path-ui`, fase 5 T7)
 
 `node tests/path_ui.test.js` comprueba que el inicio de la meta tiene exactamente un nodo `is-next`, el recomendado por `studyPlan`, con el único botón principal «Seguir: <tema>»; que un tema con prerrequisito sin completar es `is-locked`, uno verificado `is-done` y uno saltado `is-skipped` y nunca `is-done`; que las áreas sin abrir van al final atenuadas con «≈N temas»; que el orden es encabezado, camino, «Más práctica» plegado y cifras; que todos los botones del inicio anterior (lista medida con el código de T6) siguen en el árbol; que la línea se dibuja una sola vez por carga; y que pintar el inicio no escribe evidencia. No valida el aspecto real en un navegador.
+
+## Racha y meta diaria (`feat/motivation`, fase 5 T8)
+
+`node tests/motivation.test.js` comprueba qué cuenta como respuesta de estudio (aciertos y fallos sí; exposición, «No sé», auditoría, correcciones y eventos de registro no); la racha (3 respuestas por día, un hueco por cada 7 días, dos huecos cercanos la rompen, hoy sin estudiar no rompe, racha rota vuelve a 1, cruce de medianoche con fecha local, varias metas suman); la meta diaria 5/10/20 con valores inválidos rechazados y guardada solo en `store.motivation` sin tocar las metas; la pantalla (racha en la navegación, anillo, selector, hito una vez por día y sin escribir eventos, sin las palabras «dominio», «nivel» ni «experto»); y que plan y cobertura no cambian. No valida la sensación de uso en un teléfono.
 
