@@ -58,6 +58,8 @@ Tablas nuevas `placement_items` y `placement_answers` con `CREATE TABLE IF NOT E
 
 ## Fuera de alcance
 
-Preguntas abiertas en el diagnóstico, uso de las relaciones entre metas para deducir, y repaso programado de los temas saltados.
+Preguntas abiertas en el diagnóstico y uso de las relaciones entre metas para deducir.
+
+El repaso programado de los temas saltados ya existe: ver `docs/placement_skip_review_v1.md`.
 
 Si la revisión descarta todas las preguntas del diagnóstico, se regenera una vez con el motivo; un descarte parcial no reintenta (ronda QA 7).

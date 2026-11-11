@@ -34,3 +34,6 @@ y vuelve a contar los aciertos del modelo; los marcadores `TRUST` se ignoran.
 
 ## Pruebas
 `tests/open_answer_trust.test.js` y `test_open_answer_source_accepted` en `tests/local_confirmation_backend.test.py`.
+
+## Ajuste (auditoría del plan)
+Además del aviso «Falta una confirmación rápida» (2 aciertos del modelo sin ancla), tras un solo acierto abierto calificado por el modelo en práctica independiente, integración o repaso se ofrece «Confirma con una pregunta rápida» (`anchorSuggest`), si el tema no tiene ancla, esa respuesta no se confirmó ya y no hay otra práctica ni reparación activa. El nacimiento del ancla se prueba por el flujo real de `applyDiscrimination`.

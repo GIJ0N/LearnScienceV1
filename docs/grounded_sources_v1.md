@@ -30,3 +30,6 @@ Una cita verificada prueba que la frase está en la fuente, no que la explicaci�
 
 ## Pruebas
 `tests/grounded_sources_backend.test.py` y `tests/grounded_sources.test.js`.
+
+## Ajuste (auditoría del plan)
+La insignia de fuente y «Regenerar con mis fuentes» también se muestran en la lección por pasos, no solo en la explicación completa.

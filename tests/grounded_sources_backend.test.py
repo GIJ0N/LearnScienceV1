@@ -154,6 +154,16 @@ class LessonGrounding(Base):
         self.assertNotIn('citations', self.schema['required'])
         self.assertIn('citations', self.schema['properties'])
 
+    def test_prompt_identical_with_and_without_unrelated_sources(self):
+        self.lesson(lesson_raw())
+        base = self.prompt
+        self.add(profile=self.other)
+        self.add(goal='otra-meta')
+        self.add(text='Texto sin relación alguna con la lección: recetas de cocina, harina, levadura y hornos domésticos. ' * 4, title='Sin relación')
+        out = self.lesson(lesson_raw())
+        self.assertEqual(self.prompt, base, 'sin fragmentos recuperados el prompt es idéntico')
+        self.assertEqual(out['grounding']['status'], 'no_sources')
+
     def test_valid_citation_cited(self):
         self.add()
         quote = 'sesenta a ochenta micras en la pieza curada'
