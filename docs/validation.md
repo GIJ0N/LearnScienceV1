@@ -101,6 +101,7 @@ node tests/direct_teaching.test.js
 node tests/stuck_exits.test.js
 node tests/study_plan.test.js
 node tests/visual_theme.test.js
+node tests/lesson_ui.test.js
 node tests/qa_round8.test.js
 ```
 
@@ -354,3 +355,7 @@ La respuesta correcta se descarta si es claramente la opción más larga: al men
 ## Sistema visual v2 (`feat/visual-theme-v2`, fase 5 T5)
 
 `node tests/visual_theme.test.js` comprueba que los 14 tokens existen con los valores del plan en el tema claro y en el oscuro; que los pares de texto (`--ink`/`--bg`, `--ink`/`--surface`, `--muted`/`--surface`, `--on-go`/`--go`, `--bad`/`--bad-bg`, `--sun`/`--surface`, `--info`/`--surface`) cumplen contraste WCAG ≥ 4.5 en ambos; que `VISUAL_CSS` incluye `prefers-reduced-motion`, `:focus-visible`, altura táctil de 44 px y la regla de 640 px; que toda clase asignada con `className=` en `app.js` tiene estilo; que el estilo se instala una sola vez con id `ruta-visual-v2`; y que el selector de tema recuerda la elección, ignora valores inválidos, no se rompe si `localStorage` lanza y no modifica la meta. No valida el aspecto real en un navegador.
+
+## Pantalla de lección (`feat/lesson-ui`, fase 5 T6)
+
+`node tests/lesson_ui.test.js` comprueba que `lessonProgress` devuelve las cinco etapas en orden sin marcar `done` ninguna posterior a la actual y una sola etapa en los demás modos; que `verdictInfo` mapea `CORRECT`→`.good`, `PARTIAL`→`.bad` «Casi: falta una parte», `MISCONCEPTION`→`.bad` «No es correcto» y cualquier otro estado (incluido `UNKNOWN`) →`.unknown` «Sin evaluar», con el feedback íntegro; que la sesión muestra el progreso en texto, mueve «Cobertura», «Por qué se eligió» y «Adaptación» a «Por qué esta actividad» y conserva todos los textos y botones de antes; que tras responder solo «Continuar» es principal; y que el hito solo aparece tras un acierto con el tema verificado, dice «Completado con apoyo» si hubo ayuda, no aparece tras `PARTIAL`, `MISCONCEPTION`, `UNKNOWN` ni sin verificación, queda obsoleto con evidencia posterior y no escribe eventos al cerrarlo. No valida el aspecto real en un navegador.

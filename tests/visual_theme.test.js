@@ -26,10 +26,12 @@ const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) +
   assert.ok(L.includes('color-scheme:light') && D.includes('color-scheme:dark'));
 
   // Contraste WCAG AA (≥ 4.5) en ambos temas.
-  const pairs = [['ink', 'bg'], ['ink', 'surface'], ['muted', 'surface'], ['on-go', 'go'], ['bad', 'bad-bg'], ['sun', 'surface'], ['info', 'surface']];
+  const pairs = [['ink', 'bg'], ['ink', 'surface'], ['muted', 'surface'], ['on-go', 'go'], ['bad', 'bad-bg'], ['sun', 'surface'], ['info', 'surface'], ['ink', 'good-bg'], ['ink', 'bad-bg'], ['ink', 'unknown-bg'], ['muted', 'unknown-bg']];
   for (const [name, set] of [['claro', light], ['oscuro', dark]]) for (const [a, b] of pairs) {
     const r = ratio(set[a], set[b]); assert.ok(r >= 4.5, `contraste ${name} --${a} sobre --${b}: ${r.toFixed(2)} < 4.5`);
   }
+  // Titular del veredicto correcto: --go-deep en claro, --go en oscuro, sobre --good-bg.
+  assert.ok(ratio(light['go-deep'], light['good-bg']) >= 4.5 && ratio(dark.go, dark['good-bg']) >= 4.5, 'titular «Correcto» legible');
 
   // Accesibilidad y movimiento.
   assert.ok(css.includes('prefers-reduced-motion'), 'respeta movimiento reducido');
