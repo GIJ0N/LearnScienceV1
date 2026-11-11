@@ -98,6 +98,7 @@ python tests/grounded_sources_backend.test.py
 node tests/grounded_sources.test.js
 python tests/direct_teaching_backend.test.py
 node tests/direct_teaching.test.js
+node tests/stuck_exits.test.js
 node tests/qa_round8.test.js
 ```
 
@@ -335,3 +336,7 @@ La respuesta correcta se descarta si es claramente la opción más larga: al men
 ## Enseñanza directa (`feat/direct-teaching`, fase 5 T1)
 
 `python tests/direct_teaching_backend.test.py` y `node tests/direct_teaching.test.js` comprueban con modelo simulado que el paquete (ideas, pasos, ejemplo análogo y comprobación) se valida y guarda con ids `direct-`, sin clave pública; que 1 o 5 pasos, ideas vacías o de más de tres, pasos fuera de 20–450 caracteres, un ejemplo con el enunciado de la pregunta, un paso que contiene el criterio interno, una comprobación que no pasa el filtro de calidad o que repite la pregunta, y la auditoría fallida dos veces rechazan todo sin guardar nada (una sola falla reintenta con el motivo); que la pregunta y el criterio viajan entre `<<< >>>`; y que un ítem `direct-` no se responde por otras rutas ni al revés, ni desde otro perfil o meta. En JS: que el botón «No sé» existe en las fases de práctica y no en el diagnóstico ni la confirmación; que un «No sé» declarado crea `s.direct` y `DIRECT_TEACHING` con el `UNKNOWN` como único `EVIDENCE`; que un `UNKNOWN` con otro `error_type` conserva el comportamiento anterior; que la enseñanza avanza un paso por pantalla y `DIRECT_CHECK` no crea `EVIDENCE`; que, tras volver, el acierto a esa pregunta no es independiente (la línea base sin enseñanza sí lo es); que en `REVIEW` el calendario no cambia; que un segundo «No sé» ofrece la lección completa sin otra llamada; y que un fallo de la ruta o un paquete mal formado deja la sesión utilizable. Diseño en `docs/direct_teaching_v1.md`. No se probó con Gemini real ni en navegador.
+
+## Salidas cuando la reparación no ayuda (`feat/stuck-exits`, fase 5 T2)
+
+`node tests/stuck_exits.test.js` comprueba con modelo simulado que un diagnóstico de reparación terminado sin laguna confirmada (cierre `PARTIAL`) deja `s.stuck` con el intento padre y ofrece «Enséñamelo» sin crear `EVIDENCE` extra; que aceptar abre la enseñanza directa de esa pregunta con `source_attempt_id` del intento que abrió la reparación y registra `STUCK_OFFER` con `accepted:true` (y `false` con «Ahora no»); que una laguna confirmada, `closeRepairEpisode` directo o un abandono no ofrecen nada; que contestar la pregunta o elegir otro tema borra la oferta; y que «Abandonar reparación» desde el inicio de la meta deja el mismo estado (episodio, pila de contextos, sesión, eventos, evidencia y cobertura) que el «Abandonar episodio» existente, y no aparece sin episodio abierto. Diseño en `docs/stuck_exits_v1.md`. No se probó con Gemini real ni en navegador.
