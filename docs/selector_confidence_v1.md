@@ -27,3 +27,6 @@ Campo derivado en memoria; no se guarda. Revertir devuelve el selector anterior.
 
 Si el fallo ya contradecía la evidencia de una dimensión, el selector ya elegía `REPAIR`; la regla nueva sirve sobre todo cuando el fallo seguro
 no quedó reflejado en la cobertura. Una confianza ≥ 70 % es un umbral de ingeniería, no un diagnóstico de la persona.
+
+## Ajuste (QA ronda 8)
+La regla original solo se aplicaba al primer tema pendiente de la ruta; con un fallo seguro en otro tema el selector seguía hacia el primer pendiente. Ahora, sin foco explícito, el selector elige primero el tema con un fallo seguro vigente (el más reciente, `committed_at`) que no sea suficiente ni esté continuado. Un foco explícito se respeta. El resto de la regla no cambia.

@@ -81,4 +81,20 @@ const before = JSON.stringify(g);
 decide(g);
 assert.equal(JSON.stringify(g), before);
 
+// QA ronda 8: el fallo seguro está en un tema posterior al primer pendiente → igual se repara ese tema.
+{
+  const three = goal([]); three.nodes = [node('a', 0), node('b', 1), node('c', 2)];
+  three.coverage = ['a', 'b', 'c'].map(id => ({ id, name: id, status: 'UNKNOWN', confidence: 0, dimensions: [{ id: 'conceptual', name: 'c', required: true, status: 'UNKNOWN', evidence: [] }] }));
+  three.events = [evidence('MISCONCEPTION', 95, { node_id: 'c' })];
+  const dd = decide(three);
+  assert.equal(dd.action, 'REPAIR');
+  assert.equal(dd.node_id, 'c', 'repara el tema del fallo, no el primer pendiente');
+  assert.ok(p.learningState(three, 'c', NOW).committed_at > 0);
+  // Con foco explícito en otro tema se respeta el foco.
+  assert.notEqual(p.selectTutorAction(three, NOW, { reselect: true, focus: 'a' }).node_id, 'c');
+  // Si luego acierta ese tema deja de mandar a reparar.
+  three.events.push(evidence('CORRECT', 80, { node_id: 'c' }));
+  assert.notEqual(decide(three).action, 'REPAIR');
+}
+
 console.log('selector_confidence: OK');
