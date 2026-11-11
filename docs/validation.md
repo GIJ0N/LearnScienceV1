@@ -99,6 +99,7 @@ node tests/grounded_sources.test.js
 python tests/direct_teaching_backend.test.py
 node tests/direct_teaching.test.js
 node tests/stuck_exits.test.js
+node tests/study_plan.test.js
 node tests/qa_round8.test.js
 ```
 
@@ -344,3 +345,7 @@ La respuesta correcta se descarta si es claramente la opción más larga: al men
 ## Ejemplo con huecos tras la explicación completa (`feat/faded-after-explanation`, fase 5 T3)
 
 `node tests/faded_examples.test.js` cubre ahora, además de lo anterior, que con la explicación completa y modo `initial` o `scaffold` «Ahora lo intento» pide el ejemplo antes de la comprobación (y que saltarlo o terminarlo lleva a ella sin volver a ofrecerlo); que en modo `consolidate`, `repair` o sin modo no se pide; que un ejemplo ya hecho, saltado o visto no se repite; y que un fallo de la ruta o un paquete inválido pasa a la comprobación sin aviso de error. Diseño en `docs/faded_examples_v1.md`. No se probó con Gemini real ni en navegador.
+
+## Plan de estudios (`feat/study-plan`, fase 5 T4)
+
+`node tests/study_plan.test.js` comprueba con estado sintético que `studyPlan(goal, at)` es determinista y no escribe nada; que un tema con prerrequisito sin completar queda `locked` con `missing` y pasa a `ready` al completarlo (o al continuar con pendientes, sin declarar dominio); que `next` coincide con `selectTutorAction` y, si este no devuelve tema, cae al primer `ready`; que un tema saltado por diagnóstico es `skipped` y nunca `done`; que un repaso vencido se marca (`review` o `review_due`); que una meta sin áreas es un solo grupo «Ruta» y los temas fuera de toda área abierta no se pierden; que `unlocks` nunca supera 3 ni incluye dependientes indirectos; que la vista muestra la recomendación, los estados en palabras y, al elegir un tema bloqueado, «Te conviene primero» con «Ir a» y «Aprender este de todos modos» sin `confirm()`; que este último solo añade `PLAN_OVERRIDE` (más la decisión del tutor) y deja cobertura, `verified()` y repasos intactos; y que el inicio de la meta resume el plan y enlaza a la página completa. Diseño en `docs/study_plan_v1.md`. No se probó en navegador.
