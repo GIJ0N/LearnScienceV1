@@ -20,7 +20,7 @@ Pasar de leer a resolver sin salto, solo para quien lo necesita.
 
 ## Cliente
 
-- Se ofrece al terminar la lección por pasos y antes de la comprobación, solo si `lesson.adaptation_mode` es `initial` o `scaffold`
+- Se ofrece al terminar la lección por pasos y antes de la comprobación **y**, desde la fase 5 (T3), también tras la explicación completa: «Ahora lo intento» lleva primero al ejemplo (`lesson.faded_requested`) y, al terminar o saltar, a la comprobación. Solo si `lesson.adaptation_mode` es `initial` o `scaffold`
   (nunca `consolidate` ni `repair`, ni lecciones sin modo).
 - Estado en `lesson.faded`: `undefined` = no pedido; `null` = no disponible. Si la ruta falla o el paquete no es válido, `lesson.faded=null`,
   la lección sigue como hoy, sin aviso de error y sin reintentos automáticos.
@@ -39,5 +39,10 @@ Campos y tipo de evento aditivos. Las lecciones ya guardadas no cambian. Reverti
 
 ## Límites
 
-No se ofrece en la explicación completa (solo tras la lección por pasos). La calidad pedagógica del ejemplo depende del modelo y del auditor
+No se ofrece dos veces en la misma lección: si el ejemplo ya se vio (hecho, saltado o `faded_exposed`) tras la lección por pasos, la explicación completa no lo repite. La calidad pedagógica del ejemplo depende del modelo y del auditor
 (que falla abierto). No se mide si el ejemplo con huecos mejora el aprendizaje: eso exige datos de uso reales.
+
+## Fase 5 (T3): tras la explicación completa
+
+- Cuando la lección por pasos falla la revisión de contenido y se muestra la explicación completa, el ejemplo ya no se pierde: se ofrece con las mismas reglas (modos `initial` y `scaffold`; `faded===null` es no disponible y no se reintenta; «Saltar ejemplo» siempre visible; un fallo de la ruta continúa sin aviso).
+- Sigue siendo formativo: sin `EVIDENCE`, cobertura ni calendario.
