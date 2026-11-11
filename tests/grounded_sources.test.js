@@ -61,6 +61,16 @@ function attach(g) { p.setProfileForTests({ profile_id: 'profile-test', name: 'S
   assert.equal(p.regenerateWithSources(g, g.nodes[0]), true);
   assert.equal(g.lessons.a, undefined);
 
+  // Auditoría del plan: la insignia también aparece en la lección por pasos.
+  {
+    const cited = { status: 'cited', citations: [{ source_id: 's1', title: 'Ficha técnica', source_date: '', quote: 'sesenta a ochenta micras' }] };
+    const step = i => ({ step_id: 's' + i, predict: 'p', body: 'b', check: { item_id: 'step-' + i } });
+    const sg = attach(goal({ ...lesson(cited), adaptation_mode: 'consolidate', steps: [step(1), step(2)] }));
+    const sb = element();
+    await p.stepLessonView(sb, sg, sg.nodes[0], sg.lessons.a);
+    assert.match(texts(sb), /Con fuente: Ficha técnica/);
+  }
+
   // Página «Fuentes»: lista, aviso fijo, formulario, alta, duplicado y borrado.
   sources = [{ source_id: 'src-1', title: 'Ficha técnica', source_date: '2026-10-01', chars: 4200 }, { source_id: 'src-2', title: 'Nota breve', source_date: '', chars: 312 }];
   g = attach(goal()); calls = [];

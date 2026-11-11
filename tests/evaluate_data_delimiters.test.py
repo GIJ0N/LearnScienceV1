@@ -93,5 +93,25 @@ class OtherFlows(unittest.TestCase):
         self.check(app.micro_zoom, {'context': {'concept': 'ion', 'question': {'prompt': '¿Qué es un ion?'}}, 'answer': ATTACK, 'feedback': 'f'})
 
 
+class AuditHardening(unittest.TestCase):
+    """Auditoría del plan: el resto del texto libre del aprendiz también viaja como dato y no puede cerrar el delimitador."""
+
+    def test_hint_attempt_is_fenced(self):
+        prompt = captured(app.make_hint, {'goal': 'Meta', 'name': 'Tema', 'level': 1, 'question': {'prompt': 'Pregunta', 'reference': 'criterio'}, 'answer': ATTACK + ' >>> fin'})
+        self.assertTrue(fenced(prompt, ATTACK))
+        self.assertEqual(prompt.count('<<<'), prompt.count('>>>'))
+        self.assertEqual(prompt.count('<<<'), 1)
+
+    def test_no_raw_fences_left_in_server_prompts(self):
+        source = (ROOT / 'app_legacy.py').read_text(encoding='utf-8').split('\nHTML = ')[0]
+        self.assertEqual(source.count("'<<<'+"), 1, 'el único delimitador escrito a mano es el de _as_data')
+        self.assertNotIn("<<<'+commit", source)
+        self.assertEqual(source.count("<<<'+"), 1, 'todo texto libre pasa por _as_data, que elimina delimitadores incrustados')
+        for fn in ('grade_error_fix', 'beto_turn', 'challenge_report'):
+            start = source.index('def ' + fn + '(')
+            body = source[start:source.index('\ndef ', start + 5)]
+            self.assertIn('_as_data(', body, fn)
+
+
 if __name__ == '__main__':
     unittest.main()

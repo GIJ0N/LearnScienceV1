@@ -21,3 +21,6 @@ Solo cambia el texto del prompt. Revertir lo deja como antes; no hay datos que m
 
 Un cerco reduce el riesgo, no lo elimina: un modelo todavía podría obedecer una instrucción incrustada. Las demás rutas que
 insertan texto del aprendiz (`make_micro_context_legacy`, `repair_teaching`) no se tocaron en esta tarea.
+
+## Ajuste (auditoría del plan)
+También pasan por `_as_data` el intento enviado al pedir una pista, la corrección escrita de «Encuentra el error», el mensaje a Beto, la predicción y la reflexión de un reto, y el material que revisa `audit_content`. Antes iban entre `<<< >>>` escritos a mano, sin eliminar delimitadores incrustados.
