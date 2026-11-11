@@ -84,6 +84,7 @@ jobs:
           node tests/study_plan.test.js
           node tests/visual_theme.test.js
           node tests/lesson_ui.test.js
+          node tests/path_ui.test.js
           node tests/qa_round8.test.js
       - name: Run step lesson tests
         run: |

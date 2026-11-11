@@ -102,6 +102,7 @@ node tests/stuck_exits.test.js
 node tests/study_plan.test.js
 node tests/visual_theme.test.js
 node tests/lesson_ui.test.js
+node tests/path_ui.test.js
 node tests/qa_round8.test.js
 ```
 
@@ -359,3 +360,8 @@ La respuesta correcta se descarta si es claramente la opción más larga: al men
 ## Pantalla de lección (`feat/lesson-ui`, fase 5 T6)
 
 `node tests/lesson_ui.test.js` comprueba que `lessonProgress` devuelve las cinco etapas en orden sin marcar `done` ninguna posterior a la actual y una sola etapa en los demás modos; que `verdictInfo` mapea `CORRECT`→`.good`, `PARTIAL`→`.bad` «Casi: falta una parte», `MISCONCEPTION`→`.bad` «No es correcto» y cualquier otro estado (incluido `UNKNOWN`) →`.unknown` «Sin evaluar», con el feedback íntegro; que la sesión muestra el progreso en texto, mueve «Cobertura», «Por qué se eligió» y «Adaptación» a «Por qué esta actividad» y conserva todos los textos y botones de antes; que tras responder solo «Continuar» es principal; y que el hito solo aparece tras un acierto con el tema verificado, dice «Completado con apoyo» si hubo ayuda, no aparece tras `PARTIAL`, `MISCONCEPTION`, `UNKNOWN` ni sin verificación, queda obsoleto con evidencia posterior y no escribe eventos al cerrarlo. No valida el aspecto real en un navegador.
+
+## Inicio como camino (`feat/path-ui`, fase 5 T7)
+
+`node tests/path_ui.test.js` comprueba que el inicio de la meta tiene exactamente un nodo `is-next`, el recomendado por `studyPlan`, con el único botón principal «Seguir: <tema>»; que un tema con prerrequisito sin completar es `is-locked`, uno verificado `is-done` y uno saltado `is-skipped` y nunca `is-done`; que las áreas sin abrir van al final atenuadas con «≈N temas»; que el orden es encabezado, camino, «Más práctica» plegado y cifras; que todos los botones del inicio anterior (lista medida con el código de T6) siguen en el árbol; que la línea se dibuja una sola vez por carga; y que pintar el inicio no escribe evidencia. No valida el aspecto real en un navegador.
+
