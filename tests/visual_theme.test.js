@@ -64,6 +64,17 @@ const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) +
   assert.equal(p.preferredTheme(), 'light'); assert.doesNotThrow(() => p.toggleTheme()); assert.equal(documentElement.dataset.theme, 'dark', 'el tema cambia aunque no se pueda guardar');
   storageThrows = false;
 
+  // Regresión: en un navegador real `dataset` es de solo lectura; aplicar el tema no puede lanzar ni reasignarlo.
+  {
+    const attrs = {}, realRoot = { setAttribute(k, v) { attrs[k] = v; } };
+    Object.defineProperty(realRoot, 'dataset', { get() { return this._d || (this._d = {}); } });
+    const saved = global.document.documentElement; global.document.documentElement = realRoot;
+    assert.doesNotThrow(() => p.applyTheme('dark')); assert.equal(realRoot.dataset.theme, 'dark');
+    global.document.documentElement = { setAttribute(k, v) { attrs[k] = v; } };
+    assert.doesNotThrow(() => p.applyTheme('light')); assert.equal(attrs['data-theme'], 'light');
+    global.document.documentElement = saved;
+  }
+
   // El tema no escribe eventos ni toca la meta.
   const goal = { id: 'g1', events: [], coverage: [], nodes: [], reviews: [], learner: {}, session: {} };
   p.setProfileForTests({ profile_id: 'profile-test', name: 'S', preferences: {} }, 1); p.setStoreForTests({ goals: [goal], active: 'g1' });

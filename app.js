@@ -37,7 +37,7 @@ button{font:inherit;font-weight:700;min-height:44px;background:var(--go);color:v
 `;
 const THEME_KEY='ruta-theme';
 function preferredTheme(){let saved=null;try{saved=localStorage.getItem(THEME_KEY)}catch{}if(saved==='light'||saved==='dark')return saved;try{return globalThis.matchMedia?.('(prefers-color-scheme: dark)')?.matches?'dark':'light'}catch{return 'light'}}
-function applyTheme(theme){let root=document?.documentElement;if(root){root.dataset=root.dataset||{};root.dataset.theme=theme}return theme}
+function applyTheme(theme){let root=document?.documentElement;if(root){if(root.dataset)root.dataset.theme=theme;else try{root.setAttribute?.('data-theme',theme)}catch{}}return theme}
 function toggleTheme(){let next=(document?.documentElement?.dataset?.theme||preferredTheme())==='dark'?'light':'dark';applyTheme(next);try{localStorage.setItem(THEME_KEY,next)}catch{}return next}
 function installVisualTheme(){if(!document?.head||document.getElementById?.('ruta-visual-v2'))return false;let style=E('style');style.id='ruta-visual-v2';style.textContent=VISUAL_CSS;document.head.append(style);applyTheme(preferredTheme());return true}
 const HUMAN_LABELS={MASTERED:'evidencia inicial suficiente',UNKNOWN:'sin datos',PARTIALLY_UNDERSTOOD:'comprensión parcial',MISCONCEPTION:'idea errónea',PARTIAL:'parcial',CORRECT:'correcto',
