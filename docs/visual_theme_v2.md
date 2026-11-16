@@ -34,6 +34,21 @@ cobertura ni calendario.
 
 Nada. Es solo presentación. Ningún texto ni botón existente desaparece.
 
+## Navegación en móvil (`fix/mobile-nav`)
+
+Medido en Chromium real a 390×844 contra el demo controlado, la barra `.app-nav` era `position:sticky` y medía 353 px de alto (el 42 % de la pantalla), de modo que tapaba el contenido al desplazarse. Los tests con DOM simulado no lo detectaban.
+
+Qué cambia, solo en `VISUAL_CSS` y en la función `nav()` de `app.js`:
+
+- A 640 px o menos la barra deja de ser fija (`position:static`) y muestra la marca «Ruta», la racha y un botón «Menú» (`aria-expanded`, `aria-controls`, objetivo táctil de 44 px). Los demás botones van dentro de `.nav-links`, oculto hasta pulsar «Menú» (clase `is-open`) y cerrado al navegar.
+- Por encima de 640 px nada cambia: `.nav-links` usa `display:contents`, «Menú» está oculto por CSS y la barra sigue fija.
+- El menú se cierra al cambiar de página (también desde el contenido) y «Menú» conserva el foco de teclado tras alternar. «Reintentar guardado» queda en la barra, junto a «Menú», para verse siempre. Con el menú cerrado, «Ruta», la racha y «Menú» caben en una fila de 70 px a 390 px; en anchos menores la fila puede envolverse sin ocultar texto.
+- Todos los botones siguen en el DOM con el mismo texto y la misma acción; la visibilidad la decide solo el CSS. El estado abierto/cerrado vive en una variable del módulo (`navOpen`): no se guarda, no escribe eventos y no toca metas.
+
+Esto es presentación: no cambia ninguna regla de evidencia ni veredicto y no es evidencia de aprendizaje ni de calidad pedagógica.
+
+Qué no se validó: iPhone ni Safari reales (barra de direcciones dinámica, `100vh`, teclado), otros anchos de teléfono distintos de 390 px, lectores de pantalla con el menú plegado ni uso táctil real. `tests/browser_smoke.test.js` cubre solo Chromium de escritorio emulando 390×844.
+
 ## Compatibilidad y rollback
 
 Sin cambios de datos ni de rutas. Revertir el commit restaura el estilo anterior. El id `ruta-visual-v1` ya no existe.
