@@ -81,6 +81,8 @@ jobs:
           python tests/direct_teaching_backend.test.py
           node tests/direct_teaching.test.js
           node tests/stuck_exits.test.js
+          python tests/teaching_ladder_backend.test.py
+          node tests/teaching_ladder.test.js
           node tests/study_plan.test.js
           node tests/visual_theme.test.js
           node tests/lesson_ui.test.js
