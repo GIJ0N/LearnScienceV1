@@ -264,9 +264,9 @@ const days = (g, id, step) => p.scheduleInterval(g, id, step).days;
     assert.equal(q.cap, 5); assert.equal(q.due_total, 12); assert.equal(q.today.length, 5); assert.equal(q.later.length, 7);
     assert.equal(new Set([...q.today, ...q.later.map(x => x.id)]).size, 12, 'no se pierde ninguno');
     assert.ok(q.today.includes('n5'), 'el más vencido en relación a su intervalo entra');
-    assert.match(p.queueText(q), /^12 repasos vencidos; hoy van 5 \(el resto se reparte en los días siguientes: 7\)\.$/);
-    assert.ok(q.later.every(x => /^\d{4}-\d\d-\d\d$/.test(x.planned_for)));
-    assert.equal(q.later.filter(x => x.planned_for === q.later[0].planned_for).length, 5, 'reparto de a tope por día');
+    assert.match(p.queueText(q), /^12 repasos vencidos; hoy van 5 \(7 quedan pendientes para los días siguientes, según prioridad y sin fecha comprometida\)\.$/);
+    assert.ok(q.later.every(x => /^\d{4}-\d\d-\d\d$/.test(x.estimated_for)));
+    assert.equal(q.later.filter(x => x.estimated_for === q.later[0].estimated_for).length, 5, 'reparto de a tope por día');
     const f = p.reviewQueue(g, T0, { focus: 'n11' });
     assert.ok(f.today.includes('n3'), 'prerrequisito de lo que se estudia ahora tiene prioridad');
     // sin desborde: orden histórico due,id y nada cambia
@@ -299,6 +299,154 @@ const days = (g, id, step) => p.scheduleInterval(g, id, step).days;
     assert.match(text, /Tema a/); assert.match(text, /Ajuste personal/);
     const sum = p.scheduleSummary(g, T0); assert.equal(sum.personal.factor, 1);
     const rep = p.usageReport(g, T0); assert.equal(rep.schedule.cap, 5);
+  }
+
+  // 14. Corrección manual de un repaso: revoca aplazamientos, conserva los datos temporales y limpia la nota.
+  {
+    clock = T0;
+    const mk = () => reviewGoal([node('a'), node('b', ['a'])], [{ id: 'a', due: T0 + 2 * DAY, step: 4, last: T0 - 28 * DAY }, { id: 'b', due: T0 - DAY, step: 2, last: T0 - 8 * DAY }]);
+    const g = mk(); open(g, 'b');
+    const a1 = act('b9', 'b'), assess = res(a1, 'b-fix');
+    const fromDue = g.reviews.find(r => r.id === 'a').due;
+    p.applyResult(g, 'b', 'REVIEW', 'respuesta', assess);
+    const ra = g.reviews.find(r => r.id === 'a');
+    assert.ok(ra.due > fromDue && g.reviews.find(r => r.id === 'b').schedule_note);
+    p.applyManualCorrection(g, 'b', 'REVIEW', 'respuesta', assess, 'CORRECT', 'fix-same');
+    assert.ok(ra.due > fromDue, 'seguir siendo acierto válido conserva el aplazamiento');
+    const g2 = mk(); open(g2, 'b'); const as2 = res(act('b9', 'b'), 'b-fix2');
+    p.applyResult(g2, 'b', 'REVIEW', 'respuesta', as2);
+    const ra2 = g2.reviews.find(r => r.id === 'a'), evidenceBefore = g2.events.filter(e => e.type === 'EVIDENCE').length;
+    p.applyManualCorrection(g2, 'b', 'REVIEW', 'respuesta', as2, 'MISCONCEPTION', 'fix-2');
+    assert.equal(ra2.due, fromDue, 'la corrección a fallo devuelve la fecha original');
+    assert.deepEqual(ra2.deferrals, []);
+    const rev = g2.events.filter(e => e.type === 'REVIEW_DEFERRAL_REVOKED');
+    assert.equal(rev.length, 1); assert.equal(rev[0].creates_evidence, false); assert.equal(rev[0].node_id, undefined); assert.equal(rev[0].source_attempt_id, 'b-fix2');
+    assert.equal(g2.events.filter(e => e.type === 'EVIDENCE' && e.node_id === 'a').length, 0);
+    assert.ok(g2.events.filter(e => e.type === 'EVIDENCE').length > evidenceBefore, 'la corrección sí es evidencia del tema corregido');
+    const corrected = g2.events.find(e => e.type === 'EVIDENCE' && e.attempt_id === 'fix-2'), original = g2.events.find(e => e.attempt_id === 'b-fix2');
+    for (const k of ['temporal_classification', 'delay_ms_from_last_exposure', 'due_at', 'review_schedule_state']) assert.equal(corrected[k], original[k], k + ' se conserva');
+    assert.equal(corrected.temporal_classification, 'DELAYED_RETRIEVAL_OBSERVED');
+    const entries = p.scheduleEntries(g2).filter(e => e.node_id === 'b');
+    assert.equal(entries.length, 1); assert.equal(entries[0].pass, false, 'el repaso corregido sigue en el modelo, como fallo');
+    assert.equal(g2.reviews.find(r => r.id === 'b').schedule_note, undefined, 'nota obsoleta eliminada');
+    assert.match(p.reviewReasonText(g2.reviews.find(r => r.id === 'b')), /escalera/);
+  }
+
+  // 15. Selector con tope: toma el primer repaso ofrecible aunque los primeros de la cola hayan tenido exposición reciente.
+  const bigGoal = (n, extra = {}) => {
+    const nodes = Array.from({ length: n }, (_, i) => node('n' + i, []));
+    const g = goal(nodes, extra);
+    g.reviews = nodes.map((nd, i) => ({ id: nd.id, due: T0 - (i + 1) * DAY, step: 0, history: [], last_exposure_at: T0 - (i + 3) * DAY, scheduled_at: T0 - (i + 3) * DAY }));
+    g.events = nodes.map((nd, i) => ({ type: 'TEACHING_EXPOSURE', node_id: nd.id, at: i >= 5 ? T0 - 3600000 : T0 - 6 * DAY }));
+    p.setStoreForTests({ goals: [g], active: g.id });
+    return g;
+  };
+  {
+    clock = T0;
+    const g = bigGoal(8, { schedule_config: { daily_cap: 3 } });
+    const q = p.reviewQueue(g, T0, { focus: null });
+    assert.equal(q.today.length, 3);
+    const d = p.selectTutorAction(g, T0);
+    assert.equal(d.action, 'REVIEW');
+    assert.ok(!['n5', 'n6', 'n7'].includes(d.node_id), 'no ofrece los de exposición reciente');
+    assert.equal(d.node_id, q.offer.find(id => !['n5', 'n6', 'n7'].includes(id)));
+    // con el cupo agotado el selector automático no ofrece repaso, pero «siete minutos» sí
+    const done = bigGoal(8, { schedule_config: { daily_cap: 3 } });
+    done.events.push(...['n0', 'n1', 'n2'].map((id, i) => ev(id, true, { at: T0 - 1000, attempt: 'cap' + i })));
+    assert.notEqual(p.selectTutorAction(done, T0).action, 'REVIEW');
+    p.startBrief(done); assert.equal(done.session.mode, 'REVIEW'); assert.ok(done.session.node);
+    // coherencia: plan diario, selector, «siete minutos» y cola abren el mismo primer repaso
+    const g2 = bigGoal(8, { schedule_config: { daily_cap: 3 } });
+    g2.events = g2.events.map(e => ({ ...e, at: T0 - 6 * DAY }));
+    const q2 = p.reviewQueue(g2, T0);
+    assert.equal(p.selectTutorAction(g2, T0).node_id, q2.offer[0]);
+    const planFirst = p.buildDailyPlan(g2, T0).find(b => b.kind === 'review').node_id;
+    assert.equal(planFirst, q2.offer[0]);
+    p.startBrief(g2); assert.equal(g2.session.node, q2.offer[0]);
+    assert.equal(p.usageReport(g2, T0).reviews.due, 8);
+    g2.reviews.push({ id: 'fantasma', due: T0 - DAY, step: 0, history: [] });
+    assert.equal(p.usageReport(g2, T0).reviews.due, 8, 'repasos de nodos inexistentes no cuentan');
+  }
+
+  // 16. Importación malformada: deferrals/schedule_note saneados.
+  {
+    const raw = goal(); raw.reviews = [{ id: 'a', due: T0, step: 0, history: [], deferrals: {}, schedule_note: 'x' }, { id: 'b', due: T0, step: 0, history: [], deferrals: [null, { from_due: 1, to_due: 'x', days: 1, at: 1 }, { from_due: 1, to_due: 2, days: 1, at: 3, reason: 'y'.repeat(900) }], schedule_note: { reason: 7, due: 'mañana' } }];
+    const out = p.normalizeImportedStore(JSON.parse(JSON.stringify({ goals: [raw], active: 'g1' }))).goals[0].reviews;
+    assert.deepEqual(out[0].deferrals, []); assert.equal(out[0].schedule_note, null);
+    assert.equal(out[1].deferrals.length, 1); assert.equal(out[1].deferrals[0].reason.length, 200);
+    assert.equal(out[1].schedule_note.reason, ''); assert.equal(out[1].schedule_note.due, undefined);
+    assert.doesNotThrow(() => p.reviewReasonText(out[0])); assert.doesNotThrow(() => p.reviewQueue(Object.assign(goal(), { reviews: out }), T0));
+  }
+
+  // 17. Motivo desfasado: tras lapseReview, «No recuerdo» o la escalera, no se muestra el motivo anterior.
+  {
+    clock = T0;
+    const g = reviewGoal([node('a'), node('b', ['a'])], [{ id: 'a', due: T0 + 2 * DAY, step: 4, last: T0 - 28 * DAY }, { id: 'b', due: T0 - DAY, step: 2, last: T0 - 8 * DAY }]);
+    open(g, 'b'); p.applyResult(g, 'b', 'REVIEW', 'respuesta', res(act('b7', 'b'), 'b-stale'));
+    const rb = g.reviews.find(r => r.id === 'b'), ra = g.reviews.find(r => r.id === 'a');
+    assert.match(p.reviewReasonText(rb), /^Acertaste/); assert.match(p.reviewReasonText(ra), /^Aplazado/);
+    p.lapseReview(g, 'b', T0); assert.doesNotMatch(p.reviewReasonText(rb), /^Acertaste/); assert.match(p.reviewReasonText(rb), /escalera/);
+    p.lapseReview(g, 'a', T0); assert.doesNotMatch(p.reviewReasonText(ra), /Aplazado/);
+    const ra2 = JSON.parse(JSON.stringify(ra)); ra2.due = T0 + 1 * DAY; ra2.step = 0; // «No recuerdo»
+    assert.doesNotMatch(p.reviewReasonText({ ...ra2, deferrals: [{ ...ra.deferrals[0] ?? { to_due: 1, reason: 'Aplazado' } }] }), /^Aplazado/);
+    const l = { id: 'b', due: T0 + 9 * DAY, step: 3, history: [{ attempt_id: 'b-stale' }], schedule_note: { attempt_id: 'b-stale', due: T0 + 14 * DAY, reason: 'Acertaste → 14 días.' }, deferrals: [] };
+    assert.doesNotMatch(p.reviewReasonText(l), /Acertaste/);
+    const g3 = reviewGoal([node('a')], [{ id: 'a', due: T0 + 5 * DAY, step: 3, last: T0 - 10 * DAY }]);
+    g3.reviews[0].history.push({ attempt_id: 'x' }); g3.reviews[0].schedule_note = { attempt_id: 'x', due: T0 + 5 * DAY, reason: 'Acertaste → 5 días.' };
+    assert.match(p.reviewReasonText(g3.reviews[0]), /^Acertaste/);
+    p.ladderReschedule(g3, { phase: 'REVIEW', node_id: 'a' }, {}); // la fase REVIEW no reprograma
+    assert.match(p.reviewReasonText(g3.reviews[0]), /^Acertaste/);
+    clock = T0; p.ladderReschedule(g3, { phase: 'GUIDED', node_id: 'a' }, {}); // reprograma con lapseReview
+    assert.doesNotMatch(p.reviewReasonText(g3.reviews[0]), /^Acertaste/);
+  }
+
+  // 18. Cupo diario: las correcciones y la auditoría no cuentan dos veces.
+  {
+    const nodes = Array.from({ length: 6 }, (_, i) => node('n' + i));
+    const g = goal(nodes, { schedule_config: { daily_cap: 3 } });
+    g.reviews = nodes.map(n => ({ id: n.id, due: T0 - DAY, step: 0, history: [] }));
+    const e1 = { ...ev('n0', true, { at: T0 - 1000, attempt: 'c1' }), evidence_id: 'E-c1' };
+    g.events = [e1, { ...ev('n0', false, { at: T0 - 500, attempt: 'c1b' }), correction_of: 'E-c1' }, { ...ev('n1', true, { at: T0 - 400, attempt: 'au' }), audit_only: true }];
+    assert.equal(p.reviewQueue(g, T0).done_today, 1);
+  }
+
+  // 19. Aging: un repaso largo muy vencido no queda detrás de los cortos indefinidamente.
+  {
+    const nodes = Array.from({ length: 8 }, (_, i) => node('n' + i));
+    const g = goal(nodes, { schedule_config: { daily_cap: 3 } });
+    g.reviews = nodes.map((n, i) => ({ id: n.id, due: T0 - 2 * DAY, step: 0, history: [], last_exposure_at: T0 - 3 * DAY, scheduled_at: T0 - 3 * DAY }));
+    g.reviews[7] = { id: 'n7', due: T0 - 30 * DAY, step: 6, history: [], last_exposure_at: T0 - 120 * DAY, scheduled_at: T0 - 120 * DAY };
+    assert.ok(p.reviewQueue(g, T0, { focus: null }).today.includes('n7'));
+  }
+
+  // 20. Un prerrequisito aplazado y respondido en su fecha original no queda como anticipado.
+  {
+    clock = T0;
+    const g = reviewGoal([node('a'), node('b', ['a'])], [{ id: 'a', due: T0 + 2 * DAY, step: 4, last: T0 - 28 * DAY }, { id: 'b', due: T0 - DAY, step: 2, last: T0 - 8 * DAY }]);
+    open(g, 'b'); p.applyResult(g, 'b', 'REVIEW', 'respuesta', res(act('b8', 'b'), 'b-orig'));
+    const ra = g.reviews.find(r => r.id === 'a'), orig = ra.deferrals[0].from_due;
+    assert.ok(ra.due > orig);
+    clock = orig + 3600000; open(g, 'a');
+    p.applyResult(g, 'a', 'REVIEW', 'respuesta', res(act('a8', 'a'), 'a-orig'));
+    const e = g.events.find(x => x.attempt_id === 'a-orig');
+    assert.equal(e.review_schedule_state, 'AFTER_DUE', 'se evalúa contra la fecha original');
+    assert.equal(e.due_at, orig);
+    assert.equal(p.scheduleEntries(g).filter(x => x.node_id === 'a')[0].state, 'AFTER_DUE');
+    assert.deepEqual(ra.deferrals, [], 'al responder se reinician los aplazamientos');
+    clock = T0;
+  }
+
+  // 21. Recuperación: 3 fallos iniciales + 8 aciertos limpios no pesan para siempre; el redondeo es a milésimas.
+  {
+    const g = goal(); g.events = series('a', [false, false, false, ...Array(8).fill(true)]);
+    const m = p.scheduleNodeModel(p.scheduleEntries(g));
+    assert.ok(m.stretch >= 1, 'se recupera: ' + m.stretch);
+    assert.equal(m.stretch, Math.round(m.stretch * 1000) / 1000);
+    const lone = p.scheduleNodeModel(p.scheduleEntries(Object.assign(goal(), { events: series('a', [false, false, false, true, true]) })));
+    assert.ok(lone.stretch < 1, 'aún con pocos aciertos sigue por debajo');
+    const old = goal(); old.events = series('a', [false, false, false, false, false, false, ...Array(12).fill(true)]);
+    assert.ok(p.scheduleNodeModel(p.scheduleEntries(old)).stretch >= 1, 'solo pesan las últimas 12 entradas');
+    assert.ok(p.schedulePersonal(Object.assign(goal(), { events: Array.from({ length: 30 }, (_, i) => ev('a', true, { at: T0 - (60 - i) * DAY })) })).factor <= 1.25, 'máximo real del factor personal 1,25');
   }
 
   console.log('adaptive_schedule.test.js OK');

@@ -21,7 +21,7 @@ assert.equal(p.usageReport({}, NOW).content_flags, 0, 'un objeto sin campos tamp
 // 2. Fixture completo.
 const rev = (delayDays, result, extra = {}) => ({ type: 'EVIDENCE', node_id: 'a', phase: 'REVIEW', evidence_role: 'learning', result, delay_ms_from_last_exposure: delayDays * DAY, timestamp: NOW - 1 * DAY, ...extra });
 const goal = {
-  id: 'g1', goal: 'Meta', nodes: [],
+  id: 'g1', goal: 'Meta', nodes: [{ id: 'a', name: 'a', prerequisites: [] }, { id: 'b', name: 'b', prerequisites: [] }],
   events: [
     rev(2, 'CORRECT'), rev(2, 'CORRECT'), rev(2, 'CORRECT'), rev(10, 'MISCONCEPTION'),
     rev(2, 'CORRECT', { help_used: 1 }),
