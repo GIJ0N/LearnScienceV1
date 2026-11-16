@@ -2949,9 +2949,11 @@ def reminders_regenerate(data):
     return _new_reminder_link(pid,settings)
 
 def reminders_disable(data):
+    """Desactiva y revoca el enlace (no hay forma de recuperarlo: al reactivar se crea uno nuevo)."""
     pid=data.get('profile_id');current,_=memory().reminder_get(pid)
-    if current is not None:memory().reminder_put(pid,dict(current,enabled=False),keep_token=False)
-    return {'has_link':False,'settings':None if current is None else {k:current[k] for k in ('enabled','hour','minute','days','hide_goal_name','timezone') if k in current} | {'enabled':False}}
+    if current is None:return {'has_link':False,'settings':None}
+    memory().reminder_put(pid,dict(current,enabled=False),keep_token=False)
+    return {'has_link':False,'settings':dict({k:current[k] for k in ('hour','minute','days','hide_goal_name','timezone') if k in current},enabled=False)}
 
 def auth_password_hash():
     return memory().get_meta('auth_password_hash')

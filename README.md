@@ -21,6 +21,10 @@ python app_legacy.py
 
 En PowerShell: `$env:LEARNSCIENCE_JUDGE_MODEL="nombre-del-modelo"`. `set` solo vale para esa ventana de terminal; sin variables todo usa `GEMINI_MODEL`.
 
+## Alojamiento, inicio de sesión y recordatorios
+
+Opcional; sin configurar nada todo funciona como antes (PC + Tailscale, sin contraseña). Ver `docs/hosting_v1.md` (dónde correr la app, copias de seguridad) y `docs/hosting_ready_v1.md` (contrato: `LEARNSCIENCE_AUTH`, `python app_legacy.py --set-password`, calendario suscribible).
+
 ## Git
 
 ```powershell

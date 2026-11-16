@@ -1,0 +1,51 @@
+# Alojamiento: inicio de sesión, recordatorios e instalación (`hosting_ready_v1`)
+
+Rama `feat/hosting-ready`, apilada sobre `feat/authentic-performance`. Este documento es el contrato; la guía práctica está en `docs/hosting_v1.md`.
+
+## Compatibilidad: sin configurar nada, todo sigue igual
+
+Hoy la app corre en la PC del dueño y se abre desde el iPhone por Tailscale (`http://<IP Tailscale>:8765`), sin contraseña. Eso **no cambia**: con `LEARNSCIENCE_AUTH` sin definir (o `off`) no hay pantalla de inicio de sesión, no se exige Origin en los POST (la regla de `private_network_access_v1` es la de siempre), `/api/health` devuelve lo mismo y la CSP no cambia. Lo único nuevo que se ve en modo `off` es el panel «Recordatorios» en Preferencias, el aviso discreto al abrir y los metadatos de instalación. No hay migración: las tablas nuevas se crean con `CREATE TABLE IF NOT EXISTS`.
+
+## A. Inicio de sesión
+
+- **Variable** `LEARNSCIENCE_AUTH`: `off` (por defecto) o `required`. Otro valor impide arrancar.
+- **Protección de arranque (se integra con la existente).** Antes solo había un aviso al escuchar fuera de `127.0.0.1` y la validación de `LEARNSCIENCE_HOST`/`LEARNSCIENCE_ORIGINS` (`network_settings`, sin cambios). Ahora, además, el servidor **se niega a arrancar** (código 2, mensaje en español) si la dirección no es loopback ni privada/Tailscale (`127/8`, `10/8`, `172.16/12`, `192.168/16`, `100.64/10`, `fc00::/7`, `::1`) —o es `0.0.0.0`/`::`— y `LEARNSCIENCE_AUTH` no es `required` (`hosting.startup_problem`). Con `required` y sin contraseña fijada tampoco arranca. El aviso anterior se conserva en modo `off`.
+- **Contraseña única del dueño.** `python app_legacy.py --set-password` la pide con `getpass` (nunca por argumento ni variable de entorno), exige ≥ 12 caracteres y guarda **solo el hash** en `metadata.auth_password_hash`: PBKDF2-HMAC-SHA256, 600 000 iteraciones, sal aleatoria de 16 bytes (`pbkdf2_sha256$iteraciones$sal$hash`). Se elige PBKDF2 porque está en la biblioteca estándar de cualquier Python (scrypt depende de la compilación de OpenSSL). Se puede ejecutar con el servidor encendido: las sesiones se leen de la base en cada petición, así que **cambiar la contraseña cierra todas las sesiones** en la misma transacción.
+- **Sesión.** `POST /api/login` compara en tiempo constante (`hmac.compare_digest`) y responde siempre lo mismo ante cualquier fallo («No se pudo iniciar sesión.»). Cookie `ruta_session`: token de 32 bytes de `secrets`, `HttpOnly`, `SameSite=Strict`, `Path=/`, `Max-Age` 30 días, `Secure` solo si la petición llegó por HTTPS (`X-Forwarded-Proto: https` **únicamente** con `LEARNSCIENCE_TRUST_PROXY=1`; por HTTP plano —Tailscale— no puede ir `Secure` o el navegador la descartaría). En SQLite (`auth_sessions`) solo se guarda el SHA-256 del token. La caducidad es deslizante: 30 días desde el último uso (se renueva como mucho cada 5 minutos para no escribir en cada petición). `POST /api/logout` borra la sesión y la cookie.
+- **Límite de intentos** (en memoria; reiniciar el servidor lo reinicia): por IP, 5 fallos libres y luego una espera de 30 s que se duplica con cada fallo (tope 1 h); global, 20 fallos libres entre todas las IP y luego 60 s duplicándose (tope 1 h). Durante la espera responde `429` con `Retry-After`, **incluso con la contraseña correcta**. Una hora sin fallos lo olvida; un éxito reinicia el contador de esa IP. La IP es la del socket; con `LEARNSCIENCE_TRUST_PROXY=1` es el último valor de `X-Forwarded-For` (el que añadió el proxy).
+- **Todas las rutas exigen sesión** salvo una lista corta y revisada (`PUBLIC_GET`, `PUBLIC_POST` en `app_legacy.py`): `GET /` (sin sesión devuelve la pantalla de login, nunca el JS de la app), `GET /api/health` (sin sesión solo `{"ok":true}`), `GET /api/auth/status`, `/manifest.webmanifest` y los iconos (el navegador los pide sin cookies), `POST /api/login`, `POST /api/logout`, y `GET /calendar/<token>.ics` con su propia credencial (ver B). Es **denegar por defecto**: cualquier ruta nueva de `ROUTES` o de `do_GET` queda protegida sin hacer nada. `tests/hosting_ready.test.py` recorre todo `ROUTES` y una lista de GET y falla si alguna no responde 401 sin sesión, y fija las listas públicas exactas.
+- **CSRF.** Con auth activo, todo POST necesita `Origin` presente y en la lista de `allowed_origins()` (la misma que ya existía, ampliable con `LEARNSCIENCE_ORIGINS`, p. ej. `https://tutor.ejemplo.com`); sin Origin o de otro sitio → 403. Se suma `SameSite=Strict`. En modo `off` la regla es la de antes (sin Origin se permite).
+- **Un solo dueño.** No hay cuentas ni registro. Los perfiles locales son carpetas de aprendizaje, no usuarios: tras el login se ven todos, como hoy. Quien tenga la contraseña ve todos los perfiles.
+- **Cliente.** Pantalla de login sencilla (servida por el servidor, sin el JS de la app; 390 px; tema claro/oscuro por `prefers-color-scheme` o el tema guardado). `app.js` pregunta `/api/auth/status`; solo si es `required` muestra «Cerrar sesión» (en el menú y en la pantalla de perfiles). Un 401 muestra «Tu sesión terminó» y recarga para volver al login.
+- **Registros.** No se escriben contraseñas ni cookies; la ruta del calendario, que contiene el token, se enmascara en el registro de peticiones (`/calendar/<oculto>.ics`).
+
+## B. Recordatorios sin notificaciones push
+
+Web Push en iPhone exige HTTPS, instalar la app en la pantalla de inicio y firmar con VAPID (dependencias): **fuera de alcance**. En su lugar:
+
+- **Calendario suscribible** `GET /calendar/<token>.ics` (RFC 5545: CRLF, líneas de ≤ 75 octetos plegadas sin partir caracteres UTF-8, texto escapado, `UID` estables, `DTSTAMP`). Contiene exactamente:
+  1. un evento recurrente «Estudiar: <meta activa>» a la hora elegida (cada día, o `BYDAY` con los días elegidos), 15 minutos, con `VALARM` a la hora;
+  2. eventos de día completo «N repasos de <meta>» por día y meta, calculados en el servidor con `goal.reviews[].due` **ya guardado** (no se reimplementa el calendario adaptativo): los vencidos se agrupan en hoy, los futuros en su día, hasta 30 días; solo repasos cuyo tema sigue en la meta.
+  
+  Nada más: ni respuestas, ni evidencia, ni nombres de temas, ni texto del aprendiz, ni identificadores de perfil (los `UID` son hashes). La opción «Ocultar el nombre de la meta» deja «Estudiar» y «N repasos».
+- **Token.** 24 bytes de `secrets` (192 bits), uno por perfil, guardado como SHA-256 (`reminders.token_hash`). Es la **única credencial** de esa ruta (las apps de calendario no envían cookies): quien tenga el enlace ve esos títulos. Solo se muestra al crearlo o regenerarlo; después la app dice que hay un enlace activo y ofrece regenerar. Regenerar o desactivar revoca el anterior al instante; borrar el perfil borra el enlace. Token inválido o revocado → `404 «No existe esta ruta.»`; los fallos se limitan por IP (5 y luego `429`). Funciona también en modo `off`.
+- **Zona horaria (decisión).** El evento diario usa hora local **«flotante»** (`DTSTART:20261101T203000`, sin `Z` ni `TZID`): sale a esa hora en el reloj del teléfono, así un cambio de horario de verano no lo mueve y no hace falta incluir `VTIMEZONE` (el tzdata no existe en Windows sin instalar). Las fechas de los repasos (día completo) sí necesitan una zona para convertir el instante `due`: el cliente envía su zona IANA y su desfase al guardar; el servidor usa `zoneinfo` si la tiene y, si no, el desfase fijo. Límite: con desfase fijo, un repaso cuyo instante caiga a menos de una hora de la medianoche y cruce un cambio de horario puede aparecer un día antes o después. Si viajas o cambias de zona, vuelve a pulsar «Guardar cambios».
+- **UI «Recordatorios»** (Preferencias): hora, días, ocultar nombre, enlace (`https://`/`webcal://`, copiar, descargar `.ics`), regenerar, desactivar, instrucciones de iPhone (tocar el enlace, o Ajustes → Calendario → Cuentas → Añadir cuenta → Otra → Añadir calendario suscrito) y el aviso honesto: el calendario del teléfono solo se actualiza si alcanza el servidor (PC encendida y Tailscale activo, o servidor alojado). Los iPhone refrescan las suscripciones cada cierto tiempo (`REFRESH-INTERVAL` 6 h es una sugerencia).
+- **Aviso al abrir.** En Inicio y en el panel de la meta, si hay repasos vencidos y hoy no hay ninguna respuesta de estudio, una barra no bloqueante («Tienes N repasos vencidos y hoy aún no has estudiado») con «Ver repasos» y «Ahora no» (se descarta hasta recargar). Usa la misma cola de repasos (`reviewQueue`) y `studyAnswers` que la racha; no escribe nada.
+- **Qué cuenta como evidencia:** nada. Ni el calendario ni el aviso ni los ajustes crean eventos en ninguna meta, ni tocan cobertura, independencia, racha ni calendario adaptativo. Los ajustes viven en la tabla `reminders`, **fuera del almacén del perfil**: no salen en exportaciones ni respaldos JSON y no se restauran con ellos.
+
+## C. Instalable
+
+`/manifest.webmanifest` (`display: standalone`, iconos 192/512 PNG y SVG), `apple-touch-icon` (PNG 180), `apple-mobile-web-app-*` y `theme-color` claro/oscuro en `<head>`. Los iconos (anillo blanco sobre verde, PNG RGB opaco) se generan con `zlib`/`struct`, sin librerías. **Sin service worker ni caché sin conexión** (riesgo de servir JS viejo): la app necesita el servidor para funcionar. La CSP **no cambia** (`default-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'none'` cubre manifiesto e iconos propios).
+
+## Fuera de alcance
+
+Web Push/VAPID, service worker, varias cuentas o registro, recuperación de contraseña (se cambia con `--set-password` en la máquina del servidor), 2FA, límite de intentos persistente, HTTPS propio en el servidor (se delega en el proxy), `VTIMEZONE`, estado de «repaso hecho» en el calendario (los eventos se recalculan en cada consulta), recordatorios por correo o mensajería.
+
+## Rollback
+
+Revertir el commit quita el login y los recordatorios; las tablas `auth_sessions` y `reminders` quedan sin usar y son inofensivas. Un respaldo SQLite hecho con auth activo conserva el hash de contraseña y los tokens de calendario.
+
+## Pruebas
+
+`python tests/hosting_ready.test.py` (servidor real en un hilo, SQLite temporal, sin red) y `node tests/hosting_ready.test.js` (login y UI con DOM simulado); `tests/browser_smoke.test.js` comprueba en Chromium que el modo `off` carga igual, es instalable y el panel cabe en 390 px.
