@@ -5,7 +5,9 @@ import datetime
 import hashlib
 import json
 import os
+import hmac
 import re
+import secrets
 import sqlite3
 import threading
 import time
@@ -210,6 +212,112 @@ def _sanitize_lesson_explore(lesson):
         del lesson["explore_na"]
 
 
+# authentic_performance_v1: atestaciones declaradas de un mentor (capa propia; nunca evidencia calificada).
+MENTOR_POLICY_VERSION = "authentic_performance_v1"
+MENTOR_CODE_RE = re.compile(r"[A-HJ-NP-Z2-9]{5}-[A-HJ-NP-Z2-9]{5}")
+MENTOR_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+MENTOR_SOURCE_KINDS = ("case", "challenge")
+CASE_FORBIDDEN_CLIENT_KEYS = frozenset({"rubric", "private", "private_json", "model_answer", "typical_errors", "irrelevant_labels", "ambiguity", "criteria_private"})
+
+
+def _text_field(value, lo, hi, message):
+    text = value.strip() if isinstance(value, str) else ""
+    if not lo <= len(text) <= hi:
+        raise ValueError(message)
+    return text
+
+
+def _mentor_values(raw):
+    """Campos editables de una atestación; lanza ValueError en español."""
+    name = _text_field(raw.get("mentor_name"), 2, 80, "La atestación del mentor necesita su nombre (2 a 80 caracteres).")
+    role = _text_field(raw.get("mentor_role"), 2, 80, "La atestación del mentor necesita su rol (2 a 80 caracteres).")
+    date_text = raw.get("date")
+    if not isinstance(date_text, str) or not MENTOR_DATE_RE.fullmatch(date_text):
+        raise ValueError("La fecha de la atestación debe tener el formato AAAA-MM-DD.")
+    try:
+        datetime.date.fromisoformat(date_text)
+    except ValueError:
+        raise ValueError("La fecha de la atestación no es válida.")
+    levels = raw.get("levels")
+    if not isinstance(levels, dict) or not 1 <= len(levels) <= 8:
+        raise ValueError("La atestación necesita un nivel por criterio.")
+    clean = {}
+    for key, value in levels.items():
+        if not isinstance(key, str) or not re.fullmatch(r"[a-z0-9_]{1,40}", key) or isinstance(value, bool) or value not in (0, 1, 2, 3):
+            raise ValueError("Los niveles de la atestación deben ser 0, 1, 2 o 3 por criterio.")
+        clean[key] = int(value)
+    comment = raw.get("comment", "")
+    if comment is None:
+        comment = ""
+    if not isinstance(comment, str) or len(comment.strip()) > 400:
+        raise ValueError("El comentario del mentor admite hasta 400 caracteres.")
+    return {"mentor_name": name, "mentor_role": role, "date": date_text, "levels": clean, "comment": comment.strip()}
+
+
+def canonical_mentor_event(raw, allowed_nodes, known_attestations):
+    """Forma canónica de MENTOR_ATTESTATION / MENTOR_ATTESTATION_REVISION. known_attestations: dict id -> set(niveles esperados) de las atestaciones anteriores."""
+    if raw.get("type") == "MENTOR_ATTESTATION":
+        attestation_id = _text_field(raw.get("attestation_id"), 1, 120, "La atestación no tiene identidad.")
+        if attestation_id in known_attestations:
+            raise ValueError("El respaldo contiene atestaciones de mentor duplicadas.")
+        source = raw.get("source")
+        if not isinstance(source, dict) or source.get("kind") not in MENTOR_SOURCE_KINDS:
+            raise ValueError("La atestación no conserva su fuente.")
+        source_id = _text_field(source.get("id"), 1, 120, "La atestación no conserva su fuente.")
+        attempt = source.get("attempt_id")
+        if attempt is not None and not (isinstance(attempt, str) and 1 <= len(attempt) <= 120):
+            raise ValueError("La atestación no conserva su fuente.")
+        node_ids = raw.get("node_ids")
+        if not isinstance(node_ids, list) or not 1 <= len(node_ids) <= 8 or len(set(map(str, node_ids))) != len(node_ids) or any(str(n) not in allowed_nodes for n in node_ids):
+            raise ValueError("La atestación apunta a temas inexistentes.")
+        code = raw.get("code")
+        if not isinstance(code, str) or not MENTOR_CODE_RE.fullmatch(code):
+            raise ValueError("La atestación no conserva un código de verificación válido.")
+        at = raw.get("at")
+        if not _finite_number(at) or at < 0:
+            raise ValueError("La atestación no conserva una fecha de registro válida.")
+        digest = raw.get("content_digest")
+        if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+            raise ValueError("La atestación no conserva la huella del contenido.")
+        event = {"type": "MENTOR_ATTESTATION", "attestation_id": attestation_id, "source": {"kind": source["kind"], "id": source_id, **({"attempt_id": attempt} if attempt else {})},
+                 "node_ids": [str(n) for n in node_ids], **_mentor_values(raw), "code": code, "content_digest": digest, "declared_by": "learner", "code_verified": True,
+                 "at": at, "policy_version": MENTOR_POLICY_VERSION}
+        if raw.get("goal_id") is not None:
+            event["goal_id"] = str(raw["goal_id"])[:120]
+        return event
+    attestation_id = _text_field(raw.get("attestation_id"), 1, 120, "La revisión no apunta a una atestación.")
+    if attestation_id not in known_attestations:
+        raise ValueError("La revisión apunta a una atestación inexistente.")
+    revision_id = _text_field(raw.get("revision_id"), 1, 120, "La revisión no tiene identidad.")
+    action = raw.get("action")
+    at = raw.get("at")
+    if action not in ("edit", "void") or not _finite_number(at) or at < 0:
+        raise ValueError("La revisión de la atestación es inválida.")
+    event = {"type": "MENTOR_ATTESTATION_REVISION", "revision_id": revision_id, "attestation_id": attestation_id, "action": action, "at": at, "policy_version": MENTOR_POLICY_VERSION}
+    if action == "void":
+        event["reason"] = _text_field(raw.get("reason"), 3, 300, "Anular una atestación exige un motivo (3 a 300 caracteres).")
+    else:
+        values = _mentor_values(raw)
+        if set(values["levels"]) != known_attestations[attestation_id]:
+            raise ValueError("Los niveles editados deben cubrir los mismos criterios de la atestación.")
+        event.update(values)
+        reason = raw.get("reason")
+        if reason:
+            event["reason"] = _text_field(reason, 3, 300, "El motivo de la edición admite de 3 a 300 caracteres.")
+    return event
+
+
+def _find_forbidden_keys(value, depth=0):
+    """True si el valor contiene una clave de las reservadas a lo privado del caso (defensa del almacén del cliente)."""
+    if depth > 8:
+        return False
+    if isinstance(value, dict):
+        return any(k in CASE_FORBIDDEN_CLIENT_KEYS or _find_forbidden_keys(v, depth + 1) for k, v in value.items())
+    if isinstance(value, list):
+        return any(_find_forbidden_keys(v, depth + 1) for v in value[:200])
+    return False
+
+
 def validate_store(raw, profile_id, allow_profile_rebind=False):
     """Validate relations and add ownership metadata without inventing evidence."""
     profile_id = _profile_id(profile_id)
@@ -287,6 +395,11 @@ def validate_store(raw, profile_id, allow_profile_rebind=False):
                     event["is_independent"] = False
                     if "independent" in event:
                         event["independent"] = False
+            if event.get("type") == "EVIDENCE" and "case_id" in event:
+                if isinstance(event["case_id"], str) and 1 <= len(event["case_id"]) <= 120:
+                    pass
+                else:
+                    del event["case_id"]  # authentic_performance_v1: metadato del caso; un valor inválido se descarta sin rechazar el evento
             attempt_id = event.get("attempt_id")
             if event.get("type") == "EVIDENCE" and attempt_id:
                 attempt_id = str(attempt_id)
@@ -301,6 +414,17 @@ def validate_store(raw, profile_id, allow_profile_rebind=False):
                 if evidence_id in evidence_ids:
                     raise ValueError("El respaldo contiene evidence_id duplicados.")
                 evidence_ids.add(evidence_id)
+        mentor_ids = {}
+        for index, event in enumerate(events):
+            if event.get("type") in ("MENTOR_ATTESTATION", "MENTOR_ATTESTATION_REVISION"):
+                canonical = canonical_mentor_event(event, allowed_nodes, mentor_ids)
+                if canonical["type"] == "MENTOR_ATTESTATION":
+                    mentor_ids[canonical["attestation_id"]] = set(canonical["levels"])
+                canonical["profile_id"] = profile_id
+                events[index] = canonical
+        for key in ("cases", "case_draft"):
+            if key in goal and _find_forbidden_keys(goal[key]):
+                raise ValueError("El estado del caso del cliente no puede contener la rúbrica ni la respuesta modelo.")
         criterion_assessments = goal.get("criterion_assessments", [])
         if not isinstance(criterion_assessments, list):
             raise ValueError("Las evaluaciones por criterio son inválidas.")
@@ -626,6 +750,17 @@ class DurableMemory:
               created_at INTEGER NOT NULL,
               PRIMARY KEY(profile_id, attempt_id)
             );
+            CREATE TABLE IF NOT EXISTS cases(
+              profile_id TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+              goal_id TEXT NOT NULL,
+              case_id TEXT NOT NULL,
+              status TEXT NOT NULL,
+              state_json TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL,
+              PRIMARY KEY(profile_id, case_id)
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS cases_one_active ON cases(profile_id, goal_id) WHERE status='ACTIVE';
             CREATE TABLE IF NOT EXISTS knowledge_props(
               profile_id TEXT NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
               goal_id TEXT NOT NULL,
@@ -907,6 +1042,12 @@ class DurableMemory:
                              (profile_id, str(attempt_id or ""), str(goal_id or ""), str(item_id or ""))).fetchone()
         return json.loads(row["result_json"]) if row else None
 
+    def placement_answer_time(self, profile_id, attempt_id):
+        profile_id = _profile_id(profile_id)
+        with self._lock, self._connect() as db:
+            row = db.execute("SELECT created_at FROM placement_answers WHERE profile_id=? AND attempt_id=?", (profile_id, str(attempt_id or ""))).fetchone()
+        return row["created_at"] if row else 0
+
     def record_placement_answer(self, profile_id, goal_id, item_id, attempt_id, fingerprint, result):
         """Idempotent by attempt_id: the same answer returns the stored result; a different one is rejected."""
         profile_id = _profile_id(profile_id)
@@ -923,6 +1064,103 @@ class DurableMemory:
             db.execute("INSERT INTO placement_answers VALUES(?,?,?,?,?,?,?)",
                        (profile_id, attempt_id, str(goal_id), str(item_id), fingerprint, _json(result), time.time_ns()))
         return _copy(result)
+
+    # authentic_performance_v1: casos largos. Lo público y lo privado del caso viven en placement_items (patrón de las claves privadas);
+    # el estado de progreso en `cases`. Nada de esto entra en `store_json`, en la exportación ni en profile_load.
+    def mentor_secret(self):
+        """Secreto local del servidor para los códigos de verificación. Se crea una vez; no sale en ninguna respuesta ni respaldo."""
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT value FROM metadata WHERE key='mentor_code_secret'").fetchone()
+            if row:
+                return row["value"]
+            value = secrets.token_hex(32)
+            db.execute("INSERT INTO metadata(key,value) VALUES('mentor_code_secret',?)", (value,))
+            return value
+
+    def create_case(self, profile_id, goal_id, public, private):
+        profile_id = _profile_id(profile_id)
+        goal_id = str(goal_id or "").strip()
+        now = time.time_ns()
+        state = {"stages": {}, "model_viewed_at": None}
+        try:
+            with self._lock, self._connect() as db:
+                if not db.execute("SELECT 1 FROM profiles WHERE profile_id=?", (profile_id,)).fetchone():
+                    raise ValueError("El perfil local no existe.")
+                db.execute("INSERT INTO placement_items VALUES(?,?,?,?,?,?,?)",
+                           (profile_id, goal_id, public["item_id"], public["node_id"], _json(public), _json(private), now))
+                db.execute("INSERT INTO cases VALUES(?,?,?,?,?,?,?)", (profile_id, goal_id, public["item_id"], "ACTIVE", _json(state), now, now))
+        except sqlite3.IntegrityError:
+            raise ValueError("CASE_ACTIVE: ya tienes un caso activo en esta meta. Termínalo o abandónalo antes de pedir otro.")
+
+    def _case_row(self, db, profile_id, case_id):
+        row = db.execute("SELECT c.goal_id,c.status,c.state_json,c.created_at,c.updated_at,p.public_json,p.private_json FROM cases c JOIN placement_items p ON p.profile_id=c.profile_id AND p.item_id=c.case_id "
+                         "WHERE c.profile_id=? AND c.case_id=?", (profile_id, str(case_id or ""))).fetchone()
+        if not row:
+            return None
+        return {"goal_id": row["goal_id"], "status": row["status"], "state": json.loads(row["state_json"]), "created_at": row["created_at"], "updated_at": row["updated_at"],
+                "public": json.loads(row["public_json"]), "private": json.loads(row["private_json"])}
+
+    def load_case(self, profile_id, case_id):
+        profile_id = _profile_id(profile_id)
+        with self._lock, self._connect() as db:
+            return self._case_row(db, profile_id, case_id)
+
+    def active_case_id(self, profile_id, goal_id):
+        profile_id = _profile_id(profile_id)
+        with self._lock, self._connect() as db:
+            row = db.execute("SELECT case_id FROM cases WHERE profile_id=? AND goal_id=? AND status='ACTIVE'", (profile_id, str(goal_id or ""))).fetchone()
+        return row["case_id"] if row else None
+
+    def list_cases(self, profile_id, goal_id):
+        profile_id = _profile_id(profile_id)
+        with self._lock, self._connect() as db:
+            rows = db.execute("SELECT case_id,status,created_at FROM cases WHERE profile_id=? AND goal_id=? ORDER BY created_at DESC", (profile_id, str(goal_id or ""))).fetchall()
+        return [{"case_id": r["case_id"], "status": r["status"], "created_at": r["created_at"]} for r in rows]
+
+    def record_case_stage(self, profile_id, case_id, stage_index, attempt_id, fingerprint, result, total_stages):
+        """Cierra una etapa. Idempotente por (attempt_id, fingerprint); una segunda respuesta a una etapa ya calificada se rechaza."""
+        profile_id = _profile_id(profile_id)
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = self._case_row(db, profile_id, case_id)
+            if not row:
+                raise ValueError("El caso no existe para este perfil.")
+            stages = row["state"]["stages"]
+            key = str(stage_index)
+            if key in stages:
+                saved = stages[key]
+                if saved["attempt_id"] == attempt_id and saved["fingerprint"] == fingerprint:
+                    return {"result": saved, "status": row["status"], "duplicate": True}
+                raise ValueError("CASE_STAGE_CONFLICT: esta etapa ya fue calificada con otra respuesta; no se puede reintentar.")
+            if row["status"] != "ACTIVE":
+                raise ValueError("CASE_CLOSED: este caso ya no admite respuestas.")
+            if stage_index != len(stages):
+                raise ValueError("CASE_STAGE_ORDER: las etapas se responden en orden.")
+            if any(s["attempt_id"] == attempt_id for s in stages.values()):
+                raise ValueError("CASE_STAGE_CONFLICT: este attempt_id ya se usó en otra etapa.")
+            saved = {**result, "attempt_id": attempt_id, "fingerprint": fingerprint}
+            stages[key] = saved
+            status = "FINISHED" if len(stages) >= total_stages else "ACTIVE"
+            db.execute("UPDATE cases SET status=?,state_json=?,updated_at=? WHERE profile_id=? AND case_id=?", (status, _json(row["state"]), time.time_ns(), profile_id, str(case_id)))
+        return {"result": saved, "status": status, "duplicate": False}
+
+    def close_case(self, profile_id, case_id, new_status, mark_model=False):
+        """ACTIVE -> ABANDONED / CLOSED_MODEL_VIEWED; mark_model registra que se vio la respuesta modelo (también en FINISHED)."""
+        profile_id = _profile_id(profile_id)
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = self._case_row(db, profile_id, case_id)
+            if not row:
+                raise ValueError("El caso no existe para este perfil.")
+            state, status = row["state"], row["status"]
+            if mark_model and not state.get("model_viewed_at"):
+                state["model_viewed_at"] = time.time_ns()
+            if status == "ACTIVE" and new_status in ("ABANDONED", "CLOSED_MODEL_VIEWED"):
+                status = new_status
+            db.execute("UPDATE cases SET status=?,state_json=?,updated_at=? WHERE profile_id=? AND case_id=?", (status, _json(state), time.time_ns(), profile_id, str(case_id)))
+        return {"status": status, "model_viewed_at": state.get("model_viewed_at")}
+
 
     def save_criterion_activity(self, profile_id, goal_id, public_contract, private_contract):
         """Insert an immutable activity contract, or return its identical original.
@@ -1187,6 +1425,9 @@ class DurableMemory:
             # previous registry for this profile must not be reused silently.
             db.execute("DELETE FROM criterion_evaluations WHERE profile_id=?", (profile_id,))
             db.execute("DELETE FROM criterion_activities WHERE profile_id=?", (profile_id,))
+            # authentic_performance_v1: los casos (con su rúbrica privada) tampoco se reutilizan tras restaurar un respaldo público.
+            db.execute("DELETE FROM placement_items WHERE profile_id=? AND item_id IN (SELECT case_id FROM cases WHERE profile_id=?)", (profile_id, profile_id))
+            db.execute("DELETE FROM cases WHERE profile_id=?", (profile_id,))
             db.execute("UPDATE stores SET store_json=?,revision=?,updated_at=? WHERE profile_id=?", (_json(store), revision, now, profile_id))
             db.execute("UPDATE profiles SET preferences_json=?,updated_at=? WHERE profile_id=?", (_json(preferences), now, profile_id))
             db.execute("DELETE FROM attempts WHERE profile_id=?", (profile_id,))

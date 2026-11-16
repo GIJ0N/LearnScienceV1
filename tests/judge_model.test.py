@@ -155,20 +155,20 @@ class Roles(Base):
                 walk(child, name)
         walk(tree, None)
         # Si una función nueva llama al modelo, este test obliga a clasificarla (juez / auditor / generación) y a revisar si califica algo del aprendiz.
-        JUDGE = {'evaluate', 'evaluate_criterion_activity', 'grade_error_fix', 'challenge_report', 'beto_turn'}
+        JUDGE = {'evaluate', 'evaluate_criterion_activity', 'grade_error_fix', 'challenge_report', 'beto_turn', 'grade_case_stage'}
         AUDIT = {'audit_content'}
         WRAPPERS = {'judge_gemini', 'audit_gemini'}
         GENERATE = {'make_criterion_activity', 'make_coverage_map', 'expand_area', 'make_area_map', 'make_lesson', 'make_hint.ask', 'evidence_confirmation', 'review_question',
                     'micro_start', 'micro_repair', 'make_micro_context_legacy', 'repair_diagnosis', 'repair_teaching', 'micro_zoom', 'make_placement_items', 'app_model_steps',
                     'make_step_repair', 'make_error_hunt_items', 'beto_start.attempt', '_challenge_attempt', 'make_discrimination_items', '_confirmation_attempt', 'make_production_item',
-                    'make_faded_example', 'make_direct_teaching', '_make_commented_answer', 'make_expert_profile', 'extract_graph', 'make_composition_items', 'make_explore'}
+                    'make_faded_example', 'make_direct_teaching', '_make_commented_answer', 'make_expert_profile', 'extract_graph', 'make_composition_items', 'make_explore', 'make_case'}
         self.assertEqual(found.get('judge_gemini', set()), JUDGE)
         self.assertEqual(found.get('audit_gemini', set()), AUDIT)
         self.assertEqual(found.get('gemini', set()), GENERATE | WRAPPERS)
 
     def test_every_judge_function_uses_the_judge_role(self):
         import inspect
-        judges = ('evaluate', 'evaluate_criterion_activity', 'grade_error_fix', 'challenge_report', 'beto_turn')
+        judges = ('evaluate', 'evaluate_criterion_activity', 'grade_error_fix', 'challenge_report', 'beto_turn', 'grade_case_stage')
         for name in judges:
             src = inspect.getsource(getattr(app, name))
             self.assertIn('judge_gemini(', src, name)
