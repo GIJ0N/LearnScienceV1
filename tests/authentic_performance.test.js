@@ -231,9 +231,15 @@ const answer = 'Creo que la causa es el espesor excesivo porque retrasa el curad
     // la capa de independencia del panel tampoco cuenta etapas de un mismo caso como actividades distintas
     const h2 = attach(goal([], {}));
     p.caseStageEvidence(h2, 'case-Z', mk(1, 'CORRECT')); p.caseStageEvidence(h2, 'case-Z', mk(2, 'CORRECT'));
-    assert.equal(p.expertLayers(h2, 'a').layers.independence, 'partial', 'un caso = un solo indicio');
+    assert.equal(p.expertLayers(h2, 'a').layers.independence, 'none', 'calificado solo por el modelo sin ancla local: el panel tampoco lo cuenta');
     p.caseStageEvidence(h2, 'case-W', mk(1, 'CORRECT'));
-    assert.equal(p.expertLayers(h2, 'a').layers.independence, 'met');
+    assert.equal(p.expertLayers(h2, 'a').layers.independence, 'none', 'dos casos sin ancla: tampoco');
+    p.createTrustAnchor(h2, 'a', 'CONFIRMATION', 'ancla-2', NOW);
+    assert.equal(p.expertLayers(h2, 'a').layers.independence, 'met', 'con ancla local, dos casos distintos');
+    const h3 = attach(goal([], {}));
+    p.caseStageEvidence(h3, 'case-V', mk(1, 'CORRECT')); p.caseStageEvidence(h3, 'case-V', mk(2, 'CORRECT'));
+    p.createTrustAnchor(h3, 'a', 'CONFIRMATION', 'ancla-3', NOW);
+    assert.equal(p.expertLayers(h3, 'a').layers.independence, 'partial', 'un caso = un solo indicio');
   }
 
   // un fallo evaluable es contradicción y UNKNOWN no
