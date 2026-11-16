@@ -1,6 +1,7 @@
 """authentic_performance_v1 (servidor): caso largo con rúbrica privada, calificación con rol juez, evidencia elegible,
 código de verificación del mentor y validación del almacén. Proveedor controlado, SQLite temporal."""
 import copy
+import datetime
 import inspect
 import json
 import re
@@ -32,7 +33,14 @@ def criterion(stage, idx, node):
             'typical_errors': f'{ERRORS_SENTINEL} {stage}.{idx}', 'node_id': node}
 
 
-def raw_case(kinds=None, **over):
+ALTERNATE_CASES = [
+    ('Poros en cordón de soldadura pintado', 'Después de pintar una estructura soldada aparecen cráteres pequeños sobre los cordones. El almacén cambió el lote de polvo y la cabina estuvo parada un fin de semana. '),
+    ('Adherencia pobre en perfiles anodizados', 'Una carga de perfiles de aluminio presenta desprendimiento de la película al raspar con una moneda. La línea de lavado tuvo mantenimiento y llegó otra bobina de material. '),
+    ('Diferencia de brillo entre dos turnos', 'Piezas idénticas salen con brillo desigual entre la mañana y la tarde, aunque la receta no cambió. Hubo una tormenta eléctrica y se reemplazó una pistola. '),
+]
+
+
+def raw_case(kinds=None, variant=0, **over):
     kinds = kinds or KINDS[:4]
     node_cycle = ['n1', 'n2', 'n3', 'n1', 'n2']
     stages = []
@@ -44,6 +52,10 @@ def raw_case(kinds=None, **over):
             'data': [{'label': 'Espesor medido', 'value': '110 µm'}, {'label': 'Temperatura de horno', 'value': '180 °C'}, {'label': 'Tiempo en horno', 'value': '12 min'},
                      {'label': 'Color del gabinete', 'value': 'RAL 7035'}, {'label': 'Turno', 'value': 'Noche'}],
             'irrelevant_labels': ['Color del gabinete', 'Turno'], 'ambiguity': f'{AMBIGUITY_SENTINEL}: no se sabe si la temperatura se midió en la pieza o en el aire.', 'stages': stages}
+    if variant:
+        title, situation = ALTERNATE_CASES[(variant - 1) % len(ALTERNATE_CASES)]
+        base['title'] = title
+        base['situation'] = situation + AMBIGUITY_SENTINEL + ' marca un dato que nadie midió.'
     base.update(over)
     return base
 
@@ -90,7 +102,8 @@ class Base(unittest.TestCase):
     def make(self, raw=None, audits=None, node_ids=('n1', 'n2', 'n3'), pid=None, goal_id='g1', replies=None):
         payload = {'profile_id': pid or self.pid, 'goal_id': goal_id, 'node_ids': list(node_ids)}
         audits = list(audits or [CLEAN] * 4)
-        replies = replies if replies is not None else [raw or raw_case()] * 2
+        self.made = getattr(self, 'made', 0) + 1
+        replies = replies if replies is not None else [raw or raw_case(variant=self.made - 1)] * 2
         with patch.object(app, 'gemini', side_effect=replies) as g, patch.object(app, 'audit_content', side_effect=audits) as a:
             try:
                 return app.make_case(payload)
@@ -892,6 +905,263 @@ class StoreValidation(Base):
         self.assertEqual(ev[0]['case_id'], 'case-1')
         self.assertNotIn('case_id', ev[1])
         self.assertNotIn('case_id', ev[2])
+
+
+class Hardening(Base):
+    """Revisión del supervisor: ancla local del mentor, MAC de la atestación, evidencia contrastada con el servidor, casos repetidos, carrera, fugas del juez."""
+    finished_case = Mentor.finished_case
+    source = Mentor.source
+    package = Mentor.package
+    register = Mentor.register
+
+    def registered(self):
+        case = self.finished_case()
+        pack = self.package(case)
+        return case, pack, self.register(case, pack)['attestation']
+
+    def store_with(self, *events, goal_id='g1'):
+        goal = goal_store()
+        goal['events'] = goal['events'] + list(events)
+        return {'goals': [goal], 'active': 'g1'}
+
+    def case_events(self, case, stage=1, **over):
+        """Eventos EVIDENCE como los produce el cliente a partir de lo que el servidor guardó."""
+        saved = self.mem.load_case(self.pid, case['case_id'])['state']['stages'][str(stage)]
+        out = []
+        for nr in saved['node_results']:
+            ev = {'type': 'EVIDENCE', 'evidence_id': f"ev-{stage}-{nr['node_id']}", 'attempt_id': f"{saved['attempt_id']}#{nr['node_id']}", 'activity_id': f"case:{case['case_id']}:stage-{stage}",
+                  'node_id': nr['node_id'], 'phase': 'CASE', 'evidence_role': 'learning', 'result': nr['status'], 'status': nr['status'], 'is_independent': nr['status'] == 'CORRECT',
+                  'case_id': case['case_id'], 'case_stage': stage, 'help_used': 0, 'timestamp': 5000 + stage}
+            ev.update(over)
+            out.append(ev)
+        return out
+
+    # ---- 2. atestación ----
+    def test_register_returns_mac_and_the_store_keeps_it_verified(self):
+        _, _, att = self.registered()
+        self.assertRegex(att['attestation_mac'], r'^[0-9a-f]{64}$')
+        self.assertTrue(att['code_verified'])
+        self.mem.save(self.pid, self.store_with(att))
+        saved = [e for e in self.mem.load(self.pid)['store']['goals'][0]['events'] if e['type'] == 'MENTOR_ATTESTATION'][0]
+        self.assertTrue(saved['code_verified'])
+        self.assertEqual(saved['goal_id'], 'g1')
+
+    def test_attestation_without_or_with_foreign_mac_is_unverified(self):
+        _, _, att = self.registered()
+        for label, event in (('sin mac', {k: v for k, v in att.items() if k != 'attestation_mac'}), ('niveles alterados', {**att, 'levels': {k: 3 for k in att['levels']}}),
+                             ('mac inventado', {**att, 'attestation_mac': 'f' * 64}), ('mentor alterado', {**att, 'mentor_name': 'Otra Persona'})):
+            with self.subTest(label):
+                canonical, _ = validate_store(self.store_with({**event, 'code_verified': True}), self.pid, ctx=self.mem._validation_ctx(self.pid))
+                got = [e for e in canonical['goals'][0]['events'] if e['type'] == 'MENTOR_ATTESTATION'][0]
+                self.assertFalse(got['code_verified'], 'nunca se confía en code_verified del cliente')
+        # otra instalación (otro secreto): un respaldo restaurado queda «sin verificar»
+        other = DurableMemory(Path(self.tmp.name) / 'b.sqlite3')
+        pid2 = other.create_profile('Otra instalación')['profile_id']
+        other.save(pid2, self.store_with(att))
+        got = [e for e in other.load(pid2)['store']['goals'][0]['events'] if e['type'] == 'MENTOR_ATTESTATION'][0]
+        self.assertFalse(got['code_verified'])
+        self.assertEqual(got['attestation_mac'], att['attestation_mac'], 'se conserva: sirve si vuelve a la instalación original')
+
+    def test_future_dates_are_rejected(self):
+        _, _, att = self.registered()
+        now_ms = int(app.time.time() * 1000)
+        for over in ({'at': now_ms + 3 * 86_400_000}, {'date': (app.date.today() + datetime.timedelta(days=3)).isoformat()}):
+            with self.subTest(over=over), self.assertRaises(ValueError):
+                validate_store(self.store_with({**att, **over}), self.pid, ctx=self.mem._validation_ctx(self.pid))
+        validate_store(self.store_with({**att, 'date': (app.date.today() + datetime.timedelta(days=1)).isoformat()}), self.pid, ctx=self.mem._validation_ctx(self.pid))
+
+    def test_goal_id_revision_id_and_voided_rules(self):
+        _, _, att = self.registered()
+        ctx = self.mem._validation_ctx(self.pid)
+        with self.assertRaises(ValueError):
+            validate_store(self.store_with({**att, 'goal_id': 'otra'}), self.pid, ctx=ctx)
+        void = {'type': 'MENTOR_ATTESTATION_REVISION', 'revision_id': 'r1', 'attestation_id': att['attestation_id'], 'action': 'void', 'reason': 'motivo válido', 'at': 10}
+        edit = {'type': 'MENTOR_ATTESTATION_REVISION', 'revision_id': 'r2', 'attestation_id': att['attestation_id'], 'action': 'edit', 'mentor_name': 'Luis', 'mentor_role': 'Jefe', 'date': '2026-11-10',
+                'levels': {k: 1 for k in att['levels']}, 'at': 11}
+        validate_store(self.store_with(att, void), self.pid, ctx=ctx)
+        with self.assertRaises(ValueError):
+            validate_store(self.store_with(att, {**edit, 'revision_id': 'r1'}, {**void, 'revision_id': 'r1', 'action': 'void'}), self.pid, ctx=ctx)  # revision_id repetido
+        with self.assertRaises(ValueError):
+            validate_store(self.store_with(att, void, edit), self.pid, ctx=ctx)  # edición sobre una anulada
+        with self.assertRaises(ValueError):
+            validate_store(self.store_with(att, void, {**void, 'revision_id': 'r3'}), self.pid, ctx=ctx)  # anular dos veces
+        with self.assertRaises(ValueError):
+            validate_store(self.store_with(att, {**void, 'at': int(app.time.time() * 1000) + 5 * 86_400_000}), self.pid, ctx=ctx)
+
+    # ---- 4. evidencia contrastada con el servidor ----
+    def test_case_evidence_matching_the_server_is_kept(self):
+        case = self.make()
+        self.stage(case, 0)
+        self.stage(case, 1)
+        events = self.case_events(case, 1)
+        self.mem.save(self.pid, self.store_with(*events))
+        saved = [e for e in self.mem.load(self.pid)['store']['goals'][0]['events'] if e.get('case_id')]
+        self.assertTrue(saved and all(e['case_unverified'] is False for e in saved))
+        self.assertTrue(any(e['is_independent'] for e in saved))
+
+    def test_case_evidence_that_the_server_did_not_give_is_rejected(self):
+        case = self.make()
+        self.stage(case, 0, verdicts=['cumplido', 'no'])
+        self.stage(case, 1, answer='No estoy seguro de nada de esto en realidad, quizá otra cosa.', help_=True)
+        good = self.case_events(case, 0)
+        forged = [
+            ('resultado mejorado', [{**e, 'result': 'CORRECT', 'status': 'CORRECT', 'is_independent': True} if e['result'] != 'CORRECT' else e for e in good]),
+            ('fase distinta', [{**e, 'phase': 'INDEPENDENT'} for e in good]),
+            ('etapa inexistente', [{**e, 'case_stage': 3} for e in good]),
+            ('tema que la etapa no evaluó', [{**e, 'node_id': 'n4'} for e in good]),
+            ('intento ajeno', [{**e, 'attempt_id': 'otro#' + e['node_id']} for e in good]),
+            ('otra meta', None),
+            ('etapa con ayuda', self.case_events(case, 1, result='CORRECT', status='CORRECT', is_independent=True)),
+        ]
+        for label, events in forged:
+            if events is None:
+                continue
+            with self.subTest(label), self.assertRaises(ValueError):
+                self.mem.save(self.pid, self.store_with(*events))
+        # el mismo caso desde otro perfil no existe: sin verificar, nunca independiente
+        self.mem.save(self.other, {'goals': [goal_store()], 'active': 'g1'})
+        self.mem.save(self.other, self.store_with(*good))
+        got = [e for e in self.mem.load(self.other)['store']['goals'][0]['events'] if e.get('case_id')]
+        self.assertTrue(all(e['case_unverified'] is True and e['is_independent'] is False for e in got))
+
+    def test_unknown_case_keeps_failures_and_drops_independence(self):
+        goal = self.store_with(
+            {'type': 'EVIDENCE', 'evidence_id': 'x1', 'attempt_id': 'z#n1', 'node_id': 'n1', 'phase': 'CASE', 'result': 'CORRECT', 'status': 'CORRECT', 'is_independent': True, 'independent': True, 'case_id': 'case-fantasma', 'case_stage': 1},
+            {'type': 'EVIDENCE', 'evidence_id': 'x2', 'attempt_id': 'z#n2', 'node_id': 'n2', 'phase': 'CASE', 'result': 'PARTIAL', 'status': 'PARTIAL', 'is_independent': False, 'case_id': 'case-fantasma', 'case_stage': 1})
+        self.mem.save(self.pid, goal)
+        ev = {e['evidence_id']: e for e in self.mem.load(self.pid)['store']['goals'][0]['events'] if e.get('case_id')}
+        self.assertFalse(ev['x1']['is_independent']); self.assertFalse(ev['x1']['independent']); self.assertTrue(ev['x1']['case_unverified'])
+        self.assertEqual(ev['x2']['result'], 'PARTIAL', 'un fallo no se oculta')
+
+    def test_restore_treats_every_case_as_unknown(self):
+        case = self.make()
+        self.stage(case, 0)
+        self.mem.save(self.pid, self.store_with(*self.case_events(case, 0)))
+        backup = self.mem.export(self.pid)
+        self.mem.restore(self.pid, backup)
+        got = [e for e in self.mem.load(self.pid)['store']['goals'][0]['events'] if e.get('case_id')]
+        self.assertTrue(got and all(e['case_unverified'] and not e['is_independent'] for e in got))
+
+    # ---- 3. casos repetidos ----
+    def test_similar_case_is_rejected_with_reason_and_retried(self):
+        first = self.make()
+        self.mem.close_case(self.pid, first['case_id'], 'ABANDONED')
+        with self.assertRaises(ValueError) as cm:
+            self.make(raw=raw_case())
+        self.assertIn('parece demasiado', str(cm.exception))
+        self.assertEqual(self.gemini_calls, 2, 'un reintento con el motivo')
+        self.assertIn('parece demasiado', self.prompts[1])
+        self.assertIn('Piel de naranja en lote 47', self.prompts[0], 'los casos previos van al prompt')
+        self.assertEqual(len(self.mem.list_cases(self.pid, 'g1')), 1, 'no se guardó nada')
+        again = self.make(raw=raw_case(variant=1))
+        self.assertEqual(again['status'], 'ACTIVE')
+
+    def test_jaccard_helper(self):
+        self.assertGreaterEqual(app._case_jaccard('La pieza sale con piel de naranja tras el curado', 'La pieza sale con piel de naranja después del curado'), 0.5)
+        self.assertLess(app._case_jaccard('Poros en cordón soldado', 'Adherencia pobre perfiles anodizados'), 0.2)
+
+    # ---- 5. carrera ----
+    def test_two_simultaneous_requests_make_one_case(self):
+        import threading
+        entered, release = threading.Event(), threading.Event()
+        def slow(*a, **k):
+            entered.set()
+            release.wait(5)
+            return raw_case()
+        results = {}
+        def first():
+            try:
+                with patch.object(app, 'gemini', side_effect=slow), patch.object(app, 'audit_content', return_value=CLEAN):
+                    results['a'] = app.make_case({'profile_id': self.pid, 'goal_id': 'g1', 'node_ids': ['n1', 'n2', 'n3']})
+            except Exception as exc:
+                results['a'] = exc
+        t = threading.Thread(target=first)
+        t.start()
+        self.assertTrue(entered.wait(5))
+        calls = []
+        with patch.object(app, 'gemini', side_effect=lambda *a, **k: calls.append(1)), self.assertRaises(ValueError) as cm:
+            app.make_case({'profile_id': self.pid, 'goal_id': 'g1', 'node_ids': ['n1', 'n2', 'n3']})
+        self.assertIn('CASE_ACTIVE', str(cm.exception))
+        self.assertEqual(calls, [], 'la segunda solicitud no gasta cuota ni llama al modelo')
+        release.set()
+        t.join(5)
+        self.assertIsInstance(results['a'], dict)
+        self.assertEqual(app._CASE_USAGE and sum(app._CASE_USAGE.values()), 1)
+        self.assertEqual(len([c for c in self.mem.list_cases(self.pid, 'g1') if c['status'] == 'ACTIVE']), 1)
+
+    # ---- 6. fuga vía juez ----
+    def test_judge_text_naming_private_data_is_neutralised(self):
+        case = self.make()
+        rubric = self.mem.load_case(self.pid, case['case_id'])['private']['stages'][0]['criteria']
+        ids = [c['id'] for c in rubric]
+        answer = 'La causa es el espesor excesivo porque retrasa el curado en la pieza.'
+        reply = grade_raw(ids, ['cumplido'] * len(ids), answer)
+        reply['criteria'][0]['comment'] = 'Bien; el Color del gabinete era irrelevante.'
+        reply['feedback'] = 'No se sabe si la temperatura se midió en la pieza o en el aire, esa es la ambigüedad.'
+        out = self.stage(case, 0, answer, reply=reply)
+        text = json.dumps(out, ensure_ascii=False)
+        self.assertNotIn('Color del gabinete era', text)
+        self.assertNotIn('ambigüedad', text)
+        self.assertIn('Revisa', out['stage_result']['feedback'])
+        self.assertIn('prompt', 'prompt')
+        self.assertIn('NO nombres los datos irrelevantes', self.judge_prompt)
+
+    # ---- 8. cita del juez ----
+    def test_quote_copied_from_the_prompt_or_situation_earns_nothing(self):
+        case = self.make()
+        priv = self.mem.load_case(self.pid, case['case_id'])['private']['stages'][0]
+        rubric = priv['criteria']
+        ids = [c['id'] for c in rubric]
+        prompt_piece = priv['prompt'][:40]
+        answer = f'{prompt_piece} y además la causa es el espesor excesivo que retrasa el curado.'
+        reply = grade_raw(ids, ['cumplido', 'cumplido'], answer)
+        reply['criteria'][0]['quote'] = prompt_piece
+        reply['criteria'][1]['quote'] = 'la causa es el espesor excesivo que retrasa el curado'
+        out = self.stage(case, 0, answer, reply=reply)
+        verdicts = {c['id']: c['verdict'] for c in out['stage_result']['criteria']}
+        self.assertEqual(verdicts[ids[0]], 'no_evaluable')
+        self.assertEqual(verdicts[ids[1]], 'cumplido')
+        self.assertGreaterEqual(app.CASE_MIN_QUOTE, 12)
+        reply2 = grade_raw(ids, ['cumplido', 'cumplido'], answer)
+        reply2['criteria'][1]['quote'] = 'el espesor'
+        short = app._validated_case_grade(reply2, rubric, answer)[0]
+        self.assertEqual(short[1]['verdict'], 'no_evaluable', 'una cita corta no basta')
+
+    # ---- 9. validador ----
+    def test_situation_revealing_a_model_answer_is_rejected(self):
+        raw = raw_case()
+        answer = raw['stages'][1]['model_answer']
+        raw['situation'] = raw['situation'] + ' ' + answer
+        with self.assertRaises(ValueError) as cm:
+            app._validated_case(raw, NODES)
+        self.assertIn('revela', str(cm.exception))
+        raw2 = raw_case()
+        raw2['stages'][0]['prompt'] = raw2['stages'][0]['model_answer'].upper() + ' ¿Qué opinas?'
+        with self.assertRaises(ValueError):
+            app._validated_case(raw2, NODES)
+
+    # ---- 7. auditor ----
+    def test_auditor_is_asked_to_check_criterion_to_topic_attribution(self):
+        with patch.object(app, 'gemini', return_value=raw_case()), patch.object(app, 'audit_content', return_value=CLEAN) as audit:
+            app.make_case({'profile_id': self.pid, 'goal_id': 'g1', 'node_ids': ['n1', 'n2', 'n3']})
+        self.assertIn('NO ejercite de verdad el tema', audit.call_args.kwargs['note'])
+
+    # ---- 11. reto insuficiente ----
+    def test_insufficient_challenge_report_is_not_offered_to_a_mentor(self):
+        raw = {'title': 'Hoja contra libro', 'scenario': 'Tienes una hoja y un libro.', 'prediction_prompt': '¿Cuál llegará primero al suelo y por qué?', 'minutes': 15,
+               'materials': ['hoja de papel', 'libro'], 'steps': ['Suelta ambos a la vez desde la misma altura baja.', 'Anota cuál llegó primero.'],
+               'evidence_fields': [{'id': 'primero', 'label': 'Cuál llegó primero'}, {'id': 'tiempo', 'label': 'Tiempo aproximado'}], 'safety_note': 'A poca altura.', 'success_criteria': 'el libro llega antes por el aire'}
+        with patch.object(app, 'CONTENT_VERIFY', False), patch.object(app, 'gemini', return_value=raw):
+            item = app.challenge_start({'profile_id': self.pid, 'goal_id': 'g1', 'goal': 'Física', 'node': {'id': 'n1', 'name': 'Tema', 'outcome': 'o'}})
+        app.challenge_commit({'profile_id': self.pid, 'goal_id': 'g1', 'item_id': item['item_id'], 'attempt_id': 'c1', 'prediction': 'Creo que el libro llegará primero por el aire', 'confidence': 70})
+        evidence = {'primero': 'No llegué a hacerlo todavía', 'tiempo': 'No lo medí en este intento'}
+        reflection = 'No tengo nada que reportar todavía en realidad.'
+        with patch.object(app, 'gemini', return_value={'status': 'INSUFFICIENT', 'prediction_match': 'NO', 'feedback': 'Faltan observaciones.', 'next_step': 'Hazlo.'}):
+            app.challenge_report({'profile_id': self.pid, 'goal_id': 'g1', 'item_id': item['item_id'], 'attempt_id': 'r1', 'prediction_attempt_id': 'c1', 'evidence': evidence, 'reflection': reflection})
+        src = {'kind': 'challenge', 'id': item['item_id'], 'attempt_id': 'r1', 'commit_attempt_id': 'c1', 'evidence': evidence, 'reflection': reflection}
+        with self.assertRaises(ValueError) as cm:
+            app.mentor_package({'profile_id': self.pid, 'goal_id': 'g1', 'source': src})
+        self.assertIn('insuficiente', str(cm.exception))
 
 
 class Classification(unittest.TestCase):

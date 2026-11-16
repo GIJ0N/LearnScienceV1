@@ -254,8 +254,22 @@ def _mentor_values(raw):
     return {"mentor_name": name, "mentor_role": role, "date": date_text, "levels": clean, "comment": comment.strip()}
 
 
-def canonical_mentor_event(raw, allowed_nodes, known_attestations):
-    """Forma canónica de MENTOR_ATTESTATION / MENTOR_ATTESTATION_REVISION. known_attestations: dict id -> set(niveles esperados) de las atestaciones anteriores."""
+MENTOR_MAC_FIELDS = ("attestation_id", "goal_id", "source", "node_ids", "mentor_name", "mentor_role", "date", "levels", "comment", "code", "content_digest", "at")
+MENTOR_FUTURE_SLACK_MS = 86_400_000
+
+
+def mentor_event_mac(key_hex, event):
+    """HMAC (secreto local del servidor) del evento canónico de la atestación. Autentica el REGISTRO hecho en esta instalación, no al mentor."""
+    payload = json.dumps({key: event.get(key) for key in MENTOR_MAC_FIELDS}, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hmac.new(bytes.fromhex(key_hex), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def canonical_mentor_event(raw, allowed_nodes, known_attestations, goal_id=None, mac_key=None, now_ms=None, voided=None, revision_ids=None):
+    """Forma canónica de MENTOR_ATTESTATION / MENTOR_ATTESTATION_REVISION. known_attestations: dict id -> set(niveles esperados) de las atestaciones anteriores.
+    code_verified solo es True si attestation_mac coincide con el HMAC local (mac_key); sin MAC o con otro secreto queda False."""
+    now_ms = int(time.time() * 1000) if now_ms is None else now_ms
+    voided = set() if voided is None else voided
+    revision_ids = set() if revision_ids is None else revision_ids
     if raw.get("type") == "MENTOR_ATTESTATION":
         attestation_id = _text_field(raw.get("attestation_id"), 1, 120, "La atestación no tiene identidad.")
         if attestation_id in known_attestations:
@@ -276,23 +290,42 @@ def canonical_mentor_event(raw, allowed_nodes, known_attestations):
         at = raw.get("at")
         if not _finite_number(at) or at < 0:
             raise ValueError("La atestación no conserva una fecha de registro válida.")
+        if at > now_ms + MENTOR_FUTURE_SLACK_MS:
+            raise ValueError("La fecha de registro de la atestación no puede ser futura.")
+        if raw.get("goal_id") is not None and goal_id is not None and str(raw["goal_id"]) != str(goal_id):
+            raise ValueError("La atestación pertenece a otra meta.")
+        if _mentor_values(raw)["date"] > (datetime.date.fromtimestamp(now_ms / 1000) + datetime.timedelta(days=1)).isoformat():
+            raise ValueError("La fecha de la validación no puede ser futura.")
         digest = raw.get("content_digest")
         if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
             raise ValueError("La atestación no conserva la huella del contenido.")
         event = {"type": "MENTOR_ATTESTATION", "attestation_id": attestation_id, "source": {"kind": source["kind"], "id": source_id, **({"attempt_id": attempt} if attempt else {})},
-                 "node_ids": [str(n) for n in node_ids], **_mentor_values(raw), "code": code, "content_digest": digest, "declared_by": "learner", "code_verified": True,
+                 "node_ids": [str(n) for n in node_ids], **_mentor_values(raw), "code": code, "content_digest": digest, "declared_by": "learner", "code_verified": False,
                  "at": at, "policy_version": MENTOR_POLICY_VERSION}
-        if raw.get("goal_id") is not None:
+        if goal_id is not None:
+            event["goal_id"] = str(goal_id)[:120]
+        elif raw.get("goal_id") is not None:
             event["goal_id"] = str(raw["goal_id"])[:120]
+        mac = raw.get("attestation_mac")
+        if isinstance(mac, str) and re.fullmatch(r"[0-9a-f]{64}", mac):
+            event["attestation_mac"] = mac
+            if mac_key and hmac.compare_digest(mac, mentor_event_mac(mac_key, event)):
+                event["code_verified"] = True
         return event
     attestation_id = _text_field(raw.get("attestation_id"), 1, 120, "La revisión no apunta a una atestación.")
     if attestation_id not in known_attestations:
         raise ValueError("La revisión apunta a una atestación inexistente.")
     revision_id = _text_field(raw.get("revision_id"), 1, 120, "La revisión no tiene identidad.")
+    if revision_id in revision_ids:
+        raise ValueError("El respaldo contiene revisiones de mentor duplicadas.")
     action = raw.get("action")
     at = raw.get("at")
     if action not in ("edit", "void") or not _finite_number(at) or at < 0:
         raise ValueError("La revisión de la atestación es inválida.")
+    if at > now_ms + MENTOR_FUTURE_SLACK_MS:
+        raise ValueError("La fecha de la revisión no puede ser futura.")
+    if attestation_id in voided:
+        raise ValueError("Una atestación anulada no admite más revisiones.")
     event = {"type": "MENTOR_ATTESTATION_REVISION", "revision_id": revision_id, "attestation_id": attestation_id, "action": action, "at": at, "policy_version": MENTOR_POLICY_VERSION}
     if action == "void":
         event["reason"] = _text_field(raw.get("reason"), 3, 300, "Anular una atestación exige un motivo (3 a 300 caracteres).")
@@ -318,9 +351,49 @@ def _find_forbidden_keys(value, depth=0):
     return False
 
 
-def validate_store(raw, profile_id, allow_profile_rebind=False):
+def _check_case_evidence(event, goal_id, info):
+    """authentic_performance_v1: la evidencia de una etapa debe coincidir con lo que el servidor calificó.
+    - Caso conocido de esta instalación: fase CASE, misma meta, etapa, tema, intento y resultado; si algo no coincide se RECHAZA el almacén
+      (un cliente honesto nunca lo produce); no se «corrige» en silencio porque eso ocultaría la manipulación.
+    - Caso desconocido aquí (restauración o importación desde otra instalación): no se puede verificar. Se conserva el registro (un fallo no se oculta)
+      pero un CORRECT deja de ser independiente y se marca case_unverified; no se inventa ni se borra nada."""
+    result = event.get("result") or event.get("status")
+    if info is None:
+        if result == "CORRECT" or event.get("is_independent") or event.get("independent") or event.get("is_novel_variant"):
+            for key in ("is_independent", "independent", "is_novel_variant", "varied"):
+                if key in event:
+                    event[key] = False
+            event["is_independent"] = False
+        event["case_unverified"] = True
+        return
+    stage = event.get("case_stage")
+    stages = info["stages"]
+    saved = stages.get(stage) if isinstance(stage, int) and not isinstance(stage, bool) else None
+    node_status = (saved or {}).get("nodes", {}).get(event.get("node_id"))
+    problem = None
+    if info["goal_id"] != goal_id:
+        problem = "pertenece a otra meta"
+    elif event.get("phase") != "CASE":
+        problem = "no tiene la fase CASE"
+    elif saved is None or node_status is None:
+        problem = "no corresponde a una etapa calificada por el servidor"
+    elif event.get("attempt_id") != f"{saved['attempt_id']}#{event.get('node_id')}":
+        problem = "no corresponde al intento calificado"
+    elif result != node_status or event.get("status", result) != node_status:
+        problem = "no coincide con el veredicto del servidor"
+    elif not saved["eligible"] or saved["help_used"] != 0 or saved["dont_know"]:
+        problem = "corresponde a una etapa que no cuenta como evidencia"
+    if problem:
+        raise ValueError(f"La evidencia del caso {problem}; el servidor no la registró así.")
+    event["case_unverified"] = False
+
+
+def validate_store(raw, profile_id, allow_profile_rebind=False, ctx=None):
     """Validate relations and add ownership metadata without inventing evidence."""
     profile_id = _profile_id(profile_id)
+    ctx = ctx or {}
+    mac_key = ctx.get("mac_key")
+    server_cases = ctx.get("cases") or {}
     if not isinstance(raw, dict) or not isinstance(raw.get("goals"), list):
         raise ValueError("El respaldo no contiene un store válido.")
     if len(raw["goals"]) > 100:
@@ -400,6 +473,8 @@ def validate_store(raw, profile_id, allow_profile_rebind=False):
                     pass
                 else:
                     del event["case_id"]  # authentic_performance_v1: metadato del caso; un valor inválido se descarta sin rechazar el evento
+            if event.get("type") == "EVIDENCE" and "case_id" in event:
+                _check_case_evidence(event, goal_id, server_cases.get(event["case_id"]))
             attempt_id = event.get("attempt_id")
             if event.get("type") == "EVIDENCE" and attempt_id:
                 attempt_id = str(attempt_id)
@@ -415,11 +490,17 @@ def validate_store(raw, profile_id, allow_profile_rebind=False):
                     raise ValueError("El respaldo contiene evidence_id duplicados.")
                 evidence_ids.add(evidence_id)
         mentor_ids = {}
+        mentor_voided = set()
+        mentor_revisions = set()
         for index, event in enumerate(events):
             if event.get("type") in ("MENTOR_ATTESTATION", "MENTOR_ATTESTATION_REVISION"):
-                canonical = canonical_mentor_event(event, allowed_nodes, mentor_ids)
+                canonical = canonical_mentor_event(event, allowed_nodes, mentor_ids, goal_id=goal_id, mac_key=mac_key, voided=mentor_voided, revision_ids=mentor_revisions)
                 if canonical["type"] == "MENTOR_ATTESTATION":
                     mentor_ids[canonical["attestation_id"]] = set(canonical["levels"])
+                else:
+                    mentor_revisions.add(canonical["revision_id"])
+                    if canonical["action"] == "void":
+                        mentor_voided.add(canonical["attestation_id"])
                 canonical["profile_id"] = profile_id
                 events[index] = canonical
         for key in ("cases", "case_draft"):
@@ -1303,9 +1384,23 @@ class DurableMemory:
                 rows.append((profile_id, goal_id, event.get("node_id"), str(event["attempt_id"]), event.get("activity_id"), event.get("phase"), event.get("result") or event.get("status"), max(0, int(event.get("help_used") or event.get("help") or 0)), event.get("answer"), _json(question) if question is not None else None, _json({key: event.get(key) for key in ("result", "status", "raw_result", "error_type", "evaluator_version", "feedback", "hint") if key in event}), _json(event), int(event.get("at") or event.get("timestamp") or 0)))
         return rows
 
+    def _validation_ctx(self, profile_id, known_cases=True):
+        """Secreto y resultados de casos de ESTA instalación para validate_store. known_cases=False (restaurar) trata todo caso como desconocido."""
+        cases = {}
+        if known_cases:
+            with self._lock, self._connect() as db:
+                rows = db.execute("SELECT case_id,goal_id,state_json FROM cases WHERE profile_id=?", (profile_id,)).fetchall()
+            for row in rows:
+                stages = {}
+                for key, saved in json.loads(row["state_json"]).get("stages", {}).items():
+                    stages[int(key)] = {"attempt_id": saved.get("attempt_id"), "eligible": bool(saved.get("evidence_eligible")), "help_used": int(saved.get("help_used") or 0), "dont_know": bool(saved.get("dont_know")),
+                                        "nodes": {n["node_id"]: n["status"] for n in saved.get("node_results", []) if isinstance(n, dict)}}
+                cases[row["case_id"]] = {"goal_id": row["goal_id"], "stages": stages}
+        return {"mac_key": self.mentor_secret(), "cases": cases}
+
     def save(self, profile_id, raw_store, expected_revision=None):
         profile_id = _profile_id(profile_id)
-        store, counts = validate_store(raw_store, profile_id)
+        store, counts = validate_store(raw_store, profile_id, ctx=self._validation_ctx(profile_id))
         now = time.time_ns()
         rows = self._attempt_rows(profile_id, store)
         with self._lock, self._connect() as db:
@@ -1380,7 +1475,7 @@ class DurableMemory:
 
     def import_store(self, profile_id, raw_store):
         profile_id = _profile_id(profile_id)
-        canonical, counts = validate_store(raw_store, profile_id, allow_profile_rebind=True)
+        canonical, counts = validate_store(raw_store, profile_id, allow_profile_rebind=True, ctx=self._validation_ctx(profile_id))
         digest = hashlib.sha256(_json(raw_store).encode("utf-8")).hexdigest()
         now = time.time_ns()
         rows = self._attempt_rows(profile_id, canonical)
@@ -1410,7 +1505,7 @@ class DurableMemory:
         profile_id = _profile_id(profile_id)
         if not isinstance(backup, dict) or backup.get("backup_version") != 1 or not isinstance(backup.get("store"), dict):
             raise ValueError("El respaldo durable es inválido.")
-        store, counts = validate_store(backup["store"], profile_id, allow_profile_rebind=True)
+        store, counts = validate_store(backup["store"], profile_id, allow_profile_rebind=True, ctx=self._validation_ctx(profile_id, known_cases=False))
         raw_preferences = backup.get("profile", {}).get("preferences", {})
         preferences = {key: raw_preferences.get(key) is True for key in DEFAULT_PREFERENCES}
         rows = self._attempt_rows(profile_id, store)
