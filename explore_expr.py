@@ -11,6 +11,7 @@ Gramática (sin multiplicación implícita):
     atom   := número | variable | función '(' expr (',' expr)* ')' | '(' expr ')'
 Funciones permitidas: sqrt exp ln log10 sin cos tan abs min max.
 """
+import json
 import math
 import re
 
@@ -18,12 +19,16 @@ EXPR_MAX_LEN = 200
 EXPR_MAX_NODES = 120
 EXPR_MAX_DEPTH = 24
 NAME_RE = re.compile(r'[A-Za-z][A-Za-z0-9_]{0,15}')
-NUMBER_RE = re.compile(r'(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?')
+NUMBER_RE = re.compile(r'(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?')
 IDENT_RE = re.compile(r'[A-Za-z][A-Za-z0-9_]*')
 FUNCS = {'sqrt': (1, 1), 'exp': (1, 1), 'ln': (1, 1), 'log10': (1, 1), 'sin': (1, 1), 'cos': (1, 1), 'tan': (1, 1), 'abs': (1, 1), 'min': (2, 4), 'max': (2, 4)}
 RESERVED_NAMES = frozenset(set(FUNCS) | {'constructor', 'prototype', 'proto', 'tostring', 'valueof', 'hasownproperty', 'window', 'document', 'globalthis', 'self', 'this', 'eval', 'function', 'process', 'require', 'import', 'return', 'new', 'class', 'var', 'let', 'const'})
 MAX_VARIABLES = 4
 GRID_POINTS = 5
+SAMPLES = 61
+JUMP_RATIO = 0.6
+GRID_TOLERANCE = 1e-6
+STORED_MAX_BYTES = 4000
 
 
 class ExprError(ValueError):
@@ -153,13 +158,31 @@ def parse(text, names):
     return tree, used
 
 
+def _odd_integer(x):
+    return math.isfinite(x) and x == math.floor(x) and abs(x) < 2 ** 53 and int(x) % 2 == 1
+
+
 def _pow(a, b):
+    """Math.pow de JavaScript: mismos casos límite (0 con exponente negativo, |base| = 1 con exponente infinito, NaN)."""
+    if b != b:
+        return math.nan
+    if b == 0:
+        return 1.0
+    if a != a:
+        return math.nan
+    if math.isinf(b):
+        if abs(a) == 1:
+            return math.nan
+        return (math.inf if b > 0 else 0.0) if abs(a) > 1 else (0.0 if b > 0 else math.inf)
+    if a == 0:
+        neg = math.copysign(1.0, a) < 0 and _odd_integer(b)
+        if b < 0:
+            return -math.inf if neg else math.inf
+        return -0.0 if neg else 0.0
     try:
         return math.pow(a, b)
     except OverflowError:
-        return math.inf
-    except ZeroDivisionError:
-        return math.inf
+        return -math.inf if a < 0 and _odd_integer(b) else math.inf
     except ValueError:
         return math.nan
 
@@ -228,17 +251,35 @@ def evaluate(tree, env):
 
 
 def _finite_number(value):
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    try:
+        return math.isfinite(float(value))
+    except OverflowError:  # un entero JSON enorme: inválido, no un error 500
+        return False
 
 
 def _text(value, limit):
     if not isinstance(value, str):
         return ''
-    return clip_formula_safe(value.strip(), limit)
+    return clip_rich(value.strip(), limit)
 
 
-def clip_formula_safe(value, n):
-    """Igual que `compact` de app_legacy: si se corta dentro de una fórmula `$...$`, corta antes de ella."""
+RICH_NEAR = 240
+_SIGNAL_RE = re.compile(r'\\[A-Za-z]|[\^_=<>{}]|[\w)\]}]\s*[+\-*/]\s*[\w(\[\\{]')
+_VAR_RE = re.compile(r'\s*[^\W\d_]\s*')
+
+
+def has_math_signal(src):
+    """Señal matemática real de una fórmula en línea (igual que `richSignal` de app.js)."""
+    return bool(_SIGNAL_RE.search(src)) or bool(_VAR_RE.fullmatch(src))
+
+
+def clip_rich(value, n):
+    """Recorte para CONTENIDO generado que se muestra al aprendiz. Igual que `str.strip()[:n]` salvo que el corte
+    caiga dentro de una fórmula que `richParts` pintaría: abierta a <= 240 caracteres del corte, con delimitador
+    válido y señal matemática. Entonces corta antes de ella. Nunca devuelve vacío si el texto no lo era.
+    No usar en texto del aprendiz, claves, referencias, huellas, citas ni JSON de memoria."""
     text = str(value or '').strip()
     if len(text) <= n:
         return text
@@ -262,14 +303,30 @@ def clip_formula_safe(value, n):
             i += len(delim)
             continue
         i += 1
-    if open_at is not None:
-        head = head[:open_at].rstrip()
-    return head
+    if open_at is None or n - open_at > RICH_NEAR:
+        return head
+    tail = head[open_at + len(open_delim):]
+    if open_delim == '$' and (not tail or tail[0].isspace()):
+        return head
+    if not has_math_signal(tail):
+        return head
+    cut = head[:open_at].rstrip()
+    return cut if cut else head
 
 
 def _grid(variable):
     lo, hi = variable['min'], variable['max']
     return [lo + (hi - lo) * k / (GRID_POINTS - 1) for k in range(GRID_POINTS)]
+
+
+def _canon(x):
+    """Enteros sin `.0`, como los serializa JavaScript (mismo tamaño y mismo JSON en ambos lados)."""
+    return int(x) if float(x).is_integer() and abs(x) < 1e15 else x
+
+
+def stored_size(block):
+    """Tamaño que se guarda: bytes UTF-8 del JSON compacto (idéntico a TextEncoder(JSON.stringify(...)) en app.js)."""
+    return len(json.dumps(block, ensure_ascii=False, separators=(',', ':')).encode('utf-8'))
 
 
 def validate_explore(raw):
@@ -320,6 +377,12 @@ def validate_explore(raw):
             raise ValueError('El rango de una variable es demasiado grande.')
         if not 0 < step <= (hi - lo) or (hi - lo) / step > 1000:
             raise ValueError('El paso de una variable es inválido.')
+        cells = (hi - lo) / step
+        if abs(cells - math.floor(cells + 0.5)) > GRID_TOLERANCE:
+            raise ValueError('El paso de la variable ' + name + ' no divide su rango.')
+        offset = (value - lo) / step
+        if abs(offset - math.floor(offset + 0.5)) > GRID_TOLERANCE:
+            raise ValueError('El valor inicial de la variable ' + name + ' no cae en la malla de su paso.')
         clean.append({'name': name, 'label': label, 'unit': unit, 'min': lo, 'max': hi, 'step': step, 'value': value})
     try:
         tree, used = parse(expression, [v['name'] for v in clean])
@@ -345,12 +408,20 @@ def validate_explore(raw):
     scale = max(1.0, max(abs(y) for y in outputs))
     if spread <= 1e-9 * scale:
         raise ValueError('La salida no varía al mover las variables.')
-    for v, points in zip(clean, grids):
-        ys = [evaluate(tree, {**base, v['name']: p}) for p in points]
-        if max(ys) - min(ys) <= 1e-9 * max(1.0, max(abs(y) for y in ys)):
+    for v in clean:
+        ys = [evaluate(tree, {**base, v['name']: v['min'] + (v['max'] - v['min']) * k / (SAMPLES - 1)}) for k in range(SAMPLES)]
+        if not all(math.isfinite(y) for y in ys):
+            raise ValueError('La salida no es finita al recorrer la variable ' + v['name'] + '.')
+        spread = max(ys) - min(ys)
+        if spread <= 1e-9 * max(1.0, max(abs(y) for y in ys)):
             raise ValueError('La variable ' + v['name'] + ' no cambia la salida.')
-    return {'title': title, 'expression': expression, 'variables': clean, 'output': {'label': out_label, 'unit': out_unit},
-            'prompt_before': prompt_before, 'takeaway': takeaway}
+        if max(abs(ys[k + 1] - ys[k]) for k in range(SAMPLES - 1)) > JUMP_RATIO * spread:
+            raise ValueError('La salida de la variable ' + v['name'] + ' tiene una discontinuidad.')
+    block = {'title': title, 'expression': expression, 'variables': [{k: _canon(v[k]) if k in ('min', 'max', 'step', 'value') else v[k] for k in ('name', 'label', 'unit', 'min', 'max', 'step', 'value')} for v in clean],
+             'output': {'label': out_label, 'unit': out_unit}, 'prompt_before': prompt_before, 'takeaway': takeaway}
+    if stored_size(block) > STORED_MAX_BYTES:
+        raise ValueError('El bloque es demasiado grande.')
+    return block
 
 
 def explore_material(block):
