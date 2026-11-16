@@ -68,6 +68,21 @@ async function openGoal(page, url) {
   await page.getByRole('button', { name: /^Seguir: /, }).first().waitFor({ state: 'visible', timeout: 10000 });
 }
 
+// «Menú» y la marca «Ruta» en la misma fila, barra baja y sin desbordes; no depende de la fuente exacta.
+async function checkClosedBar(page, etiqueta) {
+  const m = await page.evaluate(() => {
+    const nav = document.querySelector('.app-nav'), r = nav.getBoundingClientRect();
+    const brand = nav.querySelector('.nav-brand').getBoundingClientRect(), toggle = nav.querySelector('.nav-toggle').getBoundingClientRect();
+    return { height: r.height, brand: [brand.top, brand.bottom], toggle: [toggle.top, toggle.bottom, toggle.left, toggle.right, toggle.height, toggle.width],
+      navRight: r.right, innerWidth: window.innerWidth, scrollWidth: document.documentElement.scrollWidth };
+  });
+  console.log(etiqueta + ': barra ' + Math.round(m.height) + ' px');
+  assert.ok(Math.min(m.brand[1], m.toggle[1]) - Math.max(m.brand[0], m.toggle[0]) > 0, etiqueta + ': «Menú» y «Ruta» deben estar en la misma fila ' + JSON.stringify(m));
+  assert.ok(m.height <= 110, etiqueta + ': barra cerrada demasiado alta: ' + m.height + ' px');
+  assert.ok(m.toggle[4] >= 43.5 && m.toggle[5] >= 43.5, etiqueta + ': «Menú» debe medir ≥ 44 px');
+  assert.ok(m.toggle[3] <= m.navRight + 0.5 && m.scrollWidth <= m.innerWidth, etiqueta + ': desbordamiento horizontal ' + JSON.stringify(m));
+}
+
 const visible = (page, name) => page.getByRole('button', { name, exact: true }).first().isVisible();
 
 async function main() {
@@ -98,7 +113,6 @@ async function main() {
       console.log('390 px: barra ' + Math.round(cover.navHeight) + ' px, position:' + cover.position + ', cubre ' + (cover.ratio * 100).toFixed(1) + ' % del viewport con scrollY=' + Math.round(cover.scrolled));
       assert.ok(cover.scrolled > 0, 'la página debe poder desplazarse para que la prueba tenga sentido');
       assert.equal(cover.position, 'static', 'en móvil la barra no debe quedar fija (position: ' + cover.position + ')');
-      assert.ok(cover.navHeight <= 80, 'la barra cerrada debe caber en una fila (alto ' + cover.navHeight + ' px)');
       assert.ok(cover.ratio <= 0.15, 'la barra cubre ' + (cover.ratio * 100).toFixed(1) + ' % del viewport (máximo 15 %)');
 
       // Exactamente un botón principal visible en el inicio.
@@ -107,6 +121,13 @@ async function main() {
         .filter(b => b.getClientRects().length > 0 && getComputedStyle(b).visibility !== 'hidden')
         .map(b => b.textContent));
       assert.equal(primary.length, 1, 'botones principales visibles en el inicio: ' + JSON.stringify(primary));
+
+      // Barra cerrada: fuente normal y, después, una fuente más ancha (reproduce el runner de CI y teléfonos reales).
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await checkClosedBar(page, '390 px fuente normal');
+      await page.addStyleTag({ content: '.app-nav,.app-nav *{letter-spacing:.06em;font-size:20px !important}' });
+      await checkClosedBar(page, '390 px fuente ancha');
+      await page.evaluate(() => { for (const s of document.querySelectorAll('style')) if (s.textContent.includes('letter-spacing:.06em')) s.remove(); });
 
       // Menú: «Plan» oculto hasta pulsar «Menú».
       await page.evaluate(() => window.scrollTo(0, 0));
