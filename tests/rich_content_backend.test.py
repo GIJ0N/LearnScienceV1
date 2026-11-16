@@ -42,7 +42,9 @@ class Validator(unittest.TestCase):
         out = ex.validate_explore(block())
         self.assertEqual(out['expression'], 'k*t')
         self.assertEqual([v['name'] for v in out['variables']], ['k', 't'])
-        self.assertTrue(all(isinstance(v[k], float) for v in out['variables'] for k in ('min', 'max', 'step', 'value')))
+        self.assertTrue(all(isinstance(v[k], (int, float)) and not isinstance(v[k], bool) for v in out['variables'] for k in ('min', 'max', 'step', 'value')))
+        self.assertEqual([type(out['variables'][0][k]) for k in ('min', 'max', 'value')], [int, int, int], 'enteros canónicos, como los serializa JS')
+        self.assertIsInstance(out['variables'][0]['step'], float)
         self.assertNotIn('applicable', out)
 
     def test_variables_count_names_and_ranges(self):
@@ -89,6 +91,45 @@ class Validator(unittest.TestCase):
         out = ex.validate_explore(block(title='a' * 75 + ' $x^2 + y^2$'))
         self.assertEqual(out['title'], 'a' * 75, 'el recorte no deja un `$` huérfano')
 
+    def test_i4_huge_json_integer_is_a_validation_error_not_a_500(self):
+        huge = 10 ** 400
+        for key in ('min', 'max', 'step', 'value'):
+            self.bad(variables=[{**var('k'), key: huge}], expression='k')
+        self.assertFalse(ex._finite_number(huge))
+        self.assertFalse(ex._finite_number(True))
+
+    def test_i5_discontinuities_between_grid_points_are_rejected(self):
+        self.assertIn('finita', self.bad(expression='1/(x-1.3)', variables=[var('x', 'X', '', 1, 2, 0.1, 1.5)]))
+        self.assertIn('discontinuidad', self.bad(expression='tan(x)', variables=[var('x', 'X', '', 0, 3, 0.1, 1)]))
+        self.assertTrue(ex.validate_explore(block(expression='x^2', variables=[var('x', 'X', '', 0.5, 4, 0.5, 2)])))
+        self.assertTrue(ex.validate_explore(block(expression='sin(x)', variables=[var('x', 'X', '', 0, 3, 0.1, 1)])))
+
+    def test_m4_step_divides_range_and_value_is_on_the_grid(self):
+        self.assertIn('no divide', self.bad(expression='x*2', variables=[var('x', 'X', '', 0, 10, 3, 3)]))
+        self.assertIn('malla', self.bad(expression='x*2', variables=[var('x', 'X', '', 0, 10, 2, 3)]))
+        self.assertTrue(ex.validate_explore(block(expression='x*2', variables=[var('x', 'X', '', 0, 1, 0.1, 0.3)])), 'tolerancia de coma flotante')
+        self.assertTrue(ex.validate_explore(block(expression='x*2', variables=[var('x', 'X', '', 0, 10, 2, 4)])))
+
+    def test_m7_size_is_utf8_bytes_of_compact_json(self):
+        wide = block(takeaway='ñ' * 300, prompt_before='ñ' * 300, title='ñ' * 80)
+        out = ex.validate_explore(wide)
+        self.assertLessEqual(ex.stored_size(out), ex.STORED_MAX_BYTES)
+        self.assertEqual(ex.stored_size({'a': 'ñ'}), 10)
+        self.assertEqual(ex.stored_size({'a': '😀'}), 12)
+
+    def test_size_matches_the_javascript_measure(self):
+        node = shutil.which('node')
+        if not node:
+            self.skipTest('node no disponible')
+        out = ex.validate_explore(block(takeaway='ñ😀' * 100))
+        script = ("global.document={getElementById:()=>({}),createElement:()=>({})};global.localStorage={getItem:()=>null,setItem(){}};"
+                  "const p=require(process.argv[1]);const b=JSON.parse(process.argv[2]);const v=p.exploreValidate(b);console.log(JSON.stringify([p.exploreSize(v),JSON.stringify(v)]))")
+        res = subprocess.run([node, '-e', script, str(ROOT / 'app.js'), json.dumps(block(takeaway='ñ😀' * 100)).replace('"applicable": true, ', '')], capture_output=True, text=True, timeout=60)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        size, js_json = json.loads(res.stdout)
+        self.assertEqual(size, ex.stored_size(out))
+        self.assertEqual(json.loads(js_json), out, 'mismo bloque canónico en ambos validadores')
+
     def test_not_a_dict(self):
         for raw in (None, [], 'x', 3):
             with self.assertRaises(ValueError):
@@ -111,6 +152,21 @@ class Evaluator(unittest.TestCase):
         self.assertEqual(self.ev('log10(1000)'), 3)
         self.assertAlmostEqual(self.ev('ln(exp(2))'), 2)
 
+    def test_i3_pow_matches_math_pow(self):
+        self.assertEqual(self.ev('1/(0^-1)'), 0.0)
+        self.assertEqual(self.ev('min(1,0^-1)'), 1)
+        self.assertTrue(math.isnan(self.ev('(-1)^(1/0)')))
+        self.assertTrue(math.isnan(self.ev('1^(1/0)')))
+        self.assertEqual(self.ev('0^-1'), math.inf)
+        self.assertEqual(self.ev('(-0)^-1'), math.inf if math.copysign(1, self.ev('-0')) > 0 else -math.inf)
+        self.assertEqual(self.ev('2^(1/0)'), math.inf)
+        self.assertEqual(self.ev('0.5^(1/0)'), 0.0)
+
+    def test_i3_numbers_are_ascii_only(self):
+        for text in ('\uff11+1'.encode().decode('unicode_escape'), '\u0661+1'.encode().decode('unicode_escape'), '1.\uff15'.encode().decode('unicode_escape')):
+            with self.assertRaises(ex.ExprError, msg=text):
+                ex.parse(text, [])
+
     def test_non_finite_is_returned_not_raised(self):
         for text in ('1/0', '0/0', 'ln(0)', 'ln(-1)', 'sqrt(-1)', '(-8)^(1/3)', 'exp(1000)', '0^-1', '10^400'):
             self.assertFalse(math.isfinite(self.ev(text)), text)
@@ -126,7 +182,7 @@ class Evaluator(unittest.TestCase):
             self.skipTest('node no disponible')
         cases = [['2+3*4', {}], ['-2^2', {}], ['2^3^2', {}], ['2^-1', {}], ['10/4', {}], ['8/4/2', {}], ['sqrt(16)+abs(-3)', {}], ['max(1,5,3)-min(4,2)', {}],
                  ['log10(1000)+ln(exp(2))', {}], ['sin(0)+cos(0)+tan(0)', {}], ['a*b+c', {'a': 2, 'b': 3, 'c': 4}], ['k*t^2/(1+x)', {'k': 1.5, 't': 7, 'x': 0.25}],
-                 ['1.5e3-.5', {}], ['1/0', {}], ['ln(0)', {}], ['sqrt(-1)', {}], ['(-8)^3', {}], ['(-8)^(1/3)', {}], ['exp(1000)', {}], ['0/0', {}], ['10^400', {}]]
+                 ['1.5e3-.5', {}], ['1/0', {}], ['ln(0)', {}], ['sqrt(-1)', {}], ['(-8)^3', {}], ['(-8)^(1/3)', {}], ['exp(1000)', {}], ['0/0', {}], ['10^400', {}], ['1/(0^-1)', {}], ['min(1,0^-1)', {}], ['(-1)^(1/0)', {}], ['1^(1/0)', {}], ['0^-2', {}], ['(-0)^-1', {}], ['2^(1/0)', {}], ['0.5^(1/0)', {}], ['(-2)^(1/0)', {}], ['(-8)^-1', {}], ['0^0', {}], ['1/(0^-1)+(-0)^-1', {}]]
         script = ("global.document={getElementById:()=>({}),createElement:()=>({})};global.localStorage={getItem:()=>null,setItem(){}};"
                   "const p=require(process.argv[1]);const cases=JSON.parse(process.argv[2]);"
                   "console.log(JSON.stringify(cases.map(([src,vars])=>{const t=p.exploreParse(src,Object.keys(vars)).tree;const y=p.exploreEval(t,new Map(Object.entries(vars)));return Number.isFinite(y)?y:null})))")
@@ -141,30 +197,99 @@ class Evaluator(unittest.TestCase):
                 self.assertTrue(math.isfinite(py) and math.isclose(py, expected, rel_tol=1e-12, abs_tol=1e-12), f'{text}: py={py} js={expected}')
 
 
-class Compact(unittest.TestCase):
-    def test_cuts_before_a_broken_formula(self):
-        text = 'Calcula $\\frac{a}{b}$ ahora y luego sigue'
-        self.assertEqual(app.compact(text, 200), text)
-        self.assertEqual(app.compact(text, 12), 'Calcula')
-        self.assertEqual(app.compact(text, 21), 'Calcula $\\frac{a}{b}$')
-        self.assertEqual(app.compact('Dato $x^2$ y $y', 14), 'Dato $x^2$ y')
-        self.assertEqual(app.compact('$$x^2 + y^2$$ resto', 8), '')
-        self.assertEqual(app.compact('Precio \\$5 y más texto', 12), 'Precio \\$5 y')
-        self.assertEqual(app.compact('  hola  ', 100), 'hola')
-        self.assertEqual(app.compact(None), '')
-        self.assertEqual(app.compact('abcdef', 3), 'abc', 'texto sin `$`: recorte de siempre')
+    def test_fullwidth_digits_rejected_by_both(self):
+        node = shutil.which('node')
+        if not node:
+            self.skipTest('node no disponible')
+        script = ("global.document={getElementById:()=>({}),createElement:()=>({})};global.localStorage={getItem:()=>null,setItem(){}};"
+                  "const p=require(process.argv[1]);let r=[];for(const s of JSON.parse(process.argv[2])){try{p.exploreParse(s,[]);r.push('ok')}catch(e){r.push('rechaza')}}console.log(JSON.stringify(r))")
+        cases = ['\uff11+1', '1+\uff11', '\u0661']
+        out = subprocess.run([node, '-e', script, str(ROOT / 'app.js'), json.dumps(cases)], capture_output=True, text=True, timeout=60)
+        self.assertEqual(json.loads(out.stdout), ['rechaza'] * 3)
+        for text in cases:
+            with self.assertRaises(ex.ExprError):
+                ex.parse(text, [])
 
-    def test_no_orphan_dollar_after_any_cut(self):
-        text = 'Uno $a^2$ dos $$b_1 + c$$ tres $\\frac{x}{y}$ cuatro $z$ cinco'
-        for n in range(len(text) + 1):
-            cut = app.compact(text, n)
-            if len(text) > n:
-                self.assertEqual(cut.replace('$$', '').count('$') % 2, 0, f'n={n}: {cut!r}')
+
+class Compact(unittest.TestCase):
+    """C1: `compact` es exactamente el de main; solo `compact_rich` (contenido generado que ve el aprendiz) retrocede ante una fórmula abierta."""
+
+    def test_compact_is_byte_for_byte_the_plain_cut(self):
+        for text in ('Calcula $\\frac{a}{b}$ ahora y luego sigue', 'Pagué $500 por el horno ' + 'x' * 600, '$$x^2$$ ' + 'y' * 600, '  hola  ', 'Uno $a^2$ dos $$b_1 + c$$ tres', '$' * 700):
+            for n in (1, 5, 12, 21, 100, 500, 800):
+                self.assertEqual(app.compact(text, n), str(text or '').strip()[:n], (text[:20], n))
+        self.assertEqual(app.compact(None), '')
+        self.assertEqual(app.compact('abcdef', 3), 'abc')
+        self.assertEqual(inspect.getsource(app.compact).count('[:n]'), 1)
+
+    def test_learner_text_and_memory_json_are_cut_plainly(self):
+        price = 'Pagué $500 por el horno y $x^2 ' + 'a' * 800
+        self.assertEqual(app.compact(price, 700), price.strip()[:700], 'respuesta del aprendiz con precio: igual que main')
+        reasoning = '$' + 'razono ' * 200
+        self.assertEqual(app.compact(reasoning, 100), reasoning[:100])
+        mem = json.dumps({'a': '$x^2 + y', 'b': 'c' * 50}, ensure_ascii=False)
+        self.assertEqual(app.compact(mem, 20), mem[:20], 'JSON de memoria con `$`: corte plano')
+        self.assertEqual(app.compact('$$' + 'x^2 ' * 200, 50), ('$$' + 'x^2 ' * 200)[:50], '`$$` inicial sin cierre')
+
+    def test_compact_rich_retreats_only_for_a_near_open_formula(self):
+        text = 'Calcula $\\frac{a}{b}$ ahora y luego sigue'
+        self.assertEqual(app.compact_rich(text, 200), text)
+        self.assertEqual(app.compact_rich(text, 12), 'Calcula')
+        self.assertEqual(app.compact_rich(text, 21), 'Calcula $\\frac{a}{b}$')
+        self.assertEqual(app.compact_rich('Dato $x^2$ y $y^2$ fin', 16), 'Dato $x^2$ y')
+        self.assertEqual(app.compact_rich('Precio \\$5 y más texto', 12), 'Precio \\$5 y')
+        self.assertEqual(app.compact_rich('  hola  ', 100), 'hola')
+        self.assertEqual(app.compact_rich(None), '')
+        self.assertEqual(app.compact_rich('abcdef', 3), 'abc', 'texto sin `$`: recorte de siempre')
+
+    def test_compact_rich_prices_and_edge_cases_are_plain_cuts(self):
+        for text, n in (('Pagué $500 por el horno ' + 'x' * 100, 40), ('Cuesta $5 y $6 en total y mucho más texto', 14), ('$$' + 'x' * 300 + '$$', 100),
+                        ('Precio $ ' + 'a' * 50, 20), ('Hola $' + 'x^2+' * 80 + '1$ fin', 300), ('Precio: $' + 'a' * 100, 20)):
+            self.assertEqual(app.compact_rich(text, n), text.strip()[:n], (text[:20], n))
+        self.assertEqual(app.compact_rich('Precio $500 y luego una fórmula $x^2 + y^2$ larga', 20), 'Precio $500 y luego ', 'el precio no abre fórmula; la fórmula posterior queda fuera del corte')
+        self.assertEqual(app.compact_rich('$$x^2 + y^2$$ resto', 8), '$$x^2 + ', 'nunca devuelve vacío')
+        self.assertEqual(app.compact_rich('$x^2 + y^2$ resto muy largo del texto', 4), '$x^2', 'nunca vacío si el texto empieza por la fórmula')
+        for text in ('$$a^2$$ b', '$x$', 'a$', '$$'):
+            self.assertTrue(app.compact_rich(text, 1), text)
+
+    def test_compact_rich_matches_the_javascript_clip(self):
+        node = shutil.which('node')
+        if not node:
+            self.skipTest('node no disponible')
+        cases = [['Pagué $500 por el horno ' + 'x' * 100, 40], ['Cuesta $5 y $6 en total y mucho más texto', 14], ['$$' + 'x' * 300 + '$$', 100], ['Precio $ ' + 'a' * 50, 20],
+                 ['Hola $' + 'x^2+' * 80 + '1$ fin', 300], ['$x^2 + y^2$ resto muy largo del texto', 4], ['Calcula $\\frac{a}{b}$ ahora y luego sigue', 12], ['Dato $x^2$ y $y^2$ fin', 16],
+                 ['$$x^2 + y^2$$ resto', 8], ['Uno $a^2$ dos $$b_1 + c$$ tres $\\frac{x}{y}$ cuatro $z$ cinco', 25], ['  hola  ', 100], ['x = $a_1', 6]]
+        script = ("global.document={getElementById:()=>({}),createElement:()=>({})};global.localStorage={getItem:()=>null,setItem(){}};"
+                  "const p=require(process.argv[1]);console.log(JSON.stringify(JSON.parse(process.argv[2]).map(([t,n])=>p.richClip(t,n))))")
+        out = subprocess.run([node, '-e', script, str(ROOT / 'app.js'), json.dumps(cases)], capture_output=True, text=True, timeout=60)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        for (text, n), js in zip(cases, json.loads(out.stdout)):
+            self.assertEqual(app.compact_rich(text, n), js, (text[:30], n))
+
+    def test_compact_rich_is_used_only_on_model_content_fields(self):
+        lines = [ln for ln in (ROOT / 'app_legacy.py').read_text(encoding='utf-8').splitlines() if 'compact_rich(' in ln and not ln.startswith('def ')]
+        self.assertEqual(len(lines), 21, 'lista cerrada de líneas con contenido generado; ampliarla es una decisión explícita')
+        for ln in lines:
+            for forbidden in ("data.get(", "reasoning", "response_text", "profile_id", "goal_id", "item_id", "attempt_id", "citation", "fingerprint", "json.dumps", "_hash", "answer_text"):
+                self.assertNotIn(forbidden, ln, ln[:80])
 
 
 class MakeExplore(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.mem = DurableMemory(Path(self.tmp.name) / 'e.sqlite')
+        self.old = (app._MEMORY, app._TEST_MEMORY)
+        app.set_memory_for_tests(self.mem)
+        self.pid = self.mem.create_profile('Ada')['profile_id']
+        app._EXPLORE_USAGE.clear()
+
+    def tearDown(self):
+        app._MEMORY, app._TEST_MEMORY = self.old
+        app._EXPLORE_USAGE.clear()
+        self.tmp.cleanup()
+
     def run_make(self, replies, audits=None, **data):
-        payload = {'goal': 'Pintura en polvo', 'node': {'id': 'n1', 'name': 'Espesor', 'outcome': 'Controlar'}, 'lesson': {'explanation': 'El curado depende del espesor.', 'example': 'Con 60 µm.'}}
+        payload = {'profile_id': self.pid, 'goal': 'Pintura en polvo', 'node': {'id': 'n1', 'name': 'Espesor', 'outcome': 'Controlar'}, 'lesson': {'explanation': 'El curado depende del espesor.', 'example': 'Con 60 µm.'}}
         payload.update(data)
         audits = list(audits or [CLEAN] * 5)
         with patch.object(app, 'gemini', side_effect=replies) as g, patch.object(app, 'audit_content', side_effect=audits) as a:
@@ -201,17 +326,36 @@ class MakeExplore(unittest.TestCase):
         self.assertNotIn('Corrección', self.prompts[0])
 
     def test_two_invalid_answers_raise_in_spanish_and_save_nothing(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            mem = DurableMemory(Path(tmp) / 'e.sqlite')
-            old = (app._MEMORY, app._TEST_MEMORY)
-            app.set_memory_for_tests(mem)
-            try:
-                with self.assertRaises(ValueError) as cm:
-                    self.run_make([block(expression='0*k+0*t+7'), block(expression='k*t+z')])
-            finally:
-                app._MEMORY, app._TEST_MEMORY = old
+        with self.assertRaises(ValueError) as cm:
+            self.run_make([block(expression='0*k+0*t+7'), block(expression='k*t+z')])
         self.assertIn('no se guardó nada', str(cm.exception))
         self.assertEqual(self.calls, 2)
+
+    def test_a_huge_integer_in_the_model_reply_retries_instead_of_a_500(self):
+        bad = block(variables=[var('k', 'Densidad', '', 1, 10 ** 400, 1, 2), var('t', 'Espesor', 'µm', 20, 120, 5, 60)])
+        out = self.run_make([bad, block()])
+        self.assertTrue(out['applicable'])
+        self.assertEqual(self.calls, 2)
+
+    def test_m5_profile_is_required_and_must_exist(self):
+        for pid in ('', None, 'perfil-que-no-existe'):
+            with patch.object(app, 'gemini') as g:
+                with self.assertRaises(ValueError):
+                    app.make_explore({'profile_id': pid, 'goal': 'Meta', 'node': {'id': 'n1', 'name': 'Tema'}})
+                g.assert_not_called()
+
+    def test_m5_daily_limit_per_profile(self):
+        other = self.mem.create_profile('Otra')['profile_id']
+        with patch.object(app, 'EXPLORE_DAILY_LIMIT', 2):
+            self.run_make([{'applicable': False}])
+            self.run_make([{'applicable': False}])
+            with patch.object(app, 'gemini') as g:
+                with self.assertRaises(ValueError) as cm:
+                    app.make_explore({'profile_id': self.pid, 'goal': 'Meta', 'node': {'id': 'n1', 'name': 'Tema'}})
+                g.assert_not_called()
+            self.assertIn('Límite diario', str(cm.exception))
+            with patch.object(app, 'gemini', return_value={'applicable': False}):
+                self.assertFalse(app.make_explore({'profile_id': other, 'goal': 'Meta', 'node': {'id': 'n1', 'name': 'Tema'}})['applicable'], 'otro perfil no se ve afectado')
 
     def test_failed_audit_retries_once_then_fails(self):
         issue = {'issues': ['La relación es incorrecta'], 'checked': True}
@@ -230,7 +374,7 @@ class MakeExplore(unittest.TestCase):
         for data in ({'goal': ''}, {'node': {}}, {'node': {'id': 'n1', 'name': ''}}):
             with patch.object(app, 'gemini') as g:
                 with self.assertRaises(ValueError):
-                    app.make_explore({'goal': 'Meta', 'node': {'id': 'n1', 'name': 'Tema'}, **data})
+                    app.make_explore({'profile_id': self.pid, 'goal': 'Meta', 'node': {'id': 'n1', 'name': 'Tema'}, **data})
                 g.assert_not_called()
 
     def test_learner_text_goes_to_the_model_as_data(self):
@@ -315,6 +459,22 @@ class StoreValidation(unittest.TestCase):
         checked = validate_store(raw, self.pid)[0]
         self.assertNotIn('explore', checked['goals'][0]['lessons']['n1'])
         self.assertIn('explore', raw['goals'][0]['lessons']['n1'], 'la entrada no se modifica')
+
+    def test_m6_validation_is_cached_by_block_hash(self):
+        import memory_store
+        memory_store._EXPLORE_CACHE.clear()
+        lesson = {'explanation': 'e', 'explore': self.good()}
+        with patch.object(memory_store.explore_expr, 'validate_explore', wraps=ex.validate_explore) as spy:
+            for _ in range(5):
+                self.assertIn('explore', self.lesson_after(dict(lesson)))
+            self.assertEqual(spy.call_count, 1, 'un mismo bloque se valida una sola vez')
+            bad = {'explanation': 'e', 'explore': self.good(expression='k*t+z')}
+            for _ in range(3):
+                self.assertNotIn('explore', self.lesson_after(dict(bad)))
+            self.assertEqual(spy.call_count, 2, 'los rechazos también se recuerdan')
+        first = self.lesson_after(dict(lesson))['explore']
+        first['title'] = 'mutado'
+        self.assertNotEqual(self.lesson_after(dict(lesson))['explore']['title'], 'mutado', 'la caché devuelve copias')
 
     def test_legacy_lessons_without_explore_are_untouched(self):
         lesson = {'explanation': 'e', 'example': 'x', 'common_error': 'c', 'check': None}

@@ -128,7 +128,7 @@ const mathOf = (src, display = false) => { const m = p.texToMathML(src, display)
 
   // 3b. I1: código/shell no son fórmulas; fórmulas legítimas siguen funcionando.
   {
-    const literal = ['echo $HOME/$USER', 'Usa $x=$y; en el script', 'grep ^a$|^b$ archivo', 'Cuesta $5 y $6 en total', 'Tengo $a y $b', 'el precio $x/$y', 'ver `echo $x^2$` y `$y_1$`', 'a$x^2$b', '$x^2$y', '$x^2$5', '$x^2$/2', 'pre$x^2$ post'];
+    const literal = ['echo $HOME/$USER', 'Usa $ab$ y $cd$ hoy', 'valor $12$ y $34$', 'Usa $x=$y; en el script', 'grep ^a$|^b$ archivo', 'Cuesta $5 y $6 en total', 'Tengo $a y $b', 'el precio $x/$y', 'ver `echo $x^2$` y `$y_1$`', 'a$x^2$b', '$x^2$y', '$x^2$5', '$x^2$/2', 'pre$x^2$ post'];
     for (const t of literal) { assert.equal(p.richParts(t), null, 'I1 debe quedar literal: ' + t); assert.equal(p.X('p', t).textContent, t); }
     const kinds = t => p.richParts(t).map(c => c.type === '#text' ? c.textContent : c.type);
     assert.deepEqual(kinds('Sea $x$ la incógnita'), ['Sea ', 'math', ' la incógnita']);
