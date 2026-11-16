@@ -724,6 +724,19 @@ class DurableMemory:
         with self._lock, self._connect() as db:
             return [dict(r) for r in db.execute(query + " ORDER BY report_id", args).fetchall()]
 
+    def placement_prompts(self, profile_id):
+        """Prompts of every stored private-key item of the profile (placement, confirmation, direct, steps...)."""
+        profile_id = _profile_id(profile_id)
+        with self._lock, self._connect() as db:
+            rows = db.execute("SELECT public_json FROM placement_items WHERE profile_id=?", (profile_id,)).fetchall()
+        out = []
+        for row in rows:
+            try:
+                out.append(str(json.loads(row["public_json"]).get("prompt") or ""))
+            except (ValueError, AttributeError):
+                continue
+        return out
+
     def load_placement_item(self, profile_id, item_id):
         profile_id = _profile_id(profile_id)
         with self._lock, self._connect() as db:

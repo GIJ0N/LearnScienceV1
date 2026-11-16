@@ -156,7 +156,7 @@ async function answer(g, phase, text, question) {
     assert.equal(last.result, 'CORRECT'); assert.equal(last.is_independent, true); assert.equal(last.help_used, 0);
   }
 
-  // 4. Segundo «No sé» a la misma pregunta: oferta de lección completa, sin segunda llamada a la ruta.
+  // 4. (teaching_ladder_v1) Segundo «No sé» a la misma pregunta: ya no se repite ni se ofrece la misma lección; sube al peldaño 2.
   {
     const g = attach(goal('INDEPENDENT')); calls = []; directResponse = goodPackage(); directError = null;
     await answer(g, 'INDEPENDENT', 'No sé');
@@ -164,16 +164,14 @@ async function answer(g, phase, text, question) {
     g.session.direct = null; g.session.hints = 0; // la persona volvió a la pregunta
     const routeCalls = () => calls.filter(c => c.route === '/api/teach/direct').length;
     assert.equal(routeCalls(), 1);
+    directResponse = { ...goodPackage(), rung: 2 };
     await answer(g, 'INDEPENDENT', 'No sé');
-    assert.equal(g.session.direct.status, 'repeat');
-    assert.equal(g.events.filter(e => e.type === 'DIRECT_TEACHING').length, 1, 'no se registra otra enseñanza');
+    assert.equal(g.session.direct.rung, 2);
+    assert.equal(g.events.filter(e => e.type === 'DIRECT_TEACHING').length, 1, 'DIRECT_TEACHING solo en el peldaño 1');
     roots.app.children = []; await p.session();
-    assert.ok(has('Ya vimos una explicación corta de esto'));
-    assert.ok(find('Ver la lección completa')); assert.ok(find('Seguir con otro tema'));
-    assert.equal(routeCalls(), 1, 'sin segunda llamada');
-    find('Ver la lección completa').onclick();
-    assert.equal(g.session.direct, null);
-    assert.equal(g.session.mode, 'TEACH');
+    assert.equal(has('Ya vimos una explicación corta de esto'), false, 'sustituido por la escalera');
+    assert.equal(routeCalls(), 2, 'el peldaño 2 sí llama a la ruta, con rung 2');
+    assert.equal(calls.filter(c => c.route === '/api/teach/direct')[1].body.rung, 2);
   }
 
   // 5. Fallo de la ruta: la sesión sigue utilizable.
