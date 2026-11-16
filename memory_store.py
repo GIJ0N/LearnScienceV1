@@ -10,6 +10,7 @@ import sqlite3
 import threading
 import time
 import uuid
+import explore_expr
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -162,6 +163,33 @@ def _sanitize_review_schedule(review):
                 del note["due"]
 
 
+EXPLORE_STORED_MAX_BYTES = 4000
+
+
+def _sanitize_lesson_explore(lesson):
+    """rich_content_v1: `explore` debe pasar el mismo contrato local que el generador (expresión segura, rangos finitos, tamaño acotado).
+    Si no, se elimina; `explore_na` solo se conserva si es booleano. La lección y el resto del almacén no se rechazan."""
+    if not isinstance(lesson, dict):
+        return
+    if "explore" in lesson:
+        value = lesson["explore"]
+        clean = None
+        try:
+            if isinstance(value, dict) and len(json.dumps(value, ensure_ascii=False)) <= EXPLORE_STORED_MAX_BYTES:
+                clean = explore_expr.validate_explore(value)
+                explore_id = value.get("explore_id")
+                if isinstance(explore_id, str) and 0 < len(explore_id) <= 80:
+                    clean["explore_id"] = explore_id
+        except (ValueError, TypeError, OverflowError):
+            clean = None
+        if clean is None:
+            del lesson["explore"]
+        else:
+            lesson["explore"] = clean
+    if "explore_na" in lesson and not isinstance(lesson["explore_na"], bool):
+        del lesson["explore_na"]
+
+
 def validate_store(raw, profile_id, allow_profile_rebind=False):
     """Validate relations and add ownership metadata without inventing evidence."""
     profile_id = _profile_id(profile_id)
@@ -205,6 +233,8 @@ def validate_store(raw, profile_id, allow_profile_rebind=False):
             raise ValueError("El estado del estudiante contiene referencias de nodo inválidas.")
         if not isinstance(lessons, dict) or any(node_id not in allowed_nodes for node_id in lessons):
             raise ValueError("Las microlecciones contienen referencias de nodo inválidas.")
+        for lesson in lessons.values():
+            _sanitize_lesson_explore(lesson)  # rich_content_v1: el bloque `explore` malformado se descarta sin rechazar el almacén
         reviews = goal.get("reviews", [])
         if not isinstance(reviews, list) or any(not isinstance(item, dict) or item.get("id") not in allowed_nodes for item in reviews):
             raise ValueError("Los repasos contienen referencias de nodo inválidas.")
