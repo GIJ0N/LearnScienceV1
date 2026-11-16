@@ -42,6 +42,10 @@ def make_store(goal_name='Pintura en polvo; básica, con coma'):
         'events': [{'type': 'EVIDENCE', 'answer': SENT['answer'], 'result': 'CORRECT', 'attempt_id': 'x'}]}]}
 
 
+class TestHTTPServer(ThreadingHTTPServer):
+    request_queue_size = 128   # las pruebas lanzan 60 peticiones a la vez
+
+
 class Server:
     """Servidor real en un hilo con memoria temporal. Los POST llevan Origin del propio servidor, como un navegador."""
     mode = 'required'
@@ -55,7 +59,7 @@ class Server:
                         patch.object(urllib.request, 'urlopen', side_effect=AssertionError('sin red externa en estas pruebas'))]
         for p in self.patches:
             p.start()
-        self.server = ThreadingHTTPServer(('127.0.0.1', 0), app.Handler)
+        self.server = TestHTTPServer(('127.0.0.1', 0), app.Handler)
         self.port = self.server.server_port
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -114,9 +118,38 @@ class StartupPolicy(unittest.TestCase):
             self.assertIn('se niega a arrancar', message)
             self.assertEqual(hosting.startup_problem(host, 'required', True), '', 'con auth required y contraseña sí puede')
 
-    def test_private_hosts_start_without_auth_as_today(self):
-        for host in ('127.0.0.1', '100.101.102.103', '192.168.1.5'):
-            self.assertEqual(hosting.startup_problem(host, 'off', False), '')
+    def test_loopback_and_tailscale_start_without_auth_as_today(self):
+        for host in ('127.0.0.1', '127.0.0.5', '100.101.102.103', '100.64.0.1', '::1'):
+            self.assertEqual(hosting.startup_problem(host, 'off', False), '', host)
+
+    def test_other_private_networks_need_explicit_opt_in_without_auth(self):
+        for host in ('192.168.1.5', '10.0.0.5', '172.16.0.1', 'fd00::1'):
+            message = hosting.startup_problem(host, 'off', False)
+            self.assertIn('se niega a arrancar sin contraseña', message, host)
+            self.assertIn('LEARNSCIENCE_ALLOW_LAN_WITHOUT_AUTH=1', message)
+            self.assertIn('NAT', message)
+            self.assertIn('Docker', message)
+            self.assertEqual(hosting.startup_problem(host, 'off', False, allow_lan=True), '', 'con el permiso explícito sí')
+            self.assertEqual(hosting.startup_problem(host, 'required', True), '', 'con login sí')
+        self.assertIn('se niega', hosting.startup_problem('0.0.0.0', 'off', False, allow_lan=True), '0.0.0.0 no se abre con el permiso de LAN')
+        self.assertIn('se niega', hosting.startup_problem('203.0.113.5', 'off', False, allow_lan=True))
+
+    def test_server_process_refuses_lan_without_opt_in(self):
+        out = self.run_main({'LEARNSCIENCE_HOST': '192.168.1.5'})
+        self.assertEqual(out.returncode, 2)
+        self.assertIn('LEARNSCIENCE_ALLOW_LAN_WITHOUT_AUTH', out.stderr)
+        out = self.run_main({'LEARNSCIENCE_TRUSTED_PROXIES': 'no-es-una-red'})
+        self.assertEqual(out.returncode, 2)
+        self.assertIn('LEARNSCIENCE_TRUSTED_PROXIES', out.stderr)
+
+    def test_cleartext_warning(self):
+        warn = lambda host, https=False, proxy=False, mode='required': hosting.cleartext_warning(host, mode, https, proxy)
+        self.assertIn('en claro', warn('0.0.0.0'))
+        self.assertIn('en claro', warn('203.0.113.5'))
+        self.assertEqual(warn('0.0.0.0', https=True), '')
+        self.assertEqual(warn('0.0.0.0', proxy=True), '')
+        self.assertEqual(warn('100.101.102.103'), '', 'red privada: sin aviso')
+        self.assertEqual(warn('0.0.0.0', mode='off'), '')
 
     def test_required_without_password_refuses(self):
         self.assertIn('--set-password', hosting.startup_problem('127.0.0.1', 'required', False))
@@ -193,8 +226,9 @@ class OffModeUnchanged(Server, unittest.TestCase):
 
     def test_csp_and_security_headers_unchanged(self):
         _, resp, _ = self.req('GET', '/api/health')
-        self.assertEqual(resp.getheader('Content-Security-Policy'), "default-src 'self' 'unsafe-inline';connect-src 'self';base-uri 'none'")
+        self.assertEqual(resp.getheader('Content-Security-Policy'), "default-src 'self' 'unsafe-inline';connect-src 'self';base-uri 'none';frame-ancestors 'none'")
         self.assertEqual(resp.getheader('X-Content-Type-Options'), 'nosniff')
+        self.assertEqual(resp.getheader('X-Frame-Options'), 'DENY')
         self.assertEqual(resp.getheader('Cache-Control'), 'no-store')
 
     def test_calendar_works_without_login_in_off_mode(self):
@@ -285,23 +319,25 @@ class LoginTests(Server, unittest.TestCase):
     def test_login_cookie_attributes(self):
         status, resp, body = self.login()
         self.assertEqual(status, 200)
-        cookie = resp.getheader('Set-Cookie')
+        cookie = resp.msg.get_all('Set-Cookie')[0]
         attrs = [a.strip() for a in cookie.split(';')]
         self.assertTrue(attrs[0].startswith('ruta_session='))
         self.assertGreaterEqual(len(attrs[0].split('=', 1)[1]), 40, 'token aleatorio largo')
-        for expected in ('HttpOnly', 'SameSite=Strict', 'Path=/', 'Max-Age=2592000'):
+        for expected in ('HttpOnly', 'SameSite=Lax', 'Path=/', 'Max-Age=2592000'):
             self.assertIn(expected, attrs)
         self.assertNotIn('Secure', attrs, 'por HTTP plano (Tailscale) no puede ir Secure o el navegador la descarta')
         self.assertNotIn(attrs[0].split('=', 1)[1].encode(), body)
 
     def test_secure_only_behind_trusted_proxy(self):
+        sess = lambda resp: resp.msg.get_all('Set-Cookie')[0]
         _, resp, _ = self.login(headers={'X-Forwarded-Proto': 'https'})
-        self.assertNotIn('Secure', resp.getheader('Set-Cookie'), 'X-Forwarded-Proto se ignora sin LEARNSCIENCE_TRUST_PROXY=1')
+        self.assertNotIn('Secure', sess(resp), 'X-Forwarded-Proto se ignora sin LEARNSCIENCE_TRUST_PROXY=1')
         with patch.object(app, 'TRUST_PROXY', True):
             _, resp, _ = self.login(headers={'X-Forwarded-Proto': 'https'})
-            self.assertIn('Secure', [a.strip() for a in resp.getheader('Set-Cookie').split(';')])
+            self.assertIn('Secure', [a.strip() for a in sess(resp).split(';')])
+            self.assertTrue(all('Secure' in c for c in resp.msg.get_all('Set-Cookie')), 'también la cookie de dispositivo')
             _, resp, _ = self.login(headers={'X-Forwarded-Proto': 'http'})
-            self.assertNotIn('Secure', resp.getheader('Set-Cookie'))
+            self.assertNotIn('Secure', sess(resp))
 
     def test_only_hash_of_the_session_token_is_stored(self):
         cookie = self.session_cookie()
@@ -383,37 +419,118 @@ class LoginTests(Server, unittest.TestCase):
 
 
 class LimiterTests(unittest.TestCase):
-    def test_growing_wait_per_ip_and_reset(self):
+    def test_hard_lock_per_ip_with_growing_wait_and_reset(self):
         clock = [1000.0]
         lim = hosting.LoginLimiter(clock=lambda: clock[0])
         for _ in range(lim.IP_FREE):
-            self.assertEqual(lim.retry_after('1.1.1.1'), 0)
-            lim.failure('1.1.1.1')
-        first = lim.retry_after('1.1.1.1')
+            self.assertEqual(lim.begin('1.1.1.1'), (True, 0))
+        ok, first = lim.begin('1.1.1.1')
+        self.assertFalse(ok)
         self.assertGreater(first, 0)
-        self.assertEqual(lim.retry_after('2.2.2.2'), 0, 'otra IP no se bloquea por esta')
+        self.assertEqual(lim.begin('2.2.2.2'), (True, 0), 'otra IP no se bloquea por esta')
         clock[0] += first + 1
-        self.assertEqual(lim.retry_after('1.1.1.1'), 0)
-        lim.failure('1.1.1.1')
-        second = lim.retry_after('1.1.1.1')
+        self.assertTrue(lim.begin('1.1.1.1')[0])
+        ok, second = lim.begin('1.1.1.1')
+        self.assertFalse(ok)
         self.assertGreater(second, first, 'la espera crece')
         lim.success('1.1.1.1')
-        self.assertEqual(lim.retry_after('1.1.1.1'), 0)
+        self.assertTrue(lim.begin('1.1.1.1')[0])
 
-    def test_global_limit_across_ips(self):
+    def test_attempt_is_reserved_before_verifying_so_a_race_cannot_slip_through(self):
+        lim = hosting.LoginLimiter()
+        results, barrier = [], threading.Barrier(60)
+
+        def attempt():
+            barrier.wait()
+            results.append(lim.begin('9.9.9.9')[0])
+        threads = [threading.Thread(target=attempt) for _ in range(60)]
+        [t.start() for t in threads]; [t.join() for t in threads]
+        self.assertEqual(sum(results), lim.IP_FREE, 'solo IP_FREE intentos pasan aunque lleguen a la vez')
+
+    def test_release_undoes_a_reservation(self):
+        lim = hosting.LoginLimiter()
+        for _ in range(lim.IP_FREE):
+            self.assertTrue(lim.begin('1.1.1.1')[0])
+            lim.release('1.1.1.1')
+        self.assertTrue(lim.begin('1.1.1.1')[0], 'los intentos no verificados (servidor ocupado) no cuentan')
+
+    def test_global_volume_only_slows_and_never_blocks(self):
         lim = hosting.LoginLimiter(clock=lambda: 5000.0)
-        for i in range(lim.GLOBAL_FREE):
-            lim.failure(f'9.9.{i // 200}.{i % 200}')
-        self.assertGreater(lim.retry_after('7.7.7.7'), 0, 'una IP nueva también espera si el ataque es distribuido')
+        self.assertEqual(lim.global_delay(), 0)
+        for i in range(lim.GLOBAL_FREE + 30):
+            ip = f'9.9.{i // 200}.{i % 200}'
+            self.assertTrue(lim.begin(ip)[0])
+            lim.fail()
+        self.assertTrue(lim.begin('7.7.7.7')[0], 'una IP nueva no se bloquea por los fallos de otras')
+        self.assertGreater(lim.global_delay(), 0)
+        self.assertLessEqual(lim.global_delay(), lim.GLOBAL_MAX_DELAY)
+        lim.success('7.7.7.7')
+        self.assertEqual(lim.global_delay(), 0, 'un acierto del dueño reinicia el ralentizador')
+
+    def test_known_device_has_its_own_counter(self):
+        lim = hosting.LoginLimiter()
+        for _ in range(lim.IP_FREE):
+            lim.begin('1.1.1.1')
+        self.assertFalse(lim.begin('1.1.1.1')[0], 'la IP está bloqueada')
+        self.assertTrue(lim.begin('1.1.1.1', device_id='d' * 32)[0], 'el dispositivo conocido entra')
+        for _ in range(lim.DEVICE_FREE - 1):
+            self.assertTrue(lim.begin('1.1.1.1', device_id='d' * 32)[0])
+        self.assertFalse(lim.begin('1.1.1.1', device_id='d' * 32)[0], 'el dispositivo también tiene su límite')
+        self.assertTrue(lim.begin('1.1.1.1', device_id='e' * 32)[0], 'otro dispositivo no se ve afectado')
 
     def test_idle_forgets(self):
         clock = [0.0]
         lim = hosting.LoginLimiter(clock=lambda: clock[0])
-        for _ in range(10):
-            lim.failure('1.1.1.1')
-        self.assertGreater(lim.retry_after('1.1.1.1'), 0)
+        for _ in range(lim.IP_FREE):
+            lim.begin('1.1.1.1')
+        self.assertFalse(lim.begin('1.1.1.1')[0])
         clock[0] += lim.IDLE_RESET + 1
-        self.assertEqual(lim.retry_after('1.1.1.1'), 0)
+        self.assertTrue(lim.begin('1.1.1.1')[0])
+
+    def test_dictionary_is_bounded_lru(self):
+        lim = hosting.LoginLimiter()
+        lim.MAX_ENTRIES = 10_000
+        for i in range(10_050):
+            lim.begin(f'ip-{i}')
+        self.assertEqual(len(lim), 10_000)
+        self.assertNotIn(('i', 'ip-0'), lim._entries)
+        self.assertIn(('i', 'ip-10049'), lim._entries)
+
+    def test_device_cookie_value_roundtrip_and_forgery(self):
+        secret = 'ab' * 32
+        device = hosting.new_device_id()
+        value = hosting.device_cookie_value(secret, device)
+        self.assertEqual(hosting.parse_device_cookie(secret, value), device)
+        for bad in (device + '.' + '0' * 32, device, 'x.y', '', None, value + 'a', hosting.device_cookie_value('cd' * 32, device)):
+            self.assertIsNone(hosting.parse_device_cookie(secret, bad))
+
+
+class ProxyHelpers(unittest.TestCase):
+    def test_forwarded_client_ip_skips_trusted_hops_and_ignores_garbage(self):
+        nets = hosting.parse_trusted_proxies('')
+        self.assertEqual(hosting.forwarded_client_ip('172.18.0.2', '203.0.113.9', nets), '203.0.113.9')
+        self.assertEqual(hosting.forwarded_client_ip('172.18.0.2', '6.6.6.6, 203.0.113.9, 10.0.0.3', nets), '203.0.113.9', 'se cree al proxy, no al valor que puso el cliente')
+        self.assertEqual(hosting.forwarded_client_ip('172.18.0.2', 'basura', nets), '172.18.0.2')
+        self.assertEqual(hosting.forwarded_client_ip('172.18.0.2', '', nets), '172.18.0.2')
+
+    def test_default_and_custom_trusted_networks(self):
+        nets = hosting.parse_trusted_proxies(None)
+        for ip in ('127.0.0.1', '10.1.1.1', '172.20.0.5', '192.168.1.1', '::1'):
+            self.assertTrue(hosting.ip_in_nets(ip, nets), ip)
+        for ip in ('203.0.113.9', '8.8.8.8', '100.101.102.103'):
+            self.assertFalse(hosting.ip_in_nets(ip, nets), ip)
+        self.assertTrue(hosting.ip_in_nets('172.18.0.9', hosting.parse_trusted_proxies('172.18.0.0/16')))
+        with self.assertRaises(ValueError):
+            hosting.parse_trusted_proxies('172.18.0.0/16,mi-proxy')
+
+    def test_hostnames(self):
+        self.assertEqual(hosting.hostname_of('100.101.102.103:8765'), '100.101.102.103')
+        self.assertEqual(hosting.hostname_of('localhost:8765'), 'localhost')
+        self.assertEqual(hosting.hostname_of('[::1]:8765'), '::1')
+        self.assertEqual(hosting.hostname_of('Tutor.Ejemplo.com'), 'tutor.ejemplo.com')
+        names = hosting.allowed_hostnames('100.101.102.103', ('http://127.0.0.1:8765', 'https://tutor.ejemplo.com'))
+        self.assertTrue({'127.0.0.1', 'localhost', '100.101.102.103', 'tutor.ejemplo.com'} <= names)
+        self.assertNotIn('0.0.0.0', hosting.allowed_hostnames('0.0.0.0', ()))
 
 
 # ------------------------------------------------------------------ D. todas las rutas protegidas
@@ -436,7 +553,7 @@ class RouteProtection(Server, unittest.TestCase):
 
     def test_every_post_route_is_reachable_with_a_session(self):
         cookie = self.session_cookie()
-        blocked = [p for p in sorted(app.ROUTES) if self.req('POST', p, {}, cookie=cookie)[0] in (401, 403)]
+        blocked = [p for p in sorted(app.ROUTES) if p != '/api/logout/all' and self.req('POST', p, {}, cookie=cookie)[0] in (401, 403)]
         self.assertEqual(blocked, [])
 
     def test_every_get_path_requires_a_session_except_the_public_ones(self):
@@ -491,8 +608,8 @@ class CsrfTests(Server, unittest.TestCase):
         self.assertEqual(self.req('POST', '/api/profiles/list', {}, cookie=cookie, origin=None)[0], 403, 'con auth activo el Origin es obligatorio')
 
     def test_configured_extra_origin_is_allowed(self):
-        cookie = self.session_cookie()
         with patch.object(app, 'EXTRA_ORIGINS', ('https://tutor.ejemplo.com',)):
+            cookie = self.session_cookie()
             self.assertEqual(self.req('POST', '/api/profiles/list', {}, cookie=cookie, origin='https://tutor.ejemplo.com')[0], 200)
             self.assertEqual(self.req('POST', '/api/profiles/list', {}, cookie=cookie, origin='https://otro.ejemplo.com')[0], 403)
 
@@ -759,7 +876,298 @@ class InstallableTests(Server, unittest.TestCase):
 
     def test_csp_not_relaxed(self):
         _, resp, _ = self.req('GET', '/manifest.webmanifest')
-        self.assertEqual(resp.getheader('Content-Security-Policy'), "default-src 'self' 'unsafe-inline';connect-src 'self';base-uri 'none'")
+        self.assertEqual(resp.getheader('Content-Security-Policy'), "default-src 'self' 'unsafe-inline';connect-src 'self';base-uri 'none';frame-ancestors 'none'")
+
+
+# ------------------------------------------------------------------ H. correcciones de la auditoría
+def cookies_of(resp):
+    return {c.split('=', 1)[0]: c for c in resp.msg.get_all('Set-Cookie') or []}
+
+
+class LimiterOverHttp(Server, unittest.TestCase):
+    def test_owner_gets_in_after_20_foreign_failures(self):
+        for i in range(25):
+            app._LOGIN_LIMITER.begin(f'198.51.100.{i}')
+            app._LOGIN_LIMITER.fail()
+        self.assertGreater(app._LOGIN_LIMITER.global_delay(), 0)
+        with patch.object(app.time, 'sleep') as slept:
+            status, resp, _ = self.login()
+        self.assertEqual(status, 200, 'el volumen global solo ralentiza')
+        self.assertTrue(slept.called and slept.call_args[0][0] <= hosting.LoginLimiter.GLOBAL_MAX_DELAY)
+        self.assertEqual(app._LOGIN_LIMITER.global_delay(), 0)
+
+    def test_device_cookie_attributes_and_exemption_from_ip_lock(self):
+        status, resp, _ = self.login()
+        dev = cookies_of(resp)['ruta_device']
+        attrs = [a.strip() for a in dev.split(';')]
+        for expected in ('HttpOnly', 'SameSite=Lax', 'Path=/', 'Max-Age=31536000'):
+            self.assertIn(expected, attrs)
+        device_cookie = attrs[0]
+        for _ in range(hosting.LoginLimiter.IP_FREE):
+            self.assertEqual(self.login('mala-contraseña-larga')[0], 401)
+        self.assertEqual(self.login()[0], 429, 'sin cookie de dispositivo la IP sigue bloqueada')
+        status, resp, _ = self.login(headers={'Cookie': device_cookie})
+        self.assertEqual(status, 200, 'el dispositivo conocido entra aunque la IP esté bloqueada')
+        self.assertNotIn(device_cookie.split('=')[0], '', 'la cookie se reutiliza')
+
+    def test_device_has_its_own_counter(self):
+        device_cookie = cookies_of(self.login()[1])['ruta_device'].split(';')[0]
+        for _ in range(hosting.LoginLimiter.DEVICE_FREE):
+            self.assertEqual(self.login('mala-contraseña-larga', headers={'Cookie': device_cookie})[0], 401)
+        self.assertEqual(self.login(headers={'Cookie': device_cookie})[0], 429)
+
+    def test_forged_or_stale_device_cookie_is_ignored(self):
+        device_cookie = cookies_of(self.login()[1])['ruta_device'].split(';')[0]
+        forged = 'ruta_device=' + 'a' * 32 + '.' + 'b' * 32
+        for _ in range(hosting.LoginLimiter.IP_FREE):
+            self.login('mala-contraseña-larga', headers={'Cookie': forged})
+        self.assertEqual(self.login(headers={'Cookie': forged})[0], 429, 'una cookie falsificada no exime')
+        app._LOGIN_LIMITER = hosting.LoginLimiter()
+        self.memory.set_password_hash(hosting.hash_password('nueva-contraseña-larga', iterations=100_000))   # rota el secreto
+        for _ in range(hosting.LoginLimiter.IP_FREE):
+            self.login('mala-contraseña-larga')
+        self.assertEqual(self.login('nueva-contraseña-larga', headers={'Cookie': device_cookie})[0], 429, 'tras cambiar la contraseña los dispositivos dejan de ser conocidos')
+
+    def test_parallel_attempts_verify_at_most_ip_free_times(self):
+        calls, real = [], hosting.verify_password
+
+        def counting(*a, **k):
+            calls.append(1)
+            return real(*a, **k)
+        statuses, barrier = [], threading.Barrier(60)
+
+        def attempt():
+            barrier.wait()
+            statuses.append(self.login('mala-contraseña-larga')[0])
+        with patch.object(hosting, 'verify_password', counting):
+            threads = [threading.Thread(target=attempt) for _ in range(60)]
+            [t.start() for t in threads]; [t.join() for t in threads]
+        self.assertLessEqual(len(calls), hosting.LoginLimiter.IP_FREE, 'las 60 peticiones simultáneas no se cuelan')
+        self.assertEqual(statuses.count(401), len(calls))
+        self.assertEqual(statuses.count(429), 60 - len(calls))
+
+    def test_busy_server_answers_429_and_releases_the_reservation(self):
+        busy = threading.BoundedSemaphore(1)
+        busy.acquire()
+        with patch.object(app, '_VERIFY_SLOTS', busy), patch.object(busy, 'acquire', lambda timeout=None: False):
+            status, resp, _ = self.login()
+        self.assertEqual(status, 429)
+        self.assertEqual(self.login()[0], 200)
+        for _ in range(hosting.LoginLimiter.IP_FREE):
+            app._LOGIN_LIMITER.begin('127.0.0.1'); app._LOGIN_LIMITER.release('127.0.0.1')
+
+    def test_pbkdf2_concurrency_is_bounded(self):
+        self.assertIsInstance(app._VERIFY_SLOTS, type(threading.BoundedSemaphore(1)))
+        self.assertTrue(app._VERIFY_SLOTS.acquire(blocking=False) and app._VERIFY_SLOTS.acquire(blocking=False))
+        self.assertFalse(app._VERIFY_SLOTS.acquire(blocking=False), 'solo 2 a la vez')
+        app._VERIFY_SLOTS.release(); app._VERIFY_SLOTS.release()
+
+
+class CalendarLimiterTests(Server, unittest.TestCase):
+    def setup_link(self):
+        pid = self.make_profile()
+        cookie = self.session_cookie()
+        return json.loads(self.req('POST', '/api/reminders/save', {'profile_id': pid, 'time': '20:00', 'days': [0, 1, 2, 3, 4, 5, 6]}, cookie=cookie)[2])['link_path']
+
+    def test_valid_token_always_served_even_after_foreign_and_own_failures(self):
+        link = self.setup_link()
+        for i in range(25):
+            app._ICS_LIMITER.begin(f'198.51.100.{i}')
+        for i in range(hosting.LoginLimiter.IP_FREE + 1):
+            self.req('GET', '/calendar/' + chr(65 + i) * 30 + '.ics')
+        self.assertEqual(self.req('GET', '/calendar/' + 'Q' * 30 + '.ics')[0], 429, 'los fallos de esta IP sí se limitan')
+        self.assertEqual(self.req('GET', link)[0], 200, 'un token válido se sirve siempre')
+
+    def test_query_string_is_ignored(self):
+        link = self.setup_link()
+        self.assertEqual(self.req('GET', link + '?x=1&y=2')[0], 200)
+        self.assertEqual(hosting.calendar_token_from_path('/calendar/' + 'A' * 30 + '.ics?z=1'), 'A' * 30)
+        self.assertIsNone(hosting.calendar_token_from_path('/calendar/' + 'A' * 30 + '.ics/extra'))
+
+
+class ProxyTrustTests(Server, unittest.TestCase):
+    def test_untrusted_peer_cannot_spoof_forwarded_headers(self):
+        with patch.object(app, 'TRUST_PROXY', True), patch.object(app, 'TRUSTED_PROXY_NETS', hosting.parse_trusted_proxies('203.0.113.0/24')):
+            for i in range(hosting.LoginLimiter.IP_FREE):
+                self.assertEqual(self.login('mala-contraseña-larga', headers={'X-Forwarded-For': f'6.6.6.{i}'})[0], 401)
+            self.assertEqual(self.login('mala-contraseña-larga', headers={'X-Forwarded-For': '6.6.6.99'})[0], 429, 'el XFF falso no da una IP nueva')
+            app._LOGIN_LIMITER = hosting.LoginLimiter()
+            _, resp, _ = self.login(headers={'X-Forwarded-Proto': 'https'})
+            self.assertNotIn('Secure', resp.msg.get_all('Set-Cookie')[0], 'ni X-Forwarded-Proto de un par no confiable')
+
+    def test_trusted_proxy_peer_is_believed(self):
+        with patch.object(app, 'TRUST_PROXY', True):   # 127.0.0.1 es de confianza por defecto
+            for i in range(hosting.LoginLimiter.IP_FREE):
+                self.login('mala-contraseña-larga', headers={'X-Forwarded-For': '203.0.113.7'})
+            self.assertEqual(self.login('mala-contraseña-larga', headers={'X-Forwarded-For': '203.0.113.7'})[0], 429)
+            self.assertEqual(self.login(headers={'X-Forwarded-For': '203.0.113.8'})[0], 200, 'otro cliente real, otro contador')
+
+    def test_trust_proxy_off_ignores_everything(self):
+        for i in range(hosting.LoginLimiter.IP_FREE):
+            self.login('mala-contraseña-larga', headers={'X-Forwarded-For': f'6.6.6.{i}'})
+        self.assertEqual(self.login(headers={'X-Forwarded-For': '6.6.6.200'})[0], 429)
+
+
+class ProxyWarningOffMode(Server, unittest.TestCase):
+    mode = 'off'
+
+    def test_warns_once_when_a_proxy_fronts_an_open_server(self):
+        err = io.StringIO()
+        with patch.object(app, '_PROXY_WARNED', [False]), patch('sys.stderr', err):
+            self.req('GET', '/api/health', headers={'X-Forwarded-For': '203.0.113.7'})
+            self.req('GET', '/api/health', headers={'X-Forwarded-For': '203.0.113.7'})
+        self.assertEqual(err.getvalue().count('hay un proxy delante'), 1)
+        err = io.StringIO()
+        with patch.object(app, '_PROXY_WARNED', [False]), patch('sys.stderr', err):
+            self.req('GET', '/api/health')
+        self.assertNotIn('proxy', err.getvalue(), 'sin X-Forwarded-For no avisa')
+
+
+class SecureCookieTests(Server, unittest.TestCase):
+    def test_default_plain_names(self):
+        self.assertFalse(app.cookie_secure_configured())
+        self.assertIn('ruta_session=', self.login()[1].msg.get_all('Set-Cookie')[0])
+
+    def test_env_flag_gives_host_prefixed_secure_cookie(self):
+        with patch.object(app, 'COOKIE_SECURE_ENV', True):
+            status, resp, _ = self.login()
+            session = resp.msg.get_all('Set-Cookie')[0]
+            self.assertTrue(session.startswith('__Host-ruta_session='))
+            attrs = [a.strip() for a in session.split(';')]
+            for expected in ('Secure', 'HttpOnly', 'SameSite=Lax', 'Path=/'):
+                self.assertIn(expected, attrs)
+            self.assertNotIn('Domain', session)
+            cookie = attrs[0]
+            self.assertEqual(self.req('POST', '/api/profiles/list', {}, cookie=cookie)[0], 200)
+            self.assertEqual(self.req('POST', '/api/profiles/list', {}, cookie=cookie.replace('__Host-', ''))[0], 401, 'con HTTPS declarado el nombre sin prefijo no vale')
+            out = self.req('POST', '/api/logout', {}, cookie=cookie)[1].msg.get_all('Set-Cookie')[0]
+            self.assertTrue(out.startswith('__Host-ruta_session=;') and 'Max-Age=0' in out and 'Secure' in out)
+
+    def test_https_origin_declares_https_automatically(self):
+        with patch.object(app, 'EXTRA_ORIGINS', ('https://tutor.ejemplo.com',)):
+            self.assertTrue(app.cookie_secure_configured())
+            self.assertTrue(self.login()[1].msg.get_all('Set-Cookie')[0].startswith('__Host-ruta_session='))
+        with patch.object(app, 'EXTRA_ORIGINS', ('http://mi-pc.ts.net:8765',)):
+            self.assertFalse(app.cookie_secure_configured())
+
+
+class SessionHardening(Server, unittest.TestCase):
+    def test_absolute_expiry_even_with_daily_use(self):
+        cookie = self.session_cookie()
+        th = hosting.token_hash(cookie.split('=', 1)[1])
+        now = int(time.time())
+        for day in range(10, 90, 10):
+            self.assertTrue(self.memory.check_session(th, hosting.SESSION_TTL_SECONDS, now=now + day * 86400), day)
+        self.assertFalse(self.memory.check_session(th, hosting.SESSION_TTL_SECONDS, now=now + 91 * 86400), 'a los 90 días caduca aunque se use a diario')
+
+    def test_logout_all_revokes_every_session(self):
+        a, b = self.session_cookie(), self.session_cookie()
+        self.assertEqual(self.memory.session_count(), 2)
+        status, resp, _ = self.req('POST', '/api/logout/all', {}, cookie=a)
+        self.assertEqual(status, 200)
+        self.assertIn('Max-Age=0', resp.msg.get_all('Set-Cookie')[0])
+        for cookie in (a, b):
+            self.assertEqual(self.req('POST', '/api/profiles/list', {}, cookie=cookie)[0], 401)
+        self.assertEqual(self.req('POST', '/api/logout/all', {})[0], 401, 'sin sesión no se puede')
+
+
+class HostHeaderTests(Server, unittest.TestCase):
+    mode = 'off'
+
+    def get(self, host, path='/api/health'):
+        return self.req('GET', path, headers={'Host': host})[0]
+
+    def test_foreign_host_rejected_everywhere(self):
+        for host in ('evil.example.com', 'evil.example.com:8765', '127.0.0.1.evil.com', '100.101.102.103:8765', 'localhost.evil.com'):
+            self.assertEqual(self.get(host), 403, host)
+            self.assertEqual(self.get(host, '/'), 403)
+            self.assertEqual(self.req('POST', '/api/profiles/list', {}, headers={'Host': host})[0], 403)
+        status, _, body = self.req('GET', '/', headers={'Host': 'evil.example.com'})
+        self.assertEqual(json.loads(body), {'error': 'Host no autorizado.'})
+
+    def test_loopback_names_allowed_with_any_port(self):
+        for host in ('127.0.0.1', '127.0.0.1:8765', 'localhost:8765', 'LOCALHOST:8765', '[::1]:8765', f'127.0.0.1:{self.port}'):
+            self.assertEqual(self.get(host), 200, host)
+
+    def test_bound_host_and_declared_origin_hosts_allowed(self):
+        with patch.object(app, 'HOST', '100.101.102.103'):
+            self.assertEqual(self.get('100.101.102.103:8765'), 200)
+        with patch.object(app, 'EXTRA_ORIGINS', ('https://tutor.ejemplo.com', 'http://mi-pc.tail1234.ts.net:8765')):
+            self.assertEqual(self.get('tutor.ejemplo.com'), 200)
+            self.assertEqual(self.get('mi-pc.tail1234.ts.net:8765'), 200)
+            self.assertEqual(self.get('otro.ejemplo.com'), 403)
+
+    def test_all_interfaces_does_not_allow_arbitrary_hosts(self):
+        with patch.object(app, 'HOST', '0.0.0.0'):
+            self.assertEqual(self.get('192.168.1.20:8765'), 403)
+
+    def test_rebinding_blocked_in_required_mode_too(self):
+        with patch.object(app, 'AUTH_MODE', 'required'):
+            self.assertEqual(self.get('evil.example.com'), 403)
+            self.assertEqual(self.req('POST', '/api/login', {'password': PASSWORD}, headers={'Host': 'evil.example.com'})[0], 403)
+
+
+class OwnerTailscaleScenario(Server, unittest.TestCase):
+    """RESTRICCIÓN PRIORITARIA: LEARNSCIENCE_HOST=<IP Tailscale>, sin auth, iPhone en http://100.x.y.z:8765 y localhost."""
+    mode = 'off'
+    TS = '100.101.102.103'
+
+    def setUp(self):
+        super().setUp()
+        for p in (patch.object(app, 'HOST', self.TS), patch.object(app, 'PORT', 8765), patch.object(app, 'EXTRA_ORIGINS', ())):
+            p.start(); self.addCleanup(p.stop)
+
+    def test_startup_is_allowed_without_any_new_variable(self):
+        self.assertEqual(hosting.startup_problem(self.TS, 'off', False), '')
+        self.assertEqual(hosting.parse_auth_mode(None), 'off')
+        self.assertEqual(app.network_settings({'LEARNSCIENCE_HOST': self.TS}), (self.TS, ()))
+        self.assertEqual(hosting.cleartext_warning(self.TS, 'off', False, False), '')
+
+    def test_iphone_over_tailscale_works_end_to_end(self):
+        iphone = {'Host': f'{self.TS}:8765'}
+        status, resp, body = self.req('GET', '/', headers=iphone)
+        self.assertEqual(status, 200)
+        self.assertIn(b'const KEY=', body)
+        self.assertEqual(self.req('GET', '/api/health', headers=iphone)[0], 200)
+        status, _, body = self.req('POST', '/api/profiles/list', {}, origin=f'http://{self.TS}:8765', headers=iphone)
+        self.assertEqual(status, 200)
+        self.assertEqual(self.req('POST', '/api/profile/create', {'name': 'iPhone'}, origin=f'http://{self.TS}:8765', headers=iphone)[0], 200)
+        self.assertEqual(self.req('GET', '/manifest.webmanifest', headers=iphone)[0], 200)
+        self.assertEqual(json.loads(self.req('GET', '/api/auth/status', headers=iphone)[2]), {'auth': 'off', 'logged_in': True})
+        self.assertIsNone(self.req('GET', '/', headers=iphone)[1].getheader('Set-Cookie'))
+
+    def test_localhost_and_pc_still_work(self):
+        for host in ('127.0.0.1:8765', 'localhost:8765'):
+            self.assertEqual(self.req('GET', '/', headers={'Host': host})[0], 200, host)
+        self.assertEqual(self.req('POST', '/api/profiles/list', {}, origin='http://127.0.0.1:8765', headers={'Host': '127.0.0.1:8765'})[0], 200)
+        self.assertEqual(self.req('POST', '/api/profiles/list', {}, origin=None)[0], 200, 'sin Origin como antes')
+
+    def test_calendar_subscription_over_tailscale(self):
+        pid = self.make_profile()
+        iphone = {'Host': f'{self.TS}:8765'}
+        d = json.loads(self.req('POST', '/api/reminders/save', {'profile_id': pid, 'time': '20:00', 'days': [0, 1, 2, 3, 4, 5, 6]}, origin=f'http://{self.TS}:8765', headers=iphone)[2])
+        self.assertEqual(self.req('GET', d['link_path'], headers=iphone)[0], 200)
+
+    def test_other_site_and_other_host_still_blocked(self):
+        self.assertEqual(self.req('POST', '/api/profiles/list', {}, origin='https://sitio-malicioso.com', headers={'Host': f'{self.TS}:8765'})[0], 403)
+        self.assertEqual(self.req('GET', '/', headers={'Host': 'rebind.example.com:8765'})[0], 403)
+
+
+class ReminderAnchorTests(unittest.TestCase):
+    def test_anchor_is_the_clients_local_date_not_the_servers(self):
+        night = int(datetime.datetime(2026, 11, 17, 3, 0, tzinfo=datetime.timezone.utc).timestamp() * 1000)   # servidor en UTC: ya es 17; en Monterrey (UTC-6) aún es 16
+        base = {'time': '20:00', 'days': [0], 'utc_offset_minutes': -360}
+        self.assertEqual(hosting.clean_reminder_settings(base, now_ms=night)['anchor_date'], '2026-11-16')
+        self.assertEqual(hosting.clean_reminder_settings(dict(base, timezone='America/Monterrey'), now_ms=night)['anchor_date'], '2026-11-16')
+        self.assertEqual(hosting.clean_reminder_settings(dict(base, utc_offset_minutes=0), now_ms=night)['anchor_date'], '2026-11-17')
+        settings = hosting.clean_reminder_settings(dict(base, timezone='America/Monterrey'), now_ms=night)
+        text = unfold(hosting.build_calendar('p', make_store(), settings, now_ms=night))
+        self.assertIn('DTSTART:20261116T200000', text)
+
+    def test_missing_anchor_falls_back_to_client_zone(self):
+        night = int(datetime.datetime(2026, 11, 17, 3, 0, tzinfo=datetime.timezone.utc).timestamp() * 1000)
+        text = unfold(hosting.build_calendar('p', make_store(), {'hour': 20, 'minute': 0, 'days': list(range(7)), 'utc_offset_minutes': -360}, now_ms=night))
+        self.assertIn('DTSTART:20261116T200000', text)
 
 
 if __name__ == '__main__':

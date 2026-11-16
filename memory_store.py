@@ -939,6 +939,22 @@ class DurableMemory:
             db.execute("BEGIN IMMEDIATE")
             db.execute("INSERT OR REPLACE INTO metadata(key,value) VALUES('auth_password_hash',?)", (str(encoded),))
             db.execute("DELETE FROM auth_sessions")
+            db.execute("DELETE FROM metadata WHERE key='device_cookie_secret'")   # los dispositivos conocidos también dejan de serlo
+
+    def device_secret(self):
+        """Secreto local (hex) para firmar la cookie de dispositivo conocido; se crea una vez y se rota al cambiar la contraseña."""
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT value FROM metadata WHERE key='device_cookie_secret'").fetchone()
+            if row:
+                return row["value"]
+            value = secrets.token_hex(32)
+            db.execute("INSERT INTO metadata(key,value) VALUES('device_cookie_secret',?)", (value,))
+            return value
+
+    def delete_all_sessions(self):
+        with self._lock, self._connect() as db:
+            return db.execute("DELETE FROM auth_sessions").rowcount
 
     def create_session(self, token_hash, ttl_seconds, now=None):
         now = int(time.time() if now is None else now)
@@ -946,18 +962,18 @@ class DurableMemory:
             db.execute("DELETE FROM auth_sessions WHERE expires_at<=?", (now,))
             db.execute("INSERT INTO auth_sessions(token_hash,created_at,last_seen,expires_at) VALUES(?,?,?,?)", (token_hash, now, now, now + int(ttl_seconds)))
 
-    def check_session(self, token_hash, ttl_seconds, now=None, renew_after=300):
+    def check_session(self, token_hash, ttl_seconds, now=None, renew_after=300, absolute_seconds=90 * 24 * 3600):
         """True si la sesión existe y no caducó; la caducidad se desliza (se renueva como mucho cada `renew_after` s)."""
         now = int(time.time() if now is None else now)
         with self._lock, self._connect() as db:
-            row = db.execute("SELECT last_seen,expires_at FROM auth_sessions WHERE token_hash=?", (token_hash,)).fetchone()
+            row = db.execute("SELECT created_at,last_seen,expires_at FROM auth_sessions WHERE token_hash=?", (token_hash,)).fetchone()
             if not row:
                 return False
-            if row["expires_at"] <= now:
+            if row["expires_at"] <= now or now - row["created_at"] >= absolute_seconds:
                 db.execute("DELETE FROM auth_sessions WHERE token_hash=?", (token_hash,))
                 return False
             if now - row["last_seen"] >= renew_after:
-                db.execute("UPDATE auth_sessions SET last_seen=?,expires_at=? WHERE token_hash=?", (now, now + int(ttl_seconds), token_hash))
+                db.execute("UPDATE auth_sessions SET last_seen=?,expires_at=? WHERE token_hash=?", (now, min(now + int(ttl_seconds), row["created_at"] + absolute_seconds), token_hash))
             return True
 
     def delete_session(self, token_hash):

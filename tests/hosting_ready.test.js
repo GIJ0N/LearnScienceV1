@@ -121,6 +121,19 @@ const rest = { ok: (body = {}) => ({ ok: true, status: 200, json: async () => bo
   assert.ok(fetchLog.some(c => c.route === '/api/logout'), 'llama a /api/logout');
   assert.equal(global.location.reloads, 1, 'recarga para volver a la pantalla de inicio de sesión');
 
+  // «Cerrar todas las sesiones»: solo con auth, pide confirmación y llama a /api/logout/all
+  assert.equal(buttons().filter(t => t === 'Cerrar todas las sesiones').length, 1);
+  p.setAuthForTests({ auth: 'off', logged_in: true }); p.home(); assert.ok(!buttons().includes('Cerrar todas las sesiones'));
+  p.setAuthForTests({ auth: 'required', logged_in: true }); p.home();
+  global.fetch = (orig => async (route, opts) => route === '/api/logout/all' ? (fetchLog.push({ route, body: null }), rest.ok({ ok: true })) : orig(route, opts))(global.fetch);
+  global.confirm = () => false; fetchLog.length = 0; global.location.reloads = 0;
+  button('Cerrar todas las sesiones').onclick(); await settle();
+  assert.ok(!fetchLog.some(c => c.route === '/api/logout/all'), 'si cancelas no se cierra nada');
+  global.confirm = () => true;
+  button('Cerrar todas las sesiones').onclick(); await settle();
+  assert.ok(fetchLog.some(c => c.route === '/api/logout/all'));
+  assert.equal(global.location.reloads, 1);
+
   // la pantalla de perfiles no tiene barra: ahí el botón también aparece solo con auth
   p.setAuthForTests({ auth: 'required', logged_in: true }); roots.app.children = [];
   global.fetch = (orig => async (route, opts) => route === '/api/profiles/list' ? rest.ok({ profiles: [] }) : orig(route, opts))(global.fetch);
@@ -173,6 +186,25 @@ const rest = { ok: (body = {}) => ({ ok: true, status: 200, json: async () => bo
   assert.match(texts(), /Recordatorios activos\./);
   assert.ok(buttons().includes('Copiar enlace') && buttons().includes('Descargar .ics') && buttons().includes('Regenerar enlace') && buttons().includes('Desactivar') && buttons().includes('Guardar cambios'));
   assert.ok(texts().indexOf(TOKEN) === -1 || findAll(e => e.textContent && e.textContent.includes(TOKEN)).length === 0, 'el token solo va en el campo de enlace, no en texto visible');
+
+  // por HTTPS solo se ofrece https:// (webcal:// podría degradar a http)
+  const httpsPath = '/calendar/' + TOKEN + '.ics';
+  assert.deepEqual(p.reminderUrls(httpsPath), { url: 'http://100.101.102.103:8765' + httpsPath, webcal: 'webcal://100.101.102.103:8765' + httpsPath });
+  global.location.origin = 'https://tutor.ejemplo.com';
+  assert.deepEqual(p.reminderUrls(httpsPath), { url: 'https://tutor.ejemplo.com' + httpsPath, webcal: null });
+  p.setAuthForTests({ auth: 'required', logged_in: true });
+  reminderLinkSet: {
+    roots.app.children = []; p.preferencesView(); await settle();
+    button('Activar recordatorios').onclick(); await settle();
+    assert.equal(findAll(e => e.tag === 'input' && e.readOnly)[0].value, 'https://tutor.ejemplo.com' + httpsPath);
+    assert.equal(findAll(e => e.tag === 'a' && /webcal/.test(e.href || '')).length, 0, 'sin webcal con HTTPS');
+    assert.ok(!buttons().includes('Suscribirme (webcal)'));
+    assert.match(texts(), /copia el enlace y ve a Ajustes → Calendario/);
+  }
+  global.location.origin = 'http://100.101.102.103:8765';
+  p.setAuthForTests({ auth: 'off', logged_in: true });
+  roots.app.children = []; p.preferencesView(); await settle();
+  button('Activar recordatorios').onclick(); await settle();
 
   // descargar: crea un enlace con download y lo pulsa
   button('Descargar .ics').onclick();
