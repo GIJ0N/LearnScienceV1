@@ -85,6 +85,7 @@ jobs:
           node tests/teaching_ladder.test.js
           python tests/judge_model.test.py
           node tests/judge_model.test.js
+          node tests/adaptive_schedule.test.js
           node tests/study_plan.test.js
           node tests/visual_theme.test.js
           node tests/lesson_ui.test.js

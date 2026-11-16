@@ -47,4 +47,4 @@ Reutiliza `placement_items`/`placement_answers`; sin tablas nuevas. `goal.mixed`
 
 ## Fuera de alcance
 
-Preguntas de **composición** (encadenar varias ideas en un problema largo): requieren el grafo de proposiciones y cadenas del paso 6. Intervalos personalizados por rendimiento histórico (tipo FSRS) y recordatorios fuera de la app.
+Preguntas de **composición** (encadenar varias ideas en un problema largo): requieren el grafo de proposiciones y cadenas del paso 6. Recordatorios fuera de la app. (Los intervalos ajustados al rendimiento histórico se implementaron después en `docs/adaptive_schedule_v1.md`.)
