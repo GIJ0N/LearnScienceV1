@@ -127,6 +127,13 @@ def _profile_id(value):
     return value
 
 
+_MODEL_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
+
+
+def _valid_model_name(value):
+    return isinstance(value, str) and _MODEL_NAME_RE.fullmatch(value) is not None and ".." not in value
+
+
 def validate_store(raw, profile_id, allow_profile_rebind=False):
     """Validate relations and add ownership metadata without inventing evidence."""
     profile_id = _profile_id(profile_id)
@@ -187,6 +194,8 @@ def validate_store(raw, profile_id, allow_profile_rebind=False):
             if not isinstance(event, dict):
                 raise ValueError("El ledger contiene un evento inválido.")
             event["profile_id"] = profile_id
+            if "judge_model" in event and not _valid_model_name(event["judge_model"]):
+                del event["judge_model"]  # judge_model_v1: metadato; un valor inválido se descarta sin rechazar el evento
             if event.get("node_id") is not None and event.get("node_id") not in allowed_nodes:
                 raise ValueError("El ledger contiene una referencia de nodo inválida.")
             if event.get("type") == "EVIDENCE" and "hint_level_max" in event:
@@ -913,6 +922,14 @@ class DurableMemory:
               (profile_id,goal_id,activity_id,attempt_id,fingerprint,status,assessment_json,created_at,updated_at,owner_token)
               VALUES(?,?,?,?,?,'PENDING',NULL,?,?,?)""", values + (now, now, str(owner_token or "")))
         return {"status": "PENDING", "assessment": None, "created": True}
+
+    def release_criterion_evaluation(self, profile_id, attempt_id, fingerprint, owner_token=None):
+        """Drops a PENDING reservation that never produced an assessment, so the same attempt can be retried. Never touches EVALUATED rows."""
+        profile_id = _profile_id(profile_id)
+        with self._lock, self._connect() as db:
+            cursor = db.execute("DELETE FROM criterion_evaluations WHERE profile_id=? AND attempt_id=? AND fingerprint=? AND status='PENDING' AND (?='' OR owner_token=?)",
+                                (profile_id, str(attempt_id), str(fingerprint), str(owner_token or ""), str(owner_token or "")))
+        return cursor.rowcount > 0
 
     def finish_criterion_evaluation(self, profile_id, attempt_id, fingerprint, assessment, owner_token=None):
         profile_id = _profile_id(profile_id)

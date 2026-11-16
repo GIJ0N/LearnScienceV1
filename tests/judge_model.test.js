@@ -13,6 +13,7 @@ const roots = { app: element('main'), status: element('div') };
 global.document = { getElementById: (id) => (id === 'app' ? roots.app : roots.status), createElement: (type) => element(type) };
 global.localStorage = { getItem: () => null, setItem: () => {} };
 global.confirm = () => true;
+global.fetch = async () => ({ ok: true, json: async () => ({}) });
 const policy = require('../app.js');
 
 function contract() {
@@ -83,5 +84,24 @@ assert.equal(policy.judgeModelName('gemini-3.1-pro_v2'), 'gemini-3.1-pro_v2');
   const anthropic = policy.modelRoleLines({ roles_configurable: false, generate: 'c', audit: 'c', judge: 'c', errors: [] });
   assert.ok(anthropic.warnings.some(w => w.includes('no se pueden separar')));
   assert.deepEqual(policy.modelRoleLines(null), { lines: [], warnings: [] });
+}
+// 6. La corrección manual de la persona no se atribuye al modelo; el evento original del evaluador conserva su modelo.
+for (const marks of [{ _source: 'manual_correction' }, { _actor: 'user' }]) {
+  const g = attach(goal());
+  const event = policy.record(g, 'n1', 'INDEPENDENT', 'r', assessment('CORRECT', { judge_model: 'gemini-3.1-pro', ...marks }), 0, contract(), 'j-manual-' + Object.keys(marks)[0]);
+  assert.equal('judge_model' in event, false, JSON.stringify(marks));
+}
+{
+  const g = attach(goal());
+  g.coverage[0].dimensions = [{ id: 'conceptual', name: 'c', required: true, status: 'UNKNOWN', evidence: [] }];
+  const activity = policy.activityContract({ kind: 'explanation' }, 'n1', 'comprehension_check');
+  g.session = { mode: 'COMPREHENSION', node: 'n1', stack: [], tries: 0, hints: 0 };
+  const original = { ...assessment('CORRECT', { judge_model: 'gemini-3.1-pro' }), _activity: activity, _attempt_id: 'orig-1', _decision: 'accepted' };
+  assert.equal(policy.applyResult(g, 'n1', 'COMPREHENSION', 'x', original), true);
+  assert.equal(policy.applyManualCorrection(g, 'n1', 'COMPREHENSION', 'x', original, 'PARTIAL', 'corr-1'), true);
+  const evidence = g.events.filter(e => e.type === 'EVIDENCE');
+  assert.equal(evidence[0].judge_model, 'gemini-3.1-pro', 'el veredicto del modelo conserva su modelo');
+  assert.equal(evidence.at(-1).source, 'manual_correction');
+  assert.equal('judge_model' in evidence.at(-1), false, 'la corrección manual no se atribuye al juez');
 }
 console.log('judge_model.test.js OK');

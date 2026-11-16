@@ -111,6 +111,61 @@ class Roles(Base):
         self.run_with(provider, lambda: (app.evaluate({'question': QUESTION, 'answer': 'x y z', 'phase': 'INDEPENDENT'}), app.gemini('genera', {}, 100)))
         self.assertEqual(provider.models, ['juez-fuerte', 'base-model'])
 
+    def test_role_wrappers_restore_the_previous_role_when_nested(self):
+        os.environ['LEARNSCIENCE_JUDGE_MODEL'] = 'juez-fuerte'
+        os.environ['LEARNSCIENCE_AUDIT_MODEL'] = 'auditor-fuerte'
+        provider = FakeProvider({'*': {}})
+        seen = []
+
+        def work():
+            app.judge_gemini('a', {}, 10)
+            seen.append(getattr(app._ROLE, 'role', None))
+            with_nested = []
+            real = app.gemini
+
+            def nested(*a, **k):
+                with_nested.append(getattr(app._ROLE, 'role', None))
+                if len(with_nested) == 1:
+                    app.audit_gemini('interna', {}, 10)
+                    with_nested.append(getattr(app._ROLE, 'role', None))
+                return real(*a, **k)
+            with patch.object(app, 'gemini', nested):
+                app.judge_gemini('externa', {}, 10)
+            return with_nested
+        nested_roles = self.run_with(provider, work)
+        self.assertEqual(seen, [None])
+        self.assertEqual(nested_roles, ['judge', 'audit', 'judge'], 'tras el auditor anidado vuelve a juez')
+        self.assertIsNone(getattr(app._ROLE, 'role', None))
+        with self.assertRaises(ValueError):
+            self.run_with(FakeProvider(fail={'juez-fuerte': 500}), lambda: app.judge_gemini('x', {}, 10))
+        self.assertIsNone(getattr(app._ROLE, 'role', None), 'también se restaura tras una excepción')
+
+    def test_every_model_call_site_is_classified(self):
+        import ast
+        tree = ast.parse((ROOT / 'app_legacy.py').read_text(encoding='utf-8'))
+        found = {}
+
+        def walk(node, fn):
+            for child in ast.iter_child_nodes(node):
+                name = fn
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    name = child.name if fn is None else fn + '.' + child.name
+                if isinstance(child, ast.Call) and isinstance(child.func, ast.Name) and child.func.id in ('gemini', 'judge_gemini', 'audit_gemini'):
+                    found.setdefault(child.func.id, set()).add(name)
+                walk(child, name)
+        walk(tree, None)
+        # Si una función nueva llama al modelo, este test obliga a clasificarla (juez / auditor / generación) y a revisar si califica algo del aprendiz.
+        JUDGE = {'evaluate', 'evaluate_criterion_activity', 'grade_error_fix', 'challenge_report', 'beto_turn'}
+        AUDIT = {'audit_content'}
+        WRAPPERS = {'judge_gemini', 'audit_gemini'}
+        GENERATE = {'make_criterion_activity', 'make_coverage_map', 'expand_area', 'make_area_map', 'make_lesson', 'make_hint.ask', 'evidence_confirmation', 'review_question',
+                    'micro_start', 'micro_repair', 'make_micro_context_legacy', 'repair_diagnosis', 'repair_teaching', 'micro_zoom', 'make_placement_items', 'app_model_steps',
+                    'make_step_repair', 'make_error_hunt_items', 'beto_start.attempt', '_challenge_attempt', 'make_discrimination_items', '_confirmation_attempt', 'make_production_item',
+                    'make_faded_example', 'make_direct_teaching', '_make_commented_answer', 'make_expert_profile', 'extract_graph', 'make_composition_items'}
+        self.assertEqual(found.get('judge_gemini', set()), JUDGE)
+        self.assertEqual(found.get('audit_gemini', set()), AUDIT)
+        self.assertEqual(found.get('gemini', set()), GENERATE | WRAPPERS)
+
     def test_every_judge_function_uses_the_judge_role(self):
         import inspect
         judges = ('evaluate', 'evaluate_criterion_activity', 'grade_error_fix', 'challenge_report', 'beto_turn')
@@ -191,9 +246,9 @@ class Failures(Base):
             self.run_with(provider, lambda: app.audit_content('M', 'T', 'material'))
         self.assertNotIn(SECRET, out.getvalue() + err.getvalue())
 
-    def test_criterion_judge_failure_is_unknown_never_positive(self):
+    def _criterion_activity(self, name):
         os.environ['LEARNSCIENCE_JUDGE_MODEL'] = 'juez-fuerte'
-        profile = app.memory().create_profile('p')['profile_id']
+        profile = app.memory().create_profile(name)['profile_id']
         activity = {'schema_version': 'criterion_assessment_v1', 'activity_id': 'act-1', 'type': 'multiple_choice_explanation', 'phase': 'INDEPENDENT',
                     'prompt': '¿Qué cambia al invertir una ecuación?', 'options': [{'id': 'a', 'text': 'Se conserva la igualdad'}, {'id': 'b', 'text': 'Solo un lado'}],
                     'correct_option_id': 'a', 'explanation_reference': 'Aplicar la misma operación reversible a ambos miembros conserva las soluciones; operar en un solo miembro rompe la equivalencia.',
@@ -202,21 +257,69 @@ class Failures(Base):
                     'help': {'enabled': True, 'critical': True}, 'variant': 'v1', 'context': 'sintetico'}
         with patch.object(app, 'gemini', return_value=copy.deepcopy(activity)):
             public = app.make_criterion_activity({'profile_id': profile, 'goal_id': 'g1', 'goal': 'Álgebra', 'concept': 'Inversas'})
+        return profile, public['activity_id']
+
+    def _evaluate_criterion(self, provider, profile, activity_id, attempt='at-1', selected='a'):
+        return self.run_with(provider, lambda: app.evaluate_criterion_activity({'profile_id': profile, 'goal_id': 'g1', 'activity_id': activity_id, 'attempt_id': attempt,
+                                                                                'selected_option_id': selected, 'explanation': 'misma operación en ambos lados'}))
+
+    def _reservations(self, profile):
+        with sqlite3.connect(app.memory().path) as db:
+            return db.execute('SELECT status FROM criterion_evaluations WHERE profile_id=?', (profile,)).fetchall()
+
+    def test_configured_judge_failure_releases_the_reservation_and_is_retryable(self):
+        profile, activity_id = self._criterion_activity('p')
         provider = FakeProvider(fail={'juez-fuerte': 404})
-        result = self.run_with(provider, lambda: app.evaluate_criterion_activity({'profile_id': profile, 'goal_id': 'g1', 'activity_id': public['activity_id'], 'attempt_id': 'at-1',
-                                                                                  'selected_option_id': 'b', 'explanation': 'porque sí'}))
-        self.assertEqual(provider.models, ['juez-fuerte'])
+        with self.assertRaises(app.JudgeUnavailable) as ctx:
+            self._evaluate_criterion(provider, profile, activity_id)
+        self.assertIn('calificador', str(ctx.exception))
+        self.assertNotIn(SECRET, str(ctx.exception))
+        self.assertEqual(provider.models, ['juez-fuerte'], 'sin reintento con el modelo barato')
+        self.assertEqual(self._reservations(profile), [], 'no queda reserva ni evaluación guardada')
+        self.assertIsNone(app.memory().load_criterion_evaluation(profile, 'at-1'))
+        # El mismo attempt_id se puede reintentar cuando el juez vuelve, y entonces sí se evalúa.
+        ok = self._evaluate_criterion(FakeProvider({'juez-fuerte': {'status': 'SATISFIED', 'observation': 'Explicas la conservación.'}}), profile, activity_id)
+        self.assertEqual(ok['overall'], 'CORRECT')
+        self.assertEqual(ok['judge_model'], 'juez-fuerte')
+        self.assertEqual(self._reservations(profile), [('EVALUATED',)])
+
+    def test_unconfigured_judge_failure_keeps_the_previous_behaviour(self):
+        profile, activity_id = self._criterion_activity('p3')
+        os.environ.pop('LEARNSCIENCE_JUDGE_MODEL')
+        result = self._evaluate_criterion(FakeProvider(fail={'base-model': 404}), profile, activity_id)
         explanation = next(c for c in result['criteria'] if c['criterion_id'] == 'explanation')
         self.assertEqual(explanation['status'], 'NOT_EVALUATED')
-        self.assertNotIn('judge_model', explanation)
-        self.assertNotIn('judge_model', result)
         self.assertNotEqual(result['overall'], 'CORRECT')
-        # Un acierto con juez caído tampoco es CORRECT: la explicación no se evaluó.
-        provider2 = FakeProvider(fail={'juez-fuerte': 404})
-        ok = self.run_with(provider2, lambda: app.evaluate_criterion_activity({'profile_id': profile, 'goal_id': 'g1', 'activity_id': public['activity_id'], 'attempt_id': 'at-2',
-                                                                               'selected_option_id': 'a', 'explanation': 'misma operación en ambos lados'}))
-        self.assertNotEqual(ok['overall'], 'CORRECT')
-        self.assertFalse(any(c['status'] == 'SATISFIED' for c in ok['criteria'] if c['criterion_id'] == 'explanation'))
+        self.assertNotIn('judge_model', result)
+
+    def test_release_never_drops_an_evaluated_attempt_or_another_owner(self):
+        profile, activity_id = self._criterion_activity('p4')
+        ok = self._evaluate_criterion(FakeProvider({'juez-fuerte': {'status': 'SATISFIED', 'observation': 'ok'}}), profile, activity_id)
+        self.assertFalse(app.memory().release_criterion_evaluation(profile, 'at-1', ok['fingerprint'], app._EVALUATION_OWNER))
+        self.assertEqual(self._reservations(profile), [('EVALUATED',)])
+
+    def test_invalid_judge_variable_at_runtime_is_a_retryable_judge_error(self):
+        profile, activity_id = self._criterion_activity('p5')
+        os.environ['LEARNSCIENCE_JUDGE_MODEL'] = 'x y'
+        provider = FakeProvider()
+        with self.assertRaises(app.JudgeUnavailable):
+            self._evaluate_criterion(provider, profile, activity_id)
+        self.assertEqual(provider.models, [])
+        self.assertEqual(self._reservations(profile), [])
+
+    def test_server_start_aborts_on_invalid_role_variables(self):
+        for name in ('LEARNSCIENCE_JUDGE_MODEL', 'LEARNSCIENCE_AUDIT_MODEL'):
+            env = {k: v for k, v in os.environ.items() if k != 'GEMINI_API_KEY'}
+            env[name] = 'modelo malo/../x'
+            done = subprocess.run([sys.executable, str(ROOT / 'app_legacy.py')], env=env, capture_output=True, text=True, timeout=60)
+            self.assertEqual(done.returncode, 2, done.stderr)
+            self.assertIn(name, done.stderr)
+            self.assertIn('no es válido', done.stderr)
+        app.validate_role_env()  # sin variables (o válidas) no lanza
+        os.environ['LEARNSCIENCE_JUDGE_MODEL'] = 'bueno-1.5'
+        app.validate_role_env()
+        os.environ['LEARNSCIENCE_AUDIT_MODEL'] = 'a b'
+        self.assertRaises(ValueError, app.validate_role_env)
 
     def test_criterion_success_records_the_judge_model(self):
         os.environ['LEARNSCIENCE_JUDGE_MODEL'] = 'juez-fuerte'
@@ -278,10 +381,10 @@ class SampleTool(unittest.TestCase):
         text = Path(self.out).read_text(encoding='utf-8')
         self.assertIn('PERFILA', text)
         self.assertNotIn('PERFILB', text)
-        self.assertIn('Modelo juez:** juez-fuerte', text)
+        self.assertIn('Quién calificó:** Calificado por modelo juez-fuerte', text)
         for box in ('¿Correcto?', '¿Claro?', 'Nota:'):
             self.assertIn(box, text)
-        for kind in ('Lección', 'Veredicto del juez', 'Explicación de la escalera'):
+        for kind in ('Lección', 'Intento calificado', 'Explicación de la escalera'):
             self.assertIn(kind, text)
         self.assertIn('Referencia/clave', text)
         sample_for_review.main(['--db', self.db_path, '--profile', self.a, '--out', self.out, '--n', '2'])
@@ -290,7 +393,7 @@ class SampleTool(unittest.TestCase):
     def test_legacy_events_do_not_get_an_invented_judge_model(self):
         sample_for_review.main(['--db', self.db_path, '--profile', self.b, '--out', self.out])
         text = Path(self.out).read_text(encoding='utf-8')
-        self.assertIn('no registrado (dato anterior)', text)
+        self.assertIn('Modelo no registrado (dato anterior)', text)
         self.assertNotIn('juez-fuerte', text)
         self.assertNotIn('PERFILA', text)
 
@@ -308,6 +411,101 @@ class SampleTool(unittest.TestCase):
         with self.assertRaises(SystemExit):
             sample_for_review.main(['--db', os.path.join(self.tmp.name, 'nada.sqlite3'), '--profile', self.a])
         self.assertFalse(os.path.exists(self.out))
+
+    # --- revisión del supervisor ---
+    def _text(self, profile, db=None, n=30):
+        sample_for_review.main(['--db', db or self.db_path, '--profile', profile, '--out', self.out, '--n', str(n)])
+        return Path(self.out).read_text(encoding='utf-8')
+
+    def _store_with_events(self, events, lessons=None, session=None):
+        node = {'id': 'n1', 'name': 'Densidad', 'outcome': 'Explicar', 'level': 0, 'prerequisites': [], 'kind': 'concept'}
+        goal = {'id': 'g1', 'goal': 'Meta', 'nodes': [node], 'events': events, 'coverage': [], 'reviews': [], 'lessons': lessons or {}}
+        if session:
+            goal['session'] = {'mode': 'DIAGNOSTIC', 'node': None, 'stack': [], 'stage': 'teach', 'tries': 0, **session}
+        return {'goals': [goal], 'active': 'g1'}
+
+    def test_most_recent_first_and_active_ladder_offer_has_priority(self):
+        mem = DurableMemory(os.path.join(self.tmp.name, 'order.sqlite3'))
+        profile = mem.create_profile('O')['profile_id']
+        nodes = [{'id': f'n{i}', 'name': f'Tema{i}', 'outcome': 'x', 'level': 0, 'prerequisites': [], 'kind': 'concept'} for i in (1, 2, 3)]
+        lessons = {f'n{i}': {'explanation': f'Explicación del tema {i}', 'example': 'e', 'common_error': 'c'} for i in (1, 2, 3)}
+        session = {'mode': 'DIAGNOSTIC', 'node': None, 'stack': [], 'stage': 'teach', 'tries': 0,
+                   'direct': {'rung': 3, 'status': 'ready', 'package': {'model_answer': 'OFERTA-ACTIVA'}}, 'ladder': {'k': {'avoid': ['PREVIA-VIEJA', 'PREVIA-NUEVA']}}}
+        events = [{'type': 'EVIDENCE', 'attempt_id': 'old', 'node_id': 'n1', 'phase': 'INDEPENDENT', 'result': 'CORRECT', 'help_used': 0, 'answer': 'RESP-ANTIGUA', 'at': 1_000},
+                  {'type': 'EVIDENCE', 'attempt_id': 'new', 'node_id': 'n1', 'phase': 'INDEPENDENT', 'result': 'CORRECT', 'help_used': 0, 'answer': 'RESP-NUEVA', 'at': 5_000}]
+        mem.save(profile, {'goals': [{'id': 'g1', 'goal': 'Meta', 'nodes': nodes, 'events': events, 'coverage': [], 'reviews': [], 'lessons': lessons, 'session': session}], 'active': 'g1'})
+        text = self._text(profile, str(mem.path))
+        self.assertLess(text.index('tema 3'), text.index('tema 2'))
+        self.assertLess(text.index('tema 2'), text.index('tema 1'))
+        self.assertLess(text.index('OFERTA-ACTIVA'), text.index('PREVIA-NUEVA'))
+        self.assertLess(text.index('PREVIA-NUEVA'), text.index('PREVIA-VIEJA'))
+        self.assertLess(text.index('RESP-NUEVA'), text.index('RESP-ANTIGUA'))
+        # time_ns de placement_* y ms de attempts se normalizan antes de compararse.
+        self.assertEqual(sample_for_review._ms(1_700_000_000_000_000_000), 1_700_000_000_000)
+        self.assertEqual(sample_for_review._ms(1_700_000_000_000), 1_700_000_000_000)
+        self.assertEqual(sample_for_review._ms(None), 0)
+
+    def test_old_databases_without_placement_tables_and_odd_values_do_not_crash(self):
+        old = os.path.join(self.tmp.name, 'old.sqlite3')
+        con = sqlite3.connect(old)
+        con.executescript("""CREATE TABLE profiles(profile_id TEXT PRIMARY KEY, name TEXT, preferences_json TEXT, created_at INTEGER, updated_at INTEGER);
+            CREATE TABLE stores(profile_id TEXT PRIMARY KEY, store_json TEXT, revision INTEGER, updated_at INTEGER);
+            CREATE TABLE attempts(profile_id TEXT, goal_id TEXT, node_id TEXT, attempt_id TEXT, activity_id TEXT, phase TEXT, result TEXT, help_used INTEGER, response_text TEXT, question_json TEXT, evaluation_json TEXT, event_json TEXT, occurred_at INTEGER);""")
+        odd = {'goals': [None, 7, {'goal': None, 'nodes': None, 'lessons': {'n1': None, 'n2': {'explanation': 'X', 'check': 'texto'}}, 'session': {'direct': {'package': {'steps': [None, 'a', {'body': 'paso'}]}}, 'ladder': {'k': None, 'j': {'avoid': None}}}},
+                          {'goal': 'G', 'nodes': [None, {'id': 'n1'}], 'session': None}]}
+        con.execute("INSERT INTO profiles VALUES('p','P','{}',1,1)")
+        con.execute("INSERT INTO stores VALUES('p',?,1,1)", (json.dumps(odd),))
+        con.execute("INSERT INTO attempts VALUES('p','g','n','a1',NULL,'X','CORRECT',0,NULL,'null','{\"result\":\"CORRECT\"}','null',5)")
+        con.execute("INSERT INTO attempts VALUES('p','g','n','a2',NULL,'X','CORRECT',0,NULL,NULL,'[1]','[]',6)")
+        con.commit()
+        con.close()
+        text = self._text('p', old)
+        self.assertIn('Intento calificado', text)
+        self.assertIn('Modelo no registrado (dato anterior)', text)
+
+    def test_out_cannot_overwrite_the_database(self):
+        before = self.digest()
+        for out in (self.db_path, os.path.join(self.tmp.name, 'otra.sqlite3'), os.path.join(self.tmp.name, 'x.db'), os.path.join(self.tmp.name, 'y.SQLITE'), os.path.join(self.tmp.name, '.', 'u.sqlite3')):
+            with self.assertRaises(SystemExit, msg=out):
+                sample_for_review.main(['--db', self.db_path, '--profile', self.a, '--out', out])
+        link = os.path.join(self.tmp.name, 'enlace.md')
+        os.symlink(self.db_path, link)
+        with self.assertRaises(SystemExit):
+            sample_for_review.main(['--db', self.db_path, '--profile', self.a, '--out', link])
+        self.assertEqual(self.digest(), before)
+        self.assertFalse(os.path.exists(os.path.join(self.tmp.name, 'otra.sqlite3')))
+
+    def test_each_attempt_says_who_graded_it(self):
+        mem = DurableMemory(os.path.join(self.tmp.name, 'labels.sqlite3'))
+        profile = mem.create_profile('L')['profile_id']
+        base = {'type': 'EVIDENCE', 'node_id': 'n1', 'phase': 'INDEPENDENT', 'result': 'CORRECT', 'help_used': 0}
+        events = [{**base, 'attempt_id': 'm', 'answer': 'R-MODELO', 'at': 4, 'judge_model': 'juez-fuerte'},
+                  {**base, 'attempt_id': 'l', 'answer': 'R-LOCAL', 'at': 3, 'evaluator_trust': 'deterministic'},
+                  {**base, 'attempt_id': 'c', 'answer': 'R-MANUAL', 'at': 2, 'source': 'manual_correction', 'actor': 'user', 'judge_model': 'no-debe-salir'},
+                  {**base, 'attempt_id': 'o', 'answer': 'R-VIEJA', 'at': 1}]
+        mem.save(profile, self._store_with_events(events))
+        text = self._text(profile, str(mem.path))
+        sections = {name: text.split(name)[1].split('## ')[0] for name in ('R-MODELO', 'R-LOCAL', 'R-MANUAL', 'R-VIEJA')}
+        self.assertIn('Calificado por modelo juez-fuerte', sections['R-MODELO'])
+        self.assertIn('Calificado localmente', sections['R-LOCAL'])
+        self.assertIn('Corrección manual', sections['R-MANUAL'])
+        self.assertNotIn('no-debe-salir', text)
+        self.assertIn('Modelo no registrado (dato anterior)', sections['R-VIEJA'])
+        self.assertNotIn('Veredicto del juez', text)
+
+    def test_store_validation_drops_invalid_judge_model_without_rejecting_the_event(self):
+        mem = DurableMemory(os.path.join(self.tmp.name, 'val.sqlite3'))
+        profile = mem.create_profile('V')['profile_id']
+        base = {'type': 'EVIDENCE', 'node_id': 'n1', 'phase': 'INDEPENDENT', 'result': 'CORRECT', 'help_used': 0, 'answer': 'r', 'at': 1}
+        events = [{**base, 'attempt_id': 'ok', 'judge_model': 'gemini-3.1-pro'}, {**base, 'attempt_id': 'x1', 'judge_model': 'x y'},
+                  {**base, 'attempt_id': 'x2', 'judge_model': 7}, {**base, 'attempt_id': 'x3', 'judge_model': '../x'}, {**base, 'attempt_id': 'none'}]
+        mem.save(profile, self._store_with_events(events))
+        saved = {e['attempt_id']: e for e in mem.load(profile)['store']['goals'][0]['events']}
+        self.assertEqual(saved['ok']['judge_model'], 'gemini-3.1-pro')
+        for key in ('x1', 'x2', 'x3', 'none'):
+            self.assertNotIn('judge_model', saved[key], key)
+        self.assertEqual(len(saved), 5)
+
 
     def test_tool_runs_as_a_script_without_a_provider_key(self):
         env = {k: v for k, v in os.environ.items() if 'KEY' not in k}

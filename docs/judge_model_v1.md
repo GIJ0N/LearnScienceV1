@@ -13,29 +13,33 @@ Hoy un solo modelo genera el contenido, lo audita y califica las respuestas abie
 | `LEARNSCIENCE_JUDGE_MODEL` | califica respuestas del aprendiz | se usa `GEMINI_MODEL` |
 
 - Mismo proveedor Gemini y misma `GEMINI_API_KEY`. No hay proveedores ni dependencias nuevas. Con `LLM_PROVIDER=anthropic` los roles no se pueden separar: se ignoran y se usa `ANTHROPIC_MODEL`.
-- Validación: el nombre debe tener de 1 a 64 caracteres (letras, números, `.`, `-`, `_`), empezar por letra o número y no contener `..`. Un valor no válido nunca llega a la URL: el juez responde con error en español y la auditoría falla abierta (ver abajo). La clave nunca se imprime; los errores del proveedor ya la ocultan.
+- Validación: el nombre debe tener de 1 a 64 caracteres (letras, números, `.`, `-`, `_`), empezar por letra o número y no contener `..`. Se valida **al arrancar el servidor**: una variable no válida aborta con un mensaje en español (código de salida 2) en vez de fallar en cada llamada. Como defensa, un valor no válido que apareciera después tampoco llega nunca a la URL: el juez responde con error reintentable y la auditoría falla abierta (ver abajo). La clave nunca se imprime; los errores del proveedor ya la ocultan.
 - Sin ninguna variable definida el comportamiento es idéntico al anterior.
 
 ## Roles: qué función usa cada uno
 
-Enrutado por `judge_gemini(...)` y `audit_gemini(...)`, que llaman a `gemini(...)` con un rol (el parámetro opcional `role` de `gemini` también existe; por defecto `generate`).
+Enrutado por `judge_gemini(...)` y `audit_gemini(...)`, que fijan el rol (restaurando el anterior al salir, también con anidamiento y excepciones) y llaman a `gemini(...)` (el parámetro opcional `role` de `gemini` también existe; por defecto `generate`).
 
 - **Juez** (califica lo que escribe el aprendiz): `evaluate` (`/api/evaluate`; también `micro_step`, que lo reutiliza), `evaluate_criterion_activity` (criterio de explicación; la parte de opción es determinista y no usa modelo), `grade_error_fix` (corrección del paso erróneo), `challenge_report` (valoración del informe de un reto), `beto_turn` (estado CORRECTED/PARTIAL/PERSISTS del turno con «Beto»; esa llamada además redacta la réplica de Beto, y se enruta entera al juez porque su veredicto sobre lo que explicó la persona es lo que importa).
 - **Auditor**: `audit_content` (todas sus llamadas: lecciones, preguntas de diagnóstico y de confirmación, escalera, reto, Beto, ejemplos con huecos, producción, perfil de experto, etc.).
-- **Generador** (`GEMINI_MODEL`): todo lo demás, incluidas las pistas (`make_hint`), el diagnóstico y la enseñanza de la reparación y la extracción de grafo. Estas llamadas no califican una respuesta ni deciden evidencia; si más adelante alguna pasa a calificar, debe enrutarse al juez y añadirse al test `test_every_judge_function_uses_the_judge_role`.
+- **Generador** (`GEMINI_MODEL`): todo lo demás, incluidas las pistas (`make_hint`), el diagnóstico y la enseñanza de la reparación y la extracción de grafo. Estas llamadas no califican una respuesta ni deciden evidencia; un test estático recorre `app_legacy.py` y falla ante cualquier llamada nueva a `gemini`/`judge_gemini`/`audit_gemini` que no esté en su lista clasificada (juez / auditor / generación), para que una función nueva obligue a decidir su rol.
 - Las preguntas con clave privada (opción múltiple) se califican localmente, sin modelo.
 
 ## Fallos del modelo de juez o de auditor
 
 Decisión conservadora: **no hay reintento silencioso con el modelo barato.** Hacerlo reproduciría justo el problema que se quiere evitar (el modelo que genera calificando su propio contenido) sin que la persona lo supiera.
 
-- **Juez que falla** (modelo inexistente, cuota 429, red, variable no válida): se lanza un error en español («El modelo calificador (X) no respondió: …»). La ruta responde 400, el cliente no recibe veredicto, no se crea evento ni evidencia y la persona puede reintentar. En el criterio de explicación (`evaluate_criterion_activity`) el resultado es `NOT_EVALUATED` / `UNKNOWN` con `method: provider_unavailable`, como ya ocurría con cualquier fallo del proveedor, y no lleva `judge_model`. Nunca se convierte en evidencia positiva. No existe `judge_fallback`: no se decide nada con el modelo barato.
+- **Juez configurado que falla** (modelo inexistente, cuota 429, red, variable no válida): se lanza `JudgeUnavailable` (un `ValueError`) con «El modelo calificador (X) no respondió: …». La ruta responde 400, el cliente no recibe veredicto, no se crea evento ni evidencia y la persona puede reintentar. No existe `judge_fallback`: no se decide nada con el modelo barato.
+  - En `evaluate_criterion_activity` la reserva `PENDING` del intento se **libera** (`release_criterion_evaluation`: solo borra filas `PENDING` sin evaluación, nunca una `EVALUATED`), de modo que no queda nada guardado y el mismo `attempt_id` puede reintentarse. Esto no choca con la idempotencia: el `fingerprint` y la identidad del intento no cambian y una evaluación ya cerrada sigue devolviéndose tal cual; solo desaparece una reserva que nunca produjo resultado.
+  - Si el juez **no** está configurado (se usa `MODEL`) y el proveedor falla, se conserva el comportamiento anterior: explicación `NOT_EVALUATED` / `UNKNOWN` con `method: provider_unavailable`, sin `judge_model`, nunca `CORRECT`.
 - **Auditor que falla**: sigue «fallando abierta» (el contenido se entrega con `checked: false`, forma idéntica a la actual), pero ahora queda constancia: línea en la terminal del servidor con el modelo auditor y el motivo (sin secretos), la llamada fallida en la telemetría de uso (`ok = 0`, con el modelo real) y el contador `audit_failed_open` de `/api/models`. Esto no afloja nada: el contenido sin auditar sigue marcado como no verificado y la auditoría nunca concedió evidencia.
 
 ## Constancia en los datos
 
 - `/api/evaluate` devuelve `judge_model` cuando un modelo calificó (no en «No sé», que se resuelve localmente). `prepareRecord` (cliente) lo copia al evento `EVIDENCE` solo si es un nombre válido; ese evento ya se guarda completo en `attempts.event_json`, así que **no hay migración**.
 - `evaluate_criterion_activity`, `grade_error_fix`, `challenge_report` y `beto_turn` incluyen `judge_model` en el resultado que ya persisten (`criterion_evaluations.assessment_json` / `placement_answers.result_json`).
+- La corrección manual de la persona (`_source: manual_correction` / `_actor: user`) **no** hereda `judge_model`: el evento original del evaluador conserva su modelo, el de la corrección no se atribuye al juez.
+- `validate_store` (guardar/importar) descarta un `judge_model` que no cumpla el patrón de nombre, sin rechazar el evento.
 - Los eventos y resultados anteriores no tienen el campo y **no se les inventa**: la herramienta de revisión los marca «no registrado (dato anterior)». La telemetría de uso (`llm_calls.model`) ahora registra el modelo realmente usado por rol.
 
 ## Qué cuenta como evidencia
@@ -54,7 +58,7 @@ python tools/sample_for_review.py --db RUTA\ruta.sqlite3 --list-profiles
 python tools/sample_for_review.py --db RUTA\ruta.sqlite3 --profile ID_PERFIL --n 30 --out muestra.md
 ```
 
-Abre la base en solo lectura (`mode=ro` y `query_only`), no llama a ningún proveedor, solo lee el perfil indicado y escribe un Markdown con hasta N elementos (30 por defecto) repartidos por rondas entre lecciones, preguntas con su clave, explicaciones de la escalera y veredictos del juez (con la respuesta del aprendiz y el modelo que juzgó). Cada elemento trae las casillas «¿Correcto? / ¿Claro? / Nota». Si la base está en uso por el servidor, la lectura sigue siendo segura; conviene apuntar a una copia si se quiere evitar cualquier contención.
+Abre la base en solo lectura (tolera bases antiguas sin `placement_items`/`placement_answers` y valores `null` o de tipo inesperado) (`mode=ro` y `query_only`), no llama a ningún proveedor, solo lee el perfil indicado y escribe un Markdown con hasta N elementos (30 por defecto) repartidos por rondas entre lecciones, preguntas con su clave, explicaciones de la escalera y veredictos del juez (con la respuesta del aprendiz y el modelo que juzgó). Dentro de cada categoría va lo más reciente primero (la oferta activa de la escalera, primero; las marcas `time_ns` de `placement_*` se normalizan a ms antes de compararlas con `attempts`). Cada intento dice quién calificó según lo que el evento guardó: «Calificado por modelo X» (solo si hay `judge_model`), «Calificado localmente», «Corrección manual» o «Modelo no registrado (dato anterior)». `--out` se rechaza si es la propia base o termina en `.sqlite3`/`.sqlite`/`.db`. Cada elemento trae las casillas «¿Correcto? / ¿Claro? / Nota». Si la base está en uso por el servidor, la lectura sigue siendo segura; conviene apuntar a una copia si se quiere evitar cualquier contención.
 
 Qué se persiste realmente (y por tanto qué puede muestrearse):
 
