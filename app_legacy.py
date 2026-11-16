@@ -3016,12 +3016,13 @@ class Handler(BaseHTTPRequestHandler):
         return hosting.session_cookie_name(cookie_secure_configured())
     def _host_ok(self):
         """Defensa contra DNS rebinding: el nombre de la cabecera Host debe ser el enlazado, loopback/localhost o uno de los orígenes declarados (el puerto no se mira)."""
-        host=self.headers.get('Host')
+        headers=getattr(self,'headers',None)
+        host=headers.get('Host') if headers is not None else None
         if host is None:return True
         if hosting.hostname_of(host) in allowed_hostnames():return True
         self.respond(403,{'error':'Host no autorizado.'});return False
     def _note_proxy(self):
-        if AUTH_MODE=='off' and not _PROXY_WARNED[0] and self.headers.get('X-Forwarded-For'):
+        if AUTH_MODE=='off' and not _PROXY_WARNED[0] and getattr(self,'headers',None) is not None and self.headers.get('X-Forwarded-For'):
             _PROXY_WARNED[0]=True
             print('Aviso: llegó una petición con X-Forwarded-For: hay un proxy delante y el inicio de sesión está desactivado (LEARNSCIENCE_AUTH=off). Cualquiera que alcance el proxy puede usar la app. Activa LEARNSCIENCE_AUTH=required.',file=sys.stderr,flush=True)
     def _device_id(self):

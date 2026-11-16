@@ -19,11 +19,14 @@ Guía práctica; el contrato técnico está en `docs/hosting_ready_v1.md`. Nada 
 
 | Variable | Para qué |
 |---|---|
-| `LEARNSCIENCE_HOST` | Dirección IPv4 donde escucha. Por defecto `127.0.0.1`. Con Tailscale, la IP `100.x.x.x`. `0.0.0.0` solo con `LEARNSCIENCE_AUTH=required` (si no, el servidor se niega a arrancar). |
+| `LEARNSCIENCE_HOST` | Dirección IPv4 donde escucha. Por defecto `127.0.0.1`. Con Tailscale, la IP `100.x.x.x`. Sin auth solo se permiten loopback y `100.64/10`; `192.168.x`/`10.x`/`172.16-31.x` exigen `LEARNSCIENCE_ALLOW_LAN_WITHOUT_AUTH=1` y `0.0.0.0`/IP pública exigen `LEARNSCIENCE_AUTH=required` (si no, el servidor se niega a arrancar). |
 | `PORT` | Puerto (8765). |
 | `LEARNSCIENCE_ORIGINS` | Orígenes permitidos extra, p. ej. `https://tutor.ejemplo.com`. Con auth activo, el Origin del navegador debe estar aquí (o ser el propio host:puerto). |
 | `LEARNSCIENCE_AUTH` | `off` (por defecto) o `required`. |
-| `LEARNSCIENCE_TRUST_PROXY` | `1` solo si hay **un** proxy tuyo delante que pone `X-Forwarded-Proto` y `X-Forwarded-For`; activa la cookie `Secure` y la IP real para el límite de intentos. Sin proxy, déjalo vacío (un cliente podría falsificar esas cabeceras). |
+| `LEARNSCIENCE_TRUST_PROXY` | `1` solo si hay un proxy tuyo delante que pone `X-Forwarded-Proto` y `X-Forwarded-For`; se usan únicamente si quien se conecta está en `LEARNSCIENCE_TRUSTED_PROXIES`. Sin proxy, déjalo vacío (un cliente podría falsificar esas cabeceras). |
+| `LEARNSCIENCE_TRUSTED_PROXIES` | CIDR de tus proxies, separados por comas (p. ej. `172.18.0.0/16`). Por defecto loopback y redes privadas. |
+| `LEARNSCIENCE_COOKIE_SECURE` | `1` si sirves por HTTPS (cookie `Secure` y nombre `__Host-ruta_session`); es automático si `LEARNSCIENCE_ORIGINS` trae un `https://`. |
+| `LEARNSCIENCE_ALLOW_LAN_WITHOUT_AUTH` | `1` para arrancar sin contraseña en una red privada que no sea Tailscale. Léelo antes: una dirección privada puede ser alcanzable desde fuera (NAT de una nube, Docker `-p`, reenvío de puertos). |
 | `RUTA_DB_PATH` | Ruta del archivo SQLite. |
 | `GEMINI_API_KEY` (o `ANTHROPIC_API_KEY` con `LLM_PROVIDER=anthropic`) | Clave del modelo. **Siempre por variable de entorno o gestor de secretos; nunca en el repositorio, en la imagen ni en un archivo versionado.** |
 
@@ -31,7 +34,7 @@ La contraseña **no** es una variable: se fija con `python app_legacy.py --set-p
 
 ## Opción 1: seguir con la PC + Tailscale
 
-Nada que cambiar. Si quieres recordatorios en el calendario del iPhone: Preferencias → Recordatorios → Activar, y suscribe el enlace (solo se actualiza con la PC encendida y Tailscale activo). Sigue sin contraseña: cualquiera dentro de tu red Tailscale puede usar la app. Si compartes la red Tailscale con otras personas, activa también `LEARNSCIENCE_AUTH=required`.
+Nada que cambiar si ya usas la IP de Tailscale (o `127.0.0.1`). Si en `main` escuchabas en `192.168.x` sin contraseña, ahora el servidor no arranca sin `LEARNSCIENCE_ALLOW_LAN_WITHOUT_AUTH=1` (o auth, o Tailscale). Ojo: `100.64.0.0/10` también es el rango CGNAT de algunos operadores; Tailscale asigna ahí, pero ese rango por sí solo no prueba que la red sea solo tuya. Si quieres recordatorios en el calendario del iPhone: Preferencias → Recordatorios → Activar, y suscribe el enlace (solo se actualiza con la PC encendida y Tailscale activo). Sigue sin contraseña: cualquiera dentro de tu red Tailscale puede usar la app. Si compartes la red Tailscale con otras personas, activa también `LEARNSCIENCE_AUTH=required`.
 
 ## Opción 2: Raspberry Pi (o cualquier mini-PC Linux) con Tailscale
 
@@ -80,9 +83,9 @@ Solo con `LEARNSCIENCE_AUTH=required`. Riesgos reales: cualquiera en internet pu
    docker run --rm -it -v ruta-data:/data ruta python app_legacy.py --set-password
    docker run -d --name ruta --restart unless-stopped -v ruta-data:/data \
      -e GEMINI_API_KEY="$GEMINI_API_KEY" -e LEARNSCIENCE_ORIGINS=https://tutor.ejemplo.com \
-     --network web ruta
+     -e LEARNSCIENCE_TRUST_PROXY=1 --network web ruta
    ```
-   No publiques el puerto 8765 al exterior: solo el proxy debe alcanzarlo (misma red de Docker).
+   **No uses `-p 8765:8765`**: publicaría el puerto en todas las interfaces del servidor y la app dependería solo de la contraseña (y las comprobaciones de IP/Host quedarían engañadas por NAT). Solo el proxy debe alcanzarla, por la red de Docker. `LEARNSCIENCE_TRUST_PROXY` viene apagado en la imagen: actívalo explícitamente, y si tu proxy no está en una red privada define `LEARNSCIENCE_TRUSTED_PROXIES`.
 2. Proxy inverso con HTTPS automático (Caddy). `Caddyfile`:
    ```
    tutor.ejemplo.com {
@@ -94,7 +97,7 @@ Solo con `LEARNSCIENCE_AUTH=required`. Riesgos reales: cualquiera en internet pu
        reverse_proxy ruta:8765
    }
    ```
-   Caddy añade `X-Forwarded-For`/`X-Forwarded-Proto` correctos; por eso la imagen trae `LEARNSCIENCE_TRUST_PROXY=1` (no lo uses si algo que no controlas puede alcanzar el contenedor directamente).
+   Caddy añade `X-Forwarded-For`/`X-Forwarded-Proto` y conserva la cabecera `Host` (necesaria: la app solo acepta el host de `LEARNSCIENCE_ORIGINS`). No actives `LEARNSCIENCE_TRUST_PROXY` si algo que no controlas puede alcanzar el contenedor directamente.
 3. Abre solo 80/443 en el firewall, activa actualizaciones automáticas de seguridad y programa copias de seguridad (abajo).
 4. En `https://tutor.ejemplo.com` iniciarás sesión; el calendario se suscribe con `webcal://`/`https://` normal, y la cookie ya va `Secure`.
 
@@ -104,8 +107,9 @@ Hay dos mecanismos y no son equivalentes:
 
 - **Copia de toda la base (recomendada para respaldar y para mudar de servidor).** Con la app en marcha usa la copia en caliente de SQLite, no `cp`:
   ```
-  sqlite3 /var/lib/ruta/ruta-memory.sqlite3 "VACUUM INTO '/ruta/respaldo/ruta-$(date +%F).sqlite3'"
+  python3 -c "import sqlite3,sys,datetime; sqlite3.connect(sys.argv[1]).execute('VACUUM INTO ?', (sys.argv[2] + '/ruta-' + datetime.date.today().isoformat() + '.sqlite3',))" /var/lib/ruta/ruta-memory.sqlite3 /ruta/respaldo
   ```
+  (es la copia en caliente de SQLite con Python, que ya tienes; no hace falta instalar la CLI `sqlite3`. La carpeta de destino debe existir y el archivo de destino no.)
   Restaurar: detén el servicio, reemplaza el archivo (y borra `*.sqlite3-wal`/`-shm` si existen), arranca. Conserva **todo**: perfiles, historial, casos prácticos con su rúbrica privada y el secreto de verificación de mentores (`metadata.mentor_code_secret`), llamadas de uso, **y también el hash de la contraseña, las sesiones abiertas y los enlaces de calendario**. Si restauras una copia antigua, ejecuta `--set-password` (cierra todas las sesiones, incluidas las que venían en la copia) y regenera los enlaces del calendario si no los reconoces. Trata el archivo como secreto: contiene tus datos de aprendizaje.
 - **Exportar/restaurar un perfil desde la app (JSON).** Sirve para mover un perfil entre instalaciones distintas, pero según `docs/authentic_performance_v1.md` **al restaurar en otra instalación se pierde la verificación local**: el restaurar borra los casos prácticos y sus rúbricas privadas; la evidencia de un caso que no existe en esa instalación se conserva pero un acierto deja de contar como independiente (`case_unverified`), y las atestaciones de mentor firmadas con el secreto de la instalación anterior ya no se verifican. No se inventa evidencia al restaurar. Los ajustes de recordatorios no viajan en este JSON.
 
