@@ -493,5 +493,71 @@ const answer = 'Creo que la causa es el espesor excesivo porque retrasa el curad
     freshServer();
   }
 
+  // ======================= Revisión del supervisor =======================
+  // Atestación: ni eterna ni sin verificar contada como verificada.
+  {
+    const h = attach(goal(null, {}));
+    p.mentorAdd(h, { ...att(), attestation_mac: 'a'.repeat(64) });
+    assert.equal(h.events.at(-1).attestation_mac, 'a'.repeat(64), 'el MAC del servidor se conserva para que el almacén lo verifique');
+    const ok = attach(goal(null, {})); p.mentorAdd(ok, att({ at: NOW + 10 * DAY, date: '2026-11-16' }));
+    assert.equal(p.mentorNodeState(ok, 'a').state, 'expired', 'un registro fechado en el futuro nunca es eterno');
+    const lateDate = attach(goal(null, {})); p.mentorAdd(lateDate, att({ at: NOW - DAY, date: '2026-12-30' }));
+    assert.equal(p.mentorNodeState(lateDate, 'a', NOW + 365 * DAY).state, 'expired');
+    assert.equal(p.mentorNodeState(lateDate, 'a').state, 'expired', 'fecha declarada posterior al registro: no creíble');
+    // sin verificar en esta instalación
+    const u = attach(goal(null, {}));
+    u.events.push({ ...att({ attestation_id: 'att-u' }), code_verified: false });
+    const st = p.mentorNodeState(u, 'a');
+    assert.equal(st.state, 'unverified');
+    assert.equal(st.label, 'Declarado, sin verificar en esta instalación');
+    assert.ok(st.line.startsWith('Declarado por ti, sin verificar en esta instalación'));
+    assert.ok(!st.line.startsWith('Validado'));
+    roots.app.children = []; p.expertView();
+    const full = e => String(e.textContent || '') + (e.children || []).map(full).join('');
+    assert.ok(findAll(e => e.type === 'p').map(full).join('\n').includes('Desempeño auténtico (ejercer): Declarado, sin verificar en esta instalación'));
+    assert.deepEqual(JSON.stringify(p.expertLayers(u, 'a').layers), JSON.stringify(p.expertLayers(goal(null, {}), 'a').layers), 'no alimenta ninguna de las 7 capas');
+    // una validación verificada vigente gana a una sin verificar
+    u.events.push({ ...att({ attestation_id: 'att-v', date: '2026-11-12' }) });
+    assert.equal(p.mentorNodeState(u, 'a').state, 'declared');
+  }
+
+  // Evidencia de caso: la colisión de intento no se traga y la reconciliación cubre todos los casos
+  {
+    const h = attach(goal([], {}));
+    const stage = (i, id, node = 'a') => ({ index: i, kind: KINDS[i], prompt: stagePrompt(i), answer, help_used: 0, dont_know: false, attempt_id: id, evidence_eligible: true, observable_dimension: p.CASE_KIND_DIMENSION[KINDS[i]], node_results: [{ node_id: node, status: 'CORRECT' }], feedback: 'f', judge_model: 'm', criteria: [] });
+    p.caseStageEvidence(h, 'case-A', stage(1, 'dup'));
+    assert.throws(() => p.caseStageEvidence(h, 'case-B', { ...stage(1, 'dup'), prompt: 'otro' }), e => e.code === 'ATTEMPT_COLLISION', 'otro intento con la misma identidad no se traga');
+    assert.equal(p.caseStageEvidence(h, 'case-A', stage(1, 'dup')).length, 0, 'el duplicado exacto sí se ignora');
+  }
+  {
+    const h = attach(goal());
+    const view = (id, status, stages) => ({ ...serverView(), case_id: id, status, stage_count: 4, stages_done: stages, current_stage: null, model_viewed: false });
+    const done = (i, attempt) => ({ index: i, kind: KINDS[i], prompt: stagePrompt(i), answer, help_used: 0, dont_know: false, attempt_id: attempt, criteria: [], feedback: 'f', node_results: [{ node_id: 'b', status: 'CORRECT' }], observable_dimension: p.CASE_KIND_DIMENSION[KINDS[i]], evidence_eligible: true, evaluator_version: 'case-judge-v1', judge_model: 'm', graded_at: 1 });
+    const views = { 'case-new': view('case-new', 'ACTIVE', [done(0, 'n0')]), 'case-old': view('case-old', 'FINISHED', [done(1, 'o1'), done(2, 'o2')]) };
+    views['case-new'].current_stage = { index: 1, kind: 'measure', prompt: stagePrompt(1) };
+    const realFetch = global.fetch; const asked = [];
+    global.fetch = async (route, options) => {
+      const body = options && options.body ? JSON.parse(options.body) : {};
+      if (route === '/api/case/state') { asked.push(body.case_id || null); const v = views[body.case_id || 'case-new']; return { ok: true, json: async () => ({ case: v, history: [{ case_id: 'case-new', title: 'Nuevo', status: 'ACTIVE', node_ids: TOPICS }, { case_id: 'case-old', title: 'Viejo', status: 'FINISHED', node_ids: TOPICS }] }) }; }
+      return realFetch(route, options);
+    };
+    h.cases = [{ case_id: 'case-restaurado', title: 'Ya no existe', status: 'FINISHED', node_ids: ['a'], stage_count: 4, created_at: 1 }];
+    p.caseReset(h); await p.caseRefresh(h);
+    assert.deepEqual(asked.sort(), ['case-old', null].sort(), 'se consulta también el caso anterior');
+    assert.ok(caseEvents(h).some(e => e.case_id === 'case-old'), 'lo no registrado de un caso anterior se concilia');
+    assert.ok(caseEvents(h).some(e => e.case_id === 'case-new'));
+    assert.deepEqual(h.cases.map(c => c.case_id).sort(), ['case-new', 'case-old'], 'el índice sigue al servidor: el caso inexistente desaparece');
+    const before = caseEvents(h).length; p.caseReset(h); await p.caseRefresh(h);
+    assert.equal(caseEvents(h).length, before, 'idempotente');
+    // la pantalla del mentor no ofrece casos que el servidor no tiene
+    h.cases.push({ case_id: 'case-fantasma', title: 'Fantasma', status: 'FINISHED', node_ids: ['a'], stage_count: 4, created_at: 1 });
+    p.startMentor(h, null); p.mentorUI.synced = true;
+    roots.app.children = []; p.mentorView();
+    const text = findAll(e => e.type === 'p').map(e => e.textContent).join('\n');
+    assert.ok(text.includes('Caso: Viejo') || text.includes('Caso: '), 'se ofrece el caso que sí existe');
+    assert.ok(!text.includes('Fantasma'), 'el caso inexistente no se ofrece');
+    global.fetch = realFetch;
+  }
+
   console.log('OK authentic_performance (cliente)');
 })().catch(error => { console.error = console.log; console.error(error); process.exit(1); });

@@ -110,6 +110,25 @@ Aplica a los `node_id` de la fuente (todos los temas del caso o el tema del reto
 
 Nunca se borra ni se sobrescribe. Editar o anular agrega eventos `MENTOR_ATTESTATION_REVISION` (`attestation_id`, `action: edit|void`, nuevos valores o motivo, `at`); el estado vigente se deriva aplicando las revisiones en orden y el historial completo queda visible. Una atestación anulada no cuenta como vigente y se muestra «Anulada» con su motivo.
 
+## D. Endurecimiento tras la revisión (misma versión)
+
+**Panel experto y ancla local.** `expertLayers` descarta, en todas las capas que leen evidencia de aprendizaje, los eventos con `evaluator_trust:'model_single'` (y `trust_policy_version`) mientras el tema no tenga ancla local (`trustAnchored`). Dos casos calificados solo por el modelo ya no ponen la capa de independencia en «cumplida». Es un endurecimiento: ningún test previo del panel cambió porque sus fixtures no llevan esos campos.
+
+**Atestación de mentor: no forjable ni eterna.**
+- `canonical_mentor_event` ya no escribe `code_verified:true` a ciegas. Rechaza `at` posterior a ahora + 1 día y `date` posterior a hoy + 1; exige que `goal_id` del evento sea el de la meta; rechaza `revision_id` repetido, ediciones o anulaciones sobre una atestación ya anulada y revisiones con `at` futuro.
+- Decisión 2(c): `/api/mentor/register` devuelve `attestation_mac = HMAC-SHA256(secreto local, atestación canónica: id, meta, fuente, temas, mentor, rol, fecha, niveles, comentario, código, huella, at)`. `validate_store` lo recalcula: si falta, no coincide (campo alterado) o el secreto es otro (respaldo restaurado en otra instalación) guarda `code_verified:false` y conserva el MAC por si vuelve a la instalación original. Esto autentica el REGISTRO hecho en esta instalación, no al mentor; las ediciones posteriores del aprendiz siguen siendo declaradas.
+- Cliente: una atestación con `code_verified:false` se muestra como «Declarado, sin verificar en esta instalación», NO como «Validado por…», y nunca alimenta nada (la capa ya era una línea aparte; lo conservador es que tampoco cuente como validada). Una verificada y vigente gana a una sin verificar.
+- `mentorEffectiveAt`: una fecha declarada posterior al registro + 1 día, o un registro en el futuro, hace la validación «Vencida»; nunca eterna.
+
+**Casos casi repetidos.** `make_case` pasa al prompt los títulos de los casos previos de la meta («debe ser claramente distinto») y el validador rechaza una situación con similitud de Jaccard de tokens (4+ letras, normalizados) >= 0,5 con la de un caso previo, o el mismo título, con un reintento que incluye el motivo.
+
+**Evidencia de caso contrastada con el servidor** (`validate_store`, `_check_case_evidence`). Decisión 4:
+- Caso que existe en esta instalación: la evidencia con `case_id` debe tener fase `CASE`, la misma meta, una etapa calificada, un tema evaluado en esa etapa, `attempt_id == <intento de la etapa>#<tema>`, el mismo veredicto del servidor, y la etapa debe ser elegible (sin ayuda, sin «No sé»). Si algo no coincide se RECHAZA el almacén con un error en español. No se corrige en silencio: un cliente honesto nunca lo produce y corregir ocultaría la manipulación. Nunca queda un CORRECT que el servidor no dio.
+- Caso inexistente aquí (restaurado o importado desde otra instalación; el restore borra los casos): no se puede verificar y no se inventa ni se borra nada. El evento se conserva, un fallo sigue siendo un fallo, pero un acierto deja de ser independiente y se marca `case_unverified:true`. Así no hay dominio nuevo por haber restaurado.
+- `caseRefresh` concilia todos los casos del historial (hasta 10) con etapas sin registrar, no solo el activo, y sincroniza `goal.cases` con el historial del servidor (los casos que ya no existen desaparecen y la pantalla del mentor no los ofrece). Una colisión de `attempt_id` (mismo intento, otro contenido) ya no se traga: se muestra el aviso y no se registra; solo el duplicado exacto se ignora.
+
+**Menores.** Un caso por meta también frente a solicitudes simultáneas (reserva en proceso por perfil y meta antes de gastar cuota; la segunda recibe `CASE_ACTIVE`). El juez recibe la orden de no nombrar datos irrelevantes ni la ambigüedad, y localmente se sustituye por un texto neutro todo comentario o retroalimentación que los contenga. El auditor comprueba que cada criterio ejercita el tema que declara. La cita del juez no puede salir del enunciado de la etapa ni de la situación y el mínimo sube de 6 a 12 caracteres normalizados. El validador compara la situación y los enunciados con las respuestas modelo (normalizado y por similitud). `_mentor_source` rechaza en el servidor un informe de reto `INSUFFICIENT`.
+
 ## C. Límites, compatibilidad y fuera de alcance
 
 - Tamaños: JSON del caso ≤ 24 000 caracteres, respuestas ≤ 1500 por etapa, comentario del mentor ≤ 400, paquete HTML ≤ 120 000 caracteres.

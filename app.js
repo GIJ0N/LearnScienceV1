@@ -777,7 +777,7 @@ const CASE_VERDICT_CLASS=Object.freeze({cumplido:'v-cumplido',parcial:'v-parcial
 const CASE_STATUS_LABEL=Object.freeze({ACTIVE:'En curso',FINISHED:'Terminado',ABANDONED:'Abandonado',CLOSED_MODEL_VIEWED:'Cerrado al ver la respuesta modelo'});
 const CASE_NODE_STATUS=['CORRECT','PARTIAL','MISCONCEPTION','UNKNOWN'];
 const MENTOR_SCALE=Object.freeze([[0,'No lo hace'],[1,'Con ayuda'],[2,'Solo'],[3,'Lo enseña a otros']]);
-const MENTOR_STATE_TEXT=Object.freeze({none:'Sin validar',declared:'Validado por mentor (declarado)',observed:'Revisado por mentor con observaciones (declarado)',expired:'Vencido'});
+const MENTOR_STATE_TEXT=Object.freeze({none:'Sin validar',unverified:'Declarado, sin verificar en esta instalación',declared:'Validado por mentor (declarado)',observed:'Revisado por mentor con observaciones (declarado)',expired:'Vencido'});
 const CASE_FORBIDDEN_KEYS=new Set(['rubric','private','description','typical_errors','irrelevant_labels','ambiguity','criteria_private']);
 // Temas con evidencia propia (la misma regla que el servidor): al menos un EVIDENCE de aprendizaje con resultado distinto de UNKNOWN. Más reciente primero.
 function caseEvidencedNodes(goal){const last=new Map(),ids=new Set((goal.nodes||[]).map(n=>n.id));for(const e of goal.events||[]){if(e&&e.type==='EVIDENCE'&&e.evidence_role==='learning'&&ids.has(e.node_id)&&e.audit_only!==true&&['CORRECT','PARTIAL','MISCONCEPTION'].includes(resultStatus(e.result??e.status)))last.set(e.node_id,Math.max(last.get(e.node_id)||0,expertAt(e)))}return [...last.entries()].sort((a,b)=>b[1]-a[1]).map(x=>x[0])}
@@ -818,17 +818,21 @@ function caseStageEvidence(goal,caseId,res){
    const prepared=prepareRecord(goal,nr.node_id,'CASE',res.answer,{status:nr.status,feedback:res.feedback,error_type:nr.status==='CORRECT'?'none':'application',evaluator_version:CASE_EVALUATOR,judge_model:res.judge_model},0,contract,attemptId);
    prepared.event.case_id=caseId;prepared.event.case_stage=res.index;if(out.length)prepared.event.study_counted=false;
    out.push(goalTransaction(goal,()=>commitRecord(goal,nr.node_id,prepared)))
-  }catch(e){if(e&&(e.code==='DUPLICATE_ATTEMPT'||e.code==='ATTEMPT_COLLISION'))continue;throw e}
+  }catch(e){if(e&&e.code==='DUPLICATE_ATTEMPT')continue;throw e}
  }
  return out
 }
 // Reconciliación idempotente: si el cliente cayó entre «el servidor calificó» y «el cliente registró», lo que falte se registra; lo ya registrado se rechaza como duplicado.
-function caseReconcile(goal,view){let n=0;if(!view)return n;for(const s of view.stages_done)n+=caseStageEvidence(goal,view.case_id,{...s,evidence_eligible:s.evidence_eligible&&s.help_used===0,answer:s.answer}).length;caseSyncIndex(goal,view);return n}
+function caseReconcile(goal,view){let n=0;if(!view)return n;for(const s of view.stages_done){try{n+=caseStageEvidence(goal,view.case_id,{...s,evidence_eligible:s.evidence_eligible&&s.help_used===0,answer:s.answer}).length}catch(e){if(e&&e.code==='ATTEMPT_COLLISION'){caseUI.conflicts=(caseUI.conflicts||0)+1;continue}throw e}}caseSyncIndex(goal,view);return n}
+// El índice local sigue al historial del servidor: tras restaurar en otra instalación, los casos que ya no existen aquí desaparecen y los que sí existen se agregan.
+function caseSyncWithHistory(goal,history){const ids=new Set(history.map(h=>h.case_id)),list=caseList(goal);for(let i=list.length-1;i>=0;i--)if(!ids.has(list[i].case_id))list.splice(i,1);for(const h of history)if(!list.some(c=>c.case_id===h.case_id))list.push({case_id:h.case_id,title:h.title,status:h.status,node_ids:[...h.node_ids],stage_count:0,created_at:0});else{const c=list.find(x=>x.case_id===h.case_id);c.status=h.status;c.title=h.title||c.title}}
 let caseUI={goal_id:null,view:null,history:[],loaded:false,model:null,confirmClose:false};
 function caseReset(goal){caseUI={goal_id:goal?goal.id:null,view:null,history:[],loaded:false,model:null,confirmClose:false}}
 function caseDraft(goal,view){const d=goal.case_draft;return d&&d.case_id===view.case_id&&view.current_stage&&d.stage===view.current_stage.index?d:null}
 function caseSaveDraft(goal,view,text,help){if(!view.current_stage)return;const d=caseDraft(goal,view)||{case_id:view.case_id,stage:view.current_stage.index,attempt_id:newId('attempt')};goal.case_draft={...d,text:String(text||'').slice(0,CASE_MAX_ANSWER),external_help:help===true};save()}
-async function caseRefresh(goal,caseId=''){const res=await api('/api/case/state',{goal_id:goal.id,...(caseId?{case_id:caseId}:{})});caseUI.view=caseClean(res&&res.case,goal);caseUI.history=(Array.isArray(res&&res.history)?res.history:[]).filter(h=>h&&typeof h.case_id==='string'&&CASE_STATUS_LABEL[h.status]).slice(0,50).map(h=>({case_id:h.case_id,title:String(h.title||'').slice(0,100),status:h.status,node_ids:(Array.isArray(h.node_ids)?h.node_ids:[]).map(String)}));caseUI.loaded=true;if(caseUI.view){caseReconcile(goal,caseUI.view);if(caseUI.view.status!=='ACTIVE')goal.case_draft=null;save()}return caseUI.view}
+async function caseRefresh(goal,caseId=''){const res=await api('/api/case/state',{goal_id:goal.id,...(caseId?{case_id:caseId}:{})});caseUI.view=caseClean(res&&res.case,goal);caseUI.history=(Array.isArray(res&&res.history)?res.history:[]).filter(h=>h&&typeof h.case_id==='string'&&CASE_STATUS_LABEL[h.status]).slice(0,50).map(h=>({case_id:h.case_id,title:String(h.title||'').slice(0,100),status:h.status,node_ids:(Array.isArray(h.node_ids)?h.node_ids:[]).map(String)}));caseUI.loaded=true;caseSyncWithHistory(goal,caseUI.history);if(caseUI.view){caseReconcile(goal,caseUI.view);if(caseUI.view.status!=='ACTIVE')goal.case_draft=null}
+ for(const h of caseUI.history.slice(0,10)){if(caseUI.view&&h.case_id===caseUI.view.case_id)continue;try{const other=caseClean((await api('/api/case/state',{goal_id:goal.id,case_id:h.case_id})).case,goal);if(other)caseReconcile(goal,other)}catch(e){/* se reintenta en el siguiente refresco: lo ya registrado no se duplica */}}
+ save();return caseUI.view}
 async function caseStart(goal){const ids=casePick(goal);if(ids.length<CASE_MIN_TOPICS)throw policyError('CASE_UNAVAILABLE','Un caso integra al menos 3 temas con evidencia propia.');if(caseActiveEntry(goal)&&caseUI.view&&caseUI.view.status==='ACTIVE')throw policyError('CASE_ACTIVE','Ya tienes un caso activo.');
  const res=await api('/api/case',{goal_id:goal.id,goal:goal.goal,node_ids:ids}),view=caseClean(res,goal);if(!view||view.status!=='ACTIVE'||!view.current_stage)throw Error('El caso llegó incompleto; no se registró nada.');caseUI.view=view;caseUI.loaded=true;caseUI.model=null;caseUI.confirmClose=false;caseSyncIndex(goal,view);goal.case_draft=null;save();return view}
 async function caseSubmitStage(goal,view,text,help){
@@ -870,7 +874,7 @@ function caseHome(b,goal){
 async function caseViewPage(){
  const goal=g();if(!goal){page='home';render();return}app.replaceChildren();nav();if(caseUI.goal_id!==goal.id)caseReset(goal);const b=block('Caso práctico · '+goal.goal,'activity-panel');
  if(!caseUI.loaded){b.append(E('p','Buscando tu caso…'));await task('Cargando tu caso…',async()=>{await caseRefresh(goal)});if(caseUI.loaded){render();return}b.append(E('p','No pude leer el caso ahora. No se perdió nada.'),B('Reintentar',()=>render()),B('Volver al mapa',()=>{page='dashboard';render()},true));return}
- const view=caseUI.view;
+ const view=caseUI.view;if(caseUI.conflicts)b.append(E('small',`${caseUI.conflicts} etapa(s) tienen un identificador de intento en conflicto y no se registraron como evidencia.`));
  if(view&&caseUI.model){caseModelScreen(b,goal,view);return}
  if(view&&view.status==='ACTIVE'){caseActiveScreen(b,goal,view);b.append(B('Volver al mapa',()=>{page='dashboard';render()},true));return}
  if(view){b.append(X('h3',view.title),E('p','Estado: '+CASE_STATUS_LABEL[view.status]),X('p',view.situation));for(const s of view.stages_done)caseStageBlock(b,s);
@@ -898,7 +902,7 @@ function mentorAdd(goal,attestation){
  if(!MENTOR_CODE_RE.test(String(a.code||'')))throw policyError('INVALID_MENTOR','El código de verificación no es válido.');
  const ids=Array.isArray(a.node_ids)?a.node_ids.map(String):[];if(!ids.length||ids.some(id=>!goal.nodes.some(n=>n.id===id)))throw policyError('INVALID_MENTOR','La validación apunta a temas que no están en esta meta.');
  goal.events=Array.isArray(goal.events)?goal.events:[];if(mentorEvents(goal).some(e=>e.type==='MENTOR_ATTESTATION'&&e.attestation_id===a.attestation_id))return false;
- const values=mentorValues(a),event={type:'MENTOR_ATTESTATION',attestation_id:a.attestation_id.slice(0,120),source:{kind:a.source&&a.source.kind==='challenge'?'challenge':'case',id:String(a.source&&a.source.id||'').slice(0,120),...(a.source&&a.source.attempt_id?{attempt_id:String(a.source.attempt_id).slice(0,120)}:{})},node_ids:ids,...values,code:a.code,content_digest:String(a.content_digest||''),declared_by:'learner',code_verified:true,goal_id:goal.id,at:Number.isFinite(a.at)?a.at:now(),policy_version:MENTOR_VERSION};
+ const values=mentorValues(a),event={type:'MENTOR_ATTESTATION',attestation_id:a.attestation_id.slice(0,120),source:{kind:a.source&&a.source.kind==='challenge'?'challenge':'case',id:String(a.source&&a.source.id||'').slice(0,120),...(a.source&&a.source.attempt_id?{attempt_id:String(a.source.attempt_id).slice(0,120)}:{})},node_ids:ids,...values,code:a.code,content_digest:String(a.content_digest||''),declared_by:'learner',code_verified:true,...(typeof a.attestation_mac==='string'&&/^[0-9a-f]{64}$/.test(a.attestation_mac)?{attestation_mac:a.attestation_mac}:{}),goal_id:goal.id,at:Number.isFinite(a.at)?a.at:now(),policy_version:MENTOR_VERSION};
  goal.events.push(event);save();return true
 }
 // Edición/anulación: nunca se borra ni se sobrescribe; se agrega una revisión y el estado vigente se deriva del ledger.
@@ -913,7 +917,7 @@ function mentorRevise(goal,attestationId,action,input={}){
 function mentorAttestations(goal){
  const map=new Map(),order=[];
  for(const e of mentorEvents(goal)){
-  if(e.type==='MENTOR_ATTESTATION'){if(map.has(e.attestation_id))continue;map.set(e.attestation_id,{id:e.attestation_id,source:e.source||{},node_ids:Array.isArray(e.node_ids)?[...e.node_ids]:[],mentor_name:e.mentor_name,mentor_role:e.mentor_role,date:e.date,levels:{...(e.levels||{})},comment:e.comment||'',code:e.code,registered_at:Number(e.at)||0,voided:false,void_reason:'',history:[]});order.push(e.attestation_id);continue}
+  if(e.type==='MENTOR_ATTESTATION'){if(map.has(e.attestation_id))continue;map.set(e.attestation_id,{id:e.attestation_id,source:e.source||{},node_ids:Array.isArray(e.node_ids)?[...e.node_ids]:[],mentor_name:e.mentor_name,mentor_role:e.mentor_role,date:e.date,levels:{...(e.levels||{})},comment:e.comment||'',code:e.code,registered_at:Number(e.at)||0,verified:e.code_verified===true,voided:false,void_reason:'',history:[]});order.push(e.attestation_id);continue}
   const a=map.get(e.attestation_id);if(!a||a.voided)continue;
   if(e.action==='void'){a.history.push({action:'void',at:e.at,reason:e.reason||''});a.voided=true;a.void_reason=e.reason||''}
   else if(e.action==='edit'){a.history.push({action:'edit',at:e.at,reason:e.reason||'',before:{mentor_name:a.mentor_name,mentor_role:a.mentor_role,date:a.date,levels:{...a.levels},comment:a.comment}});Object.assign(a,{mentor_name:e.mentor_name,mentor_role:e.mentor_role,date:e.date,levels:{...(e.levels||{})},comment:e.comment||''})}
@@ -921,12 +925,13 @@ function mentorAttestations(goal){
  return order.map(id=>map.get(id))
 }
 // La vigencia cuenta desde la fecha más antigua entre la declarada y la del registro: una fecha inventada hacia delante no la alarga.
-function mentorEffectiveAt(a){const declared=Date.parse(String(a.date)+'T12:00:00Z'),reg=Number(a.registered_at);return Math.min(Number.isFinite(declared)?declared:Infinity,Number.isFinite(reg)&&reg>0?reg:Infinity)}
-function mentorLine(a){return `Validado por ${a.mentor_name}, ${a.mentor_role}, ${a.date} (declarado por ti)`}
-function mentorStateOf(a,at=now()){if(a.voided)return 'voided';const eff=mentorEffectiveAt(a);if(!Number.isFinite(eff)||at-eff>EXPERT_STALE_DAYS*DAY)return 'expired';const levels=Object.values(a.levels);return levels.length>0&&levels.every(v=>v>=2)?'declared':'observed'}
+// Una fecha declarada posterior al registro (+1 día) o un registro en el futuro no son creíbles: la validación se trata como vencida, nunca como eterna.
+function mentorEffectiveAt(a){const declared=Date.parse(String(a.date)+'T12:00:00Z'),reg=Number(a.registered_at);if(!Number.isFinite(declared)||!Number.isFinite(reg)||reg<=0||declared>reg+DAY)return NaN;return Math.min(declared,reg)}
+function mentorLine(a){if(a.verified===false)return `Declarado por ti, sin verificar en esta instalación: ${a.mentor_name}, ${a.mentor_role}, ${a.date}`;return `Validado por ${a.mentor_name}, ${a.mentor_role}, ${a.date} (declarado por ti)`}
+function mentorStateOf(a,at=now()){if(a.voided)return 'voided';const eff=mentorEffectiveAt(a);if(!Number.isFinite(eff)||Number(a.registered_at)>at+DAY||at-eff>EXPERT_STALE_DAYS*DAY)return 'expired';if(a.verified===false)return 'unverified';const levels=Object.values(a.levels);return levels.length>0&&levels.every(v=>v>=2)?'declared':'observed'}
 function mentorNodeState(goal,nodeId,at=now()){
  const items=mentorAttestations(goal).filter(a=>!a.voided&&a.node_ids.includes(nodeId));if(!items.length)return {state:'none',label:MENTOR_STATE_TEXT.none,attestation:null,line:''};
- const best=[...items].sort((x,y)=>mentorEffectiveAt(y)-mentorEffectiveAt(x))[0],state=mentorStateOf(best,at);
+ const rank=x=>(x.verified!==false?1e15:0)+(Number.isFinite(mentorEffectiveAt(x))?mentorEffectiveAt(x):-1e14),best=[...items].sort((x,y)=>rank(y)-rank(x))[0],state=mentorStateOf(best,at);
  return {state,label:MENTOR_STATE_TEXT[state],attestation:best,line:mentorLine(best)}
 }
 function rememberChallengeReport(goal,c,attemptId,evidence,reflection,res){
@@ -967,12 +972,12 @@ function mentorView(){
  b.append(E('p','Un mentor es una persona real que ve lo que hiciste y dictamina lo que observa. Generas un paquete para compartir (archivo o texto), el mentor llena su hoja y te devuelve un código; tú registras lo que dictaminó.'),E('small','Importante: esto es una atestación declarada por ti, no una certificación. La app no verifica quién es el mentor y no impide validarte a ti mismo. El paquete no incluye la rúbrica ni la respuesta modelo.'));
  if(mentorUI.notice)b.append(E('p',mentorUI.notice));
  if(mentorUI.pack){const pack=mentorUI.pack;b.append(E('h3','Paquete: '+pack.title),E('p','Código de verificación:'));const code=E('p',pack.code);code.className='mentor-code';b.append(code,B('Descargar paquete (HTML)',()=>mentorDownload(pack)),B('Copiar como texto',()=>task('Copiando…',async()=>{note(await mentorCopy(pack)?'Texto copiado.':'Tu navegador no permitió copiar; descarga el archivo.')}),true),B('Descartar este paquete',()=>{mentorUI.pack=null;render()},true));mentorForm(b,goal,pack)}
- else{const finished=caseList(goal).filter(c=>c&&c.status==='FINISHED'),reports=(goal.challenge_reports||[]).filter(r=>r&&r.attempt_id);b.append(E('h3','¿Qué quieres que valide?'));if(!finished.length&&!reports.length)b.append(E('p','Aún no tienes un caso terminado ni un reto del mundo real con informe.'));
+ else{if(!mentorUI.synced){mentorUI.synced=true;caseRefresh(goal).then(()=>{if(page==='mentor')render()}).catch(()=>{})}const finished=caseList(goal).filter(c=>c&&c.status==='FINISHED'&&(!caseUI.loaded||caseUI.history.some(h=>h.case_id===c.case_id))),reports=(goal.challenge_reports||[]).filter(r=>r&&r.attempt_id);b.append(E('h3','¿Qué quieres que valide?'));if(!finished.length&&!reports.length)b.append(E('p','Aún no tienes un caso terminado ni un reto del mundo real con informe.'));
   for(const c of finished)b.append(E('p','Caso: '+c.title),B('Generar paquete de este caso',()=>task('Preparando el paquete…',async()=>{await mentorRequestPackage(goal,{kind:'case',id:c.case_id});render()}),true));
   for(const r of reports)b.append(E('p','Reto: '+(r.title||'sin título')),B('Generar paquete de este reto',()=>task('Preparando el paquete…',async()=>{await mentorRequestPackage(goal,{kind:'challenge',attempt_id:r.attempt_id});render()}),true))}
  b.append(B('Volver al caso práctico',()=>{page='case';render()},true),B('Volver al mapa',()=>{page='dashboard';render()},true));mentorListBlock(goal)
 }
-function authenticLine(box,goal,nodeId){const st=mentorNodeState(goal,nodeId),row=E('p'),chip=E('span',st.label);chip.className='mentor-state '+(st.state==='declared'?'s-declared':st.state==='observed'?'s-observed':st.state==='expired'?'s-expired':'s-none');row.append(E('span','Desempeño auténtico (ejercer): '),chip);box.append(row);if(st.attestation)box.append(E('small',st.line+' · declarada, no verificada; no cuenta en las 7 capas ni concede dominio.'))}
+function authenticLine(box,goal,nodeId){const st=mentorNodeState(goal,nodeId),row=E('p'),chip=E('span',st.label);chip.className='mentor-state '+(st.state==='declared'?'s-declared':st.state==='observed'?'s-observed':st.state==='expired'||st.state==='unverified'?'s-expired':'s-none');row.append(E('span','Desempeño auténtico (ejercer): '),chip);box.append(row);if(st.attestation)box.append(E('small',st.line+' · declarada, no verificada; no cuenta en las 7 capas ni concede dominio.'))}
 function normalizeCaseIndex(list){return (Array.isArray(list)?list:[]).filter(c=>c&&typeof c==='object'&&typeof c.case_id==='string'&&c.case_id).slice(0,50).map(c=>({case_id:c.case_id.slice(0,120),title:String(c.title||'').slice(0,100),status:CASE_STATUS_LABEL[c.status]?c.status:'ACTIVE',node_ids:(Array.isArray(c.node_ids)?c.node_ids:[]).map(String).slice(0,5),stage_count:Number(c.stage_count)||0,created_at:Number(c.created_at)||0}))}
 function normalizeCaseDraft(d){return d&&typeof d==='object'&&typeof d.case_id==='string'&&Number.isInteger(d.stage)?{case_id:d.case_id.slice(0,120),stage:d.stage,attempt_id:typeof d.attempt_id==='string'&&d.attempt_id?d.attempt_id.slice(0,120):newId('attempt'),text:String(d.text||'').slice(0,1500),external_help:d.external_help===true}:null}
 const stepsUnavailable=new Set();
