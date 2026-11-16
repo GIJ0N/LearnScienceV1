@@ -104,6 +104,9 @@ node tests/visual_theme.test.js
 node tests/lesson_ui.test.js
 node tests/path_ui.test.js
 node tests/motivation.test.js
+node tests/nav_menu.test.js
+python tools/ensure_playwright.py
+node tests/browser_smoke.test.js
 node tests/qa_round8.test.js
 ```
 
@@ -370,3 +373,10 @@ La respuesta correcta se descarta si es claramente la opción más larga: al men
 
 `node tests/motivation.test.js` comprueba qué cuenta como respuesta de estudio (aciertos y fallos sí; exposición, «No sé», auditoría, correcciones y eventos de registro no); la racha (3 respuestas por día, un hueco por cada 7 días, dos huecos cercanos la rompen, hoy sin estudiar no rompe, racha rota vuelve a 1, cruce de medianoche con fecha local, varias metas suman); la meta diaria 5/10/20 con valores inválidos rechazados y guardada solo en `store.motivation` sin tocar las metas; la pantalla (racha en la navegación, anillo, selector, hito una vez por día y sin escribir eventos, sin las palabras «dominio», «nivel» ni «experto»); y que plan y cobertura no cambian. No valida la sensación de uso en un teléfono.
 
+## Navegación plegable en móvil (`fix/mobile-nav`)
+
+`node tests/nav_menu.test.js` (DOM simulado) comprueba que todos los botones de navegación de antes (Perfiles, Metas, Aprendizaje, Preferencias, Plan, Ruta y mapa, Nivel experto, Fuentes, Informe, Tema: …) siguen en el árbol con su texto, ahora dentro de `.nav-links`; que existe «Menú» con `aria-expanded='false'` y `aria-controls`; que al pulsarlo pasa a `'true'` y el contenedor gana `is-open`; que cada botón de navegación lleva a su página (`aria-current`) y cierra el menú, incluso el de la página actual; que «Reintentar guardado» es hijo directo de la barra, fuera de `.nav-links`, para que siga visible en móvil; y que alternar el menú no modifica la meta, no añade eventos y no guarda nada.
+
+`node tests/browser_smoke.test.js` arranca `tools/serve_controlled_demo.py` (SQLite en `os.tmpdir()`, puerto libre, proveedor controlado, sin Gemini) y abre el perfil «DEMO VISUAL SINTÉTICA» en Chromium real con Playwright. En 390×844 comprueba: sin errores de página ni de consola, sin desplazamiento horizontal, barra no fija, cerrada en una sola fila (≤ 80 px) y sin cubrir más del 15 % del alto tras `scrollTo(0,1400)` (también con el menú abierto), «Plan» oculto hasta pulsar «Menú» y cerrado de nuevo al navegar, todos los botones de `.nav-links` con el menú abierto de al menos 44 × 44 px, Enter sobre «Menú» que alterna y deja el foco en el botón, el menú que se cierra al navegar desde el contenido («Seguir: …») y exactamente un botón principal visible en el inicio. En 1280×900 comprueba «Plan» visible, «Menú» oculto y barra fija. Mata el servidor al terminar, también si falla. Si Playwright no está disponible, falla con un mensaje claro y no se omite.
+
+`python tools/ensure_playwright.py` prepara la prueba de navegador: con `CI=true` (GitHub Actions) instala Playwright (versión fijada, 1.63.0) y Chromium; en local solo verifica que Playwright se resuelva. Así `run_ci.py` ejecuta localmente cada línea `run:` sin instalar nada. No validan iPhone/Safari real ni un teléfono físico.

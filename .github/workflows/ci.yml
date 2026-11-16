@@ -86,6 +86,7 @@ jobs:
           node tests/lesson_ui.test.js
           node tests/path_ui.test.js
           node tests/motivation.test.js
+          node tests/nav_menu.test.js
           node tests/qa_round8.test.js
       - name: Run step lesson tests
         run: |
@@ -186,6 +187,12 @@ jobs:
         run: |
           node tests/graded_hints.test.js
           python tests/graded_hints_backend.test.py
+
+      - name: Prepare Playwright and Chromium
+        run: python tools/ensure_playwright.py
+
+      - name: Test mobile navigation in a real browser
+        run: node tests/browser_smoke.test.js
 
       - name: Check app.js syntax
         run: node --check app.js
