@@ -26,7 +26,7 @@ function goalFor(text, sufficient) {
     const status = code === 'F' ? 'MISCONCEPTION' : code === 'U' ? 'UNKNOWN' : 'CORRECT';
     // D repite el attempt_id del evento anterior (duplicado).
     const attempt = code === 'D' && seen.length ? seen[seen.length - 1] : 'att-' + seq;
-    const event = p.activityEvidence(activity, { status, evaluator_version: 'local-fixture' }, 0, { attempt_id: attempt, timestamp: T0 + seq * 1000, hint_level_max: code === 'H' ? 1 : undefined });
+    const event = p.activityEvidence(activity, { status, evaluator_version: 'local-fixture' }, 0, { attempt_id: attempt, timestamp: T0 + seq * 1000, hint_level_max: code === 'H' ? 1 : undefined, sufficient_before: band === 'challenge' });
     seen.push(attempt);
     goal.events.push({ type: 'EVIDENCE', ...event });
     direct.evidence.push(event);

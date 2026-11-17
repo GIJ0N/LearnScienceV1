@@ -144,7 +144,7 @@ ayuda (`help_used>=1`, no independiente). Ver `docs/direct_teaching_v1.md`.
 
 ## Práctica con dificultad adaptativa
 Desde `practice_difficulty_v1`, la banda de una práctica (`base`/`standard`/`challenge`) es dato de selección, nunca crédito. La política de suficiencia no cambia, con dos notas de versión:
-una práctica `base` no suma como acierto independiente para `sufficient()`, y un **fallo en `challenge`** (solo posible con suficiencia previa; si no la había, se registra como `standard`) **no cuenta como contradicción ni como fallo de aprendizaje**: no reinicia `lastFailure` ni quita aciertos previos. Es una excepción acotada a «Fuera del diagnóstico, únicamente `PARTIAL` y `MISCONCEPTION` cuentan como fallos de aprendizaje». Los eventos sin banda se tratan como `standard`. Ver `docs/practice_difficulty_v1.md`.
+una práctica `base` no suma como acierto independiente para `sufficient()`, y un **fallo en `challenge`** (solo con suficiencia previa comprobada al registrar; si no la había, se registra como `standard`) **no cuenta como contradicción ni como fallo de aprendizaje**: no reinicia `lastFailure` ni quita aciertos previos. Es una excepción acotada a «Fuera del diagnóstico, únicamente `PARTIAL` y `MISCONCEPTION` cuentan como fallos de aprendizaje». Los eventos sin banda se tratan como `standard`. Ver `docs/practice_difficulty_v1.md`.
 
 ## Alcance pendiente
 

@@ -216,8 +216,8 @@ class ClientRules(Base):
         names = {
             'empty': ('', False), 'base_only': ('bSbS', True), 'base_hits_ramp': ('bSbSbS', False), 'standard_pair': ('SS', False),
             'help_only': ('SSH', False), 'unknown': ('SSUUUUUU', False), 'unknown_fails': ('FFUUUUUU', False),
-            'duplicate': ('SSD', False), 'legacy': ('lSlSlS', False), 'hysteresis_8': ('FFFSSSSS', False), 'hysteresis_9': ('FFFSSSSSS', False),
-            'hysteresis_10': ('FFFSSSSSSS', False), 'sufficient': ('SS', True), 'challenge_fail': ('SS cF', True), 'standard_fail': ('SS F', True),
+            'duplicate': ('SSD', False), 'legacy': ('lSlSlS', False), 'hysteresis_8': ('FFFSSSS', False), 'hysteresis_9': ('FFFSSSSS', False),
+            'hysteresis_10': ('FFFSSSSSS', False), 'base_fail': ('SS bF', True), 'stuck_4_of_5': ('FFSSSFSSS', False), 'sufficient': ('SS', True), 'challenge_fail': ('SS cF', True), 'standard_fail': ('SS F', True),
             'challenge_low': ('SS cF cF cF', True), 'standard_fails_down': ('FFF', False),
         }
         out = self.run_node([{'name': n, 'history': h, 'sufficient': s} for n, (h, s) in names.items()])
@@ -236,6 +236,9 @@ class ClientRules(Base):
         self.assertEqual(out['hysteresis_8']['replayed'], 'standard')
         self.assertEqual(out['hysteresis_9']['replayed'], 'standard', 'la histéresis impide dos cambios seguidos')
         self.assertEqual(out['hysteresis_10']['replayed'], 'challenge')
+        self.assertEqual(out['hysteresis_8']['replayed'], 'standard', 'salir de base con 4 de 5')
+        self.assertEqual(out['stuck_4_of_5']['replayed'], 'standard', 'la secuencia FFSSSFSSS ya no se queda en base')
+        self.assertFalse(out['base_fail']['mastered'], 'un fallo en base contradice y quita la suficiencia')
         self.assertTrue(out['challenge_fail']['mastered'], 'un fallo en desafío no cambia sufficient()')
         self.assertEqual(out['challenge_fail']['independent'], out['sufficient']['independent'], 'no borra aciertos previos')
         self.assertFalse(out['standard_fail']['mastered'], 'el mismo fallo en estándar sí')
@@ -274,6 +277,19 @@ class StoreCompatibility(Base):
         evidence = goal['coverage'][0]['dimensions'][0]['evidence']
         self.assertEqual(evidence[0]['difficulty_band'], 'base')
         self.assertNotIn('difficulty_band', evidence[1], 'un desafío sin versión no puede eximir fallos')
+
+    def test_discarded_band_does_not_keep_the_challenge_exemption(self):
+        exempt = {'result': 'MISCONCEPTION', 'evidence_role': 'learning', 'contradicts_sufficiency': False, 'counts_as_learning_failure': False}
+        raw = self.store([self.event(1, **exempt, difficulty_band='challenge'),  # sin versión: la banda se descarta
+                          self.event(2, **exempt, difficulty_band='challenge', difficulty_policy_version='practice_difficulty_v1'),  # banda verificable: se conserva
+                          self.event(3, **{**exempt, 'evidence_role': 'evaluation_audit'}, difficulty_band='raro')])
+        events = validate_store(copy.deepcopy(raw), self.pid)[0]['goals'][0]['events']
+        self.assertNotIn('difficulty_band', events[0])
+        self.assertIs(events[0]['contradicts_sufficiency'], True, 'sin banda verificable el fallo contradice')
+        self.assertIs(events[0]['counts_as_learning_failure'], True)
+        self.assertEqual(events[1]['difficulty_band'], 'challenge')
+        self.assertIs(events[1]['contradicts_sufficiency'], False)
+        self.assertIs(events[2]['contradicts_sufficiency'], False, 'una auditoría no se convierte en fallo')
 
     def test_restore_backup_round_trips_and_profiles_stay_isolated(self):
         good = {'difficulty_band': 'challenge', 'difficulty_policy_version': 'practice_difficulty_v1'}
