@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -33,6 +34,9 @@ class Provider:
         self.calls = []
         self.judge = judge or {'status': 'CORRECT', 'feedback': 'Bien explicado.'}
         self.items = items
+        self.audit = {'issues': []}
+        self.gate = None
+        self.entered = threading.Event()
 
     def __call__(self, prompt, schema, max_tokens=0, *a, **k):
         if schema is app.PRODUCTION_ITEM_SCHEMA:
@@ -40,10 +44,15 @@ class Provider:
             return {'items': self.items if self.items is not None else [raw_item(n) for n in ('n1', 'n2', 'n3')]}
         if schema is app.AUDIT_SCHEMA:
             self.calls.append('audit')
-            return {'issues': []}
+            if isinstance(self.audit, Exception):
+                raise self.audit
+            return self.audit
         if schema is app.PRODUCTION_JUDGE_SCHEMA:
             self.calls.append('judge')
             self.last_judge_prompt = prompt
+            if self.gate is not None:
+                self.entered.set()
+                self.gate.wait(5)
             if isinstance(self.judge, Exception):
                 raise self.judge
             return self.judge
@@ -61,9 +70,9 @@ class Base(unittest.TestCase):
         self.addCleanup(patch.stopall)
         self.addCleanup(self.tmp.cleanup)
 
-    def generate(self, provider, node_ids=('n1', 'n2', 'n3')):
+    def generate(self, provider, node_ids=('n1', 'n2', 'n3'), diagnostic='1001'):
         with patch.object(app, 'gemini', side_effect=provider):
-            return app.make_placement_production_items({'profile_id': self.profile, 'goal_id': 'g1', 'goal': 'Fluidos', 'nodes': NODES, 'node_ids': list(node_ids)})
+            return app.make_placement_production_items({'profile_id': self.profile, 'goal_id': 'g1', 'goal': 'Fluidos', 'nodes': NODES, 'node_ids': list(node_ids), 'diagnostic': diagnostic})
 
     def answer(self, provider, item, text, attempt='t1', profile=None, goal='g1'):
         with patch.object(app, 'gemini', side_effect=provider):
@@ -98,13 +107,13 @@ class Generation(Base):
         bad = [{**raw_item('zzz')}, {**raw_item('n1'), 'key_points': ['solo uno largo']}, {**raw_item('n2'), 'prompt': 'corto'}]
         with self.assertRaises(ValueError):
             self.generate(Provider(items=bad))
-        out = self.generate(Provider(items=bad + [raw_item('n3')]))
+        out = self.generate(Provider(items=bad + [raw_item('n3')]), diagnostic='1002')
         self.assertEqual([x['node_id'] for x in out['items']], ['n3'])
 
     def test_quota_exhausted_at_generation_raises_without_saving(self):
         with patch.dict(os.environ, {'GEMINI_API_KEY': 'clave-de-prueba'}), patch.object(app, 'LIMIT', 0):
             with self.assertRaises(ValueError) as ctx:
-                app.make_placement_production_items({'profile_id': self.profile, 'goal_id': 'g1', 'goal': 'Fluidos', 'nodes': NODES, 'node_ids': ['n1']})
+                app.make_placement_production_items({'profile_id': self.profile, 'goal_id': 'g1', 'goal': 'Fluidos', 'nodes': NODES, 'node_ids': ['n1'], 'diagnostic': '1001'})
         self.assertTrue(str(ctx.exception).startswith('Límite local'))
         self.assertEqual(self.memory.placement_prompts(self.profile), [])
 
@@ -225,6 +234,170 @@ class Grading(Base):
         item, _ = self.one_item()
         with self.assertRaises(ValueError):
             app.answer_placement_item({'profile_id': self.profile, 'goal_id': 'g1', 'item_id': item['item_id'], 'attempt_id': 'x', 'selected_option_id': 'a'})
+
+
+class ServerCaps(Base):
+    """Cuota y calificación única en el servidor, no solo en el cliente."""
+
+    def test_repeated_batch_request_returns_the_existing_batch_without_calls(self):
+        provider = Provider()
+        first = self.generate(provider)
+        calls = list(provider.calls)
+        again = self.generate(provider, node_ids=('n1', 'n2', 'n3', 'n4'))
+        self.assertEqual(provider.calls, calls, 'la petición repetida no llama al modelo')
+        self.assertEqual([x['item_id'] for x in again['items']], [x['item_id'] for x in first['items']])
+        self.assertTrue(again.get('existing'))
+        nodes = [x['node_id'] for x in again['items']]
+        self.assertEqual(len(nodes), len(set(nodes)), 'un tema no recibe un segundo item_id')
+        for item in again['items']:
+            self.assertEqual(set(item), {'schema_version', 'item_id', 'node_id', 'prompt'})
+
+    def test_failed_generation_is_not_retried_for_the_same_diagnostic_but_a_new_one_can(self):
+        provider = Provider(items=[])
+        with self.assertRaises(ValueError):
+            self.generate(provider)
+        with self.assertRaises(ValueError) as ctx:
+            self.generate(provider)
+        self.assertIn('PLACEMENT_PRODUCTION_BATCH_USED', str(ctx.exception))
+        self.assertEqual(provider.calls.count('generate'), 1, 'repetir la petición no gasta otra generación')
+        ok = Provider()
+        self.assertTrue(self.generate(ok, diagnostic='2002')['items'])
+
+    def test_other_goal_or_profile_has_its_own_cap_and_diagnostic_is_required(self):
+        self.generate(Provider())
+        with patch.object(app, 'gemini', side_effect=Provider()):
+            out = app.make_placement_production_items({'profile_id': self.profile, 'goal_id': 'g2', 'goal': 'Otra', 'nodes': NODES, 'node_ids': ['n1'], 'diagnostic': '1001'})
+            self.assertEqual(len(out['items']), 1)
+            with self.assertRaises(ValueError):
+                app.make_placement_production_items({'profile_id': self.profile, 'goal_id': 'g3', 'goal': 'Otra', 'nodes': NODES, 'node_ids': ['n1']})
+
+    def test_two_threads_with_different_attempt_ids_grade_the_question_once(self):
+        item, provider = self.one_item()
+        provider.gate = threading.Event()
+        outcomes = []
+
+        def run(attempt):
+            try:
+                outcomes.append(('ok', app.answer_placement_production({'profile_id': self.profile, 'goal_id': 'g1', 'item_id': item['item_id'], 'attempt_id': attempt, 'answer': GOOD})))
+            except ValueError as exc:
+                outcomes.append(('error', str(exc)))
+        with patch.object(app, 'gemini', side_effect=provider):
+            first = threading.Thread(target=run, args=('a1',))
+            first.start()
+            self.assertTrue(provider.entered.wait(5), 'la primera ya está en el juez')
+            second = threading.Thread(target=run, args=('a2',))
+            second.start()
+            second.join(5)                       # la segunda no espera al juez: se rechaza al instante
+            self.assertFalse(second.is_alive())
+            provider.gate.set()
+            first.join(5)
+        self.assertEqual(provider.calls.count('judge'), 1, 'una pregunta solo se califica una vez')
+        kinds = sorted(kind for kind, _ in outcomes)
+        self.assertEqual(kinds, ['error', 'ok'])
+        self.assertIn('PLACEMENT_PRODUCTION_BUSY', next(text for kind, text in outcomes if kind == 'error'))
+        with self.assertRaises(ValueError) as ctx:       # y después ya está calificada
+            self.answer(provider, item, GOOD, attempt='a3')
+        self.assertIn('PLACEMENT_PRODUCTION_ANSWERED', str(ctx.exception))
+
+    def test_simultaneous_start_still_one_judge_call(self):
+        item, provider = self.one_item()
+        provider.gate = threading.Event()
+        barrier = threading.Barrier(4)
+        results = []
+
+        def run(n):
+            barrier.wait()
+            try:
+                results.append(app.answer_placement_production({'profile_id': self.profile, 'goal_id': 'g1', 'item_id': item['item_id'], 'attempt_id': f'r{n}', 'answer': GOOD}))
+            except ValueError:
+                pass
+        with patch.object(app, 'gemini', side_effect=provider):
+            threads = [threading.Thread(target=run, args=(n,)) for n in range(4)]
+            for t in threads:
+                t.start()
+            provider.entered.wait(5)
+            provider.gate.set()
+            for t in threads:
+                t.join(5)
+        self.assertEqual(provider.calls.count('judge'), 1)
+        self.assertEqual(len(results), 1)
+
+    def test_judge_failure_releases_the_reservation_so_a_retry_can_grade(self):
+        item, provider = self.one_item()
+        provider.judge = app.JudgeUnavailable('El modelo calificador (x) no respondió: 500')
+        with self.assertRaises(ValueError):
+            self.answer(provider, item, GOOD, attempt='f1')
+        provider.judge = {'status': 'CORRECT', 'feedback': 'Bien.'}
+        self.assertEqual(self.answer(provider, item, GOOD, attempt='f2')['status'], 'CORRECT')
+
+    def test_expired_reservation_does_not_lock_the_item_forever(self):
+        item, provider = self.one_item()
+        self.assertEqual(self.memory.reserve_production_answer(self.profile, 'g1', item['item_id'], 'zombi'), 'reserved')
+        self.assertEqual(self.memory.reserve_production_answer(self.profile, 'g1', item['item_id'], 'otro'), 'busy')
+        with patch.object(DurableMemory, 'PRODUCTION_RESERVATION_TTL_NS', 0):
+            self.assertEqual(self.answer(provider, item, GOOD, attempt='b1')['status'], 'CORRECT')
+
+
+class Rubric(Base):
+    def test_paraphrased_feedback_is_replaced(self):
+        item, provider = self.one_item()
+        for n, text in enumerate(('Te falta explicar cómo, al aumentar la diferencia, crece el efecto.',
+                                  'Recuerda que el efecto se amplía al aumentar la diferencia')):
+            fresh = self.generate(Provider(), diagnostic=f'p{n}')['items'][0]
+            provider.judge = {'status': 'PARTIAL', 'feedback': text}
+            res = self.answer(provider, fresh, GOOD, attempt=f'pp{n}')
+            self.assertEqual(res['feedback'], 'Tu respuesta va por buen camino, pero le falta parte de la idea.', text)
+
+    def test_short_key_points_are_checked_and_harmless_feedback_is_kept(self):
+        raw = {**raw_item('n1'), 'key_points': ['Ley de Ohm', 'Corriente alterna constante'], 'reference_answer': 'Se aplica la ley de Ohm al circuito completo.'}
+        item = self.generate(Provider(items=[raw]), diagnostic='s1')['items'][0]
+        provider = Provider(judge={'status': 'PARTIAL', 'feedback': 'Menciona la ley de Ohm para completar tu idea.'})
+        self.assertEqual(self.answer(provider, item, GOOD, attempt='s1')['feedback'], 'Tu respuesta va por buen camino, pero le falta parte de la idea.')
+        item2 = self.generate(Provider(items=[raw]), diagnostic='s2')['items'][0]
+        provider = Provider(judge={'status': 'PARTIAL', 'feedback': 'Buen intento: vuelve a pensar en cómo se conecta con el resto.'})
+        self.assertEqual(self.answer(provider, item2, GOOD, attempt='s2')['feedback'], 'Buen intento: vuelve a pensar en cómo se conecta con el resto.')
+
+
+class AuditPolicy(Base):
+    def test_audit_that_fails_open_discards_the_batch(self):
+        provider = Provider()
+        provider.audit = RuntimeError('auditor caído')
+        with self.assertRaises(ValueError) as ctx:
+            self.generate(provider)
+        self.assertIn('revisión del contenido no respondió', str(ctx.exception))
+        self.assertEqual(self.memory.production_batch_items(self.profile, 'g1', '1001'), [], 'no se guardó nada')
+
+    def test_general_audit_warning_discards_the_batch_and_is_logged(self):
+        provider = Provider()
+        provider.audit = {'issues': [{'item': 0, 'problem': 'Los puntos clave son imprecisos.'}]}
+        with patch('builtins.print') as logged:
+            with self.assertRaises(ValueError):
+                self.generate(provider)
+        self.assertTrue(any('aviso general' in ' '.join(map(str, c.args)) for c in logged.call_args_list))
+        self.assertEqual(self.memory.production_batch_items(self.profile, 'g1', '1001'), [])
+
+    def test_item_warning_drops_only_that_item_and_disabled_verification_is_the_owners_choice(self):
+        provider = Provider()
+        provider.audit = {'issues': [{'item': 1, 'problem': 'Impreciso.'}]}
+        out = self.generate(provider)
+        self.assertEqual(len(out['items']), 2)
+        with patch.object(app, 'CONTENT_VERIFY', False):
+            out = self.generate(Provider(), diagnostic='off')
+        self.assertEqual((len(out['items']), out['content_check']['checked']), (3, False))
+
+
+class ProviderReason(Base):
+    def test_anthropic_judge_failure_is_recognised_as_judge_error(self):
+        item, _ = self.one_item()
+        with patch.object(app, 'PROVIDER', 'anthropic'), patch.object(app, '_anthropic_call', side_effect=ValueError('Anthropic respondió 529')):
+            with self.assertRaises(app.JudgeUnavailable) as ctx:
+                app.answer_placement_production({'profile_id': self.profile, 'goal_id': 'g1', 'item_id': item['item_id'], 'attempt_id': 'an1', 'answer': GOOD})
+        self.assertIn('calificador', str(ctx.exception))
+        self.assertIsNone(self.memory.load_choice_answer(self.profile, 'g1', item['item_id'], 'an1'))
+        with patch.object(app, 'PROVIDER', 'anthropic'), patch.object(app, '_anthropic_call', side_effect=ValueError('Límite local alcanzado; continúa con contenido guardado.')):
+            with self.assertRaises(ValueError) as ctx:
+                app.answer_placement_production({'profile_id': self.profile, 'goal_id': 'g1', 'item_id': item['item_id'], 'attempt_id': 'an2', 'answer': GOOD})
+        self.assertTrue(str(ctx.exception).startswith('Límite local'))
 
 
 if __name__ == '__main__':

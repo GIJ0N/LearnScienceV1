@@ -155,7 +155,7 @@ class Roles(Base):
                 walk(child, name)
         walk(tree, None)
         # Si una función nueva llama al modelo, este test obliga a clasificarla (juez / auditor / generación) y a revisar si califica algo del aprendiz.
-        JUDGE = {'evaluate', 'evaluate_criterion_activity', 'grade_error_fix', 'challenge_report', 'beto_turn', 'grade_case_stage', 'answer_placement_production'}
+        JUDGE = {'evaluate', 'evaluate_criterion_activity', 'grade_error_fix', 'challenge_report', 'beto_turn', 'grade_case_stage', '_grade_placement_production'}
         AUDIT = {'audit_content'}
         WRAPPERS = {'judge_gemini', 'audit_gemini'}
         GENERATE = {'make_criterion_activity', 'make_coverage_map', 'expand_area', 'make_area_map', 'make_lesson', 'make_hint.ask', 'evidence_confirmation', 'review_question',
@@ -168,7 +168,7 @@ class Roles(Base):
 
     def test_every_judge_function_uses_the_judge_role(self):
         import inspect
-        judges = ('evaluate', 'evaluate_criterion_activity', 'grade_error_fix', 'challenge_report', 'beto_turn', 'grade_case_stage', 'answer_placement_production')
+        judges = ('evaluate', 'evaluate_criterion_activity', 'grade_error_fix', 'challenge_report', 'beto_turn', 'grade_case_stage', '_grade_placement_production')
         for name in judges:
             src = inspect.getsource(getattr(app, name))
             self.assertIn('judge_gemini(', src, name)

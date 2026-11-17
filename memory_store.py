@@ -1035,6 +1035,8 @@ class DurableMemory:
         profile_id = _profile_id(profile_id)
         with self._lock, self._connect() as db:
             deleted = db.execute("DELETE FROM profiles WHERE profile_id=?", (profile_id,)).rowcount
+            for prefix in (f"pprod_batch:{profile_id}:", f"pprod_answer:{profile_id}:"):
+                db.execute("DELETE FROM metadata WHERE instr(key, ?)=1", (prefix,))
         if not deleted:
             raise ValueError("El perfil local no existe.")
         return {"deleted": True, "profile_id": profile_id}
@@ -1227,13 +1229,59 @@ class DurableMemory:
                              (profile_id, str(attempt_id or ""), str(goal_id or ""), str(item_id or ""))).fetchone()
         return json.loads(row["result_json"]) if row else None
 
-    def item_first_answer(self, profile_id, goal_id, item_id):
-        """Resultado ya registrado de una pregunta (cualquier attempt_id), o None. Evita calificar dos veces la misma pregunta abierta."""
+    # placement_production_v1: reservas atómicas en `metadata` (clave con el perfil; se borran con el perfil).
+    PRODUCTION_RESERVATION_TTL_NS = 180 * 10**9
+
+    def reserve_production_batch(self, profile_id, goal_id, diagnostic):
+        """Un solo intento de generar el lote de producción por meta y diagnóstico. True si se reserva ahora; False si ya se intentó."""
+        profile_id = _profile_id(profile_id)
+        key = f"pprod_batch:{profile_id}:{goal_id}:{diagnostic}"
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            if db.execute("SELECT 1 FROM metadata WHERE key=?", (key,)).fetchone():
+                return False
+            db.execute("INSERT INTO metadata VALUES(?,?)", (key, str(time.time_ns())))
+            return True
+
+    def production_batch_items(self, profile_id, goal_id, diagnostic):
+        """Preguntas públicas ya generadas para ese diagnóstico (sin rúbrica)."""
         profile_id = _profile_id(profile_id)
         with self._lock, self._connect() as db:
-            row = db.execute("SELECT result_json FROM placement_answers WHERE profile_id=? AND goal_id=? AND item_id=? ORDER BY created_at LIMIT 1",
-                             (profile_id, str(goal_id or ""), str(item_id or ""))).fetchone()
-        return json.loads(row["result_json"]) if row else None
+            rows = db.execute("SELECT public_json, private_json FROM placement_items WHERE profile_id=? AND goal_id=? ORDER BY rowid", (profile_id, str(goal_id or ""))).fetchall()
+        out = []
+        for row in rows:
+            try:
+                public, private = json.loads(row["public_json"]), json.loads(row["private_json"])
+            except ValueError:
+                continue
+            if isinstance(public, dict) and public.get("schema_version") == "placement_production_v1" and private.get("diagnostic") == diagnostic:
+                out.append(public)
+        return out
+
+    def reserve_production_answer(self, profile_id, goal_id, item_id, attempt_id):
+        """Reserva la pregunta antes de llamar al juez. 'reserved' | 'answered' (ya calificada) | 'busy' (otra calificación en curso)."""
+        profile_id = _profile_id(profile_id)
+        key = f"pprod_answer:{profile_id}:{item_id}"
+        now = time.time_ns()
+        with self._lock, self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            if db.execute("SELECT 1 FROM placement_answers WHERE profile_id=? AND goal_id=? AND item_id=?", (profile_id, str(goal_id or ""), str(item_id or ""))).fetchone():
+                return "answered"
+            row = db.execute("SELECT value FROM metadata WHERE key=?", (key,)).fetchone()
+            if row:
+                try:
+                    since = int(json.loads(row["value"]).get("at", 0))
+                except (ValueError, AttributeError, TypeError):
+                    since = 0
+                if now - since < self.PRODUCTION_RESERVATION_TTL_NS:
+                    return "busy"
+            db.execute("INSERT OR REPLACE INTO metadata VALUES(?,?)", (key, _json({"attempt_id": str(attempt_id), "at": now})))
+            return "reserved"
+
+    def release_production_answer(self, profile_id, item_id):
+        profile_id = _profile_id(profile_id)
+        with self._lock, self._connect() as db:
+            db.execute("DELETE FROM metadata WHERE key=?", (f"pprod_answer:{profile_id}:{item_id}",))
 
     def placement_answer_time(self, profile_id, attempt_id):
         profile_id = _profile_id(profile_id)
