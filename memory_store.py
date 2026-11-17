@@ -134,6 +134,34 @@ def _valid_model_name(value):
     return isinstance(value, str) and _MODEL_NAME_RE.fullmatch(value) is not None and ".." not in value
 
 
+def _finite_number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value == value and abs(value) != float("inf")
+
+
+def _sanitize_review_schedule(review):
+    """adaptive_schedule_v1: `deferrals` es una lista de objetos con números finitos y `schedule_note` un objeto; si no, se descartan."""
+    if "deferrals" in review:
+        value = review["deferrals"]
+        clean = []
+        if isinstance(value, list):
+            for item in value[:10]:
+                if isinstance(item, dict) and all(_finite_number(item.get(key)) for key in ("from_due", "to_due", "days", "at")):
+                    entry = dict(item)
+                    reason = entry.get("reason")
+                    entry["reason"] = reason[:200] if isinstance(reason, str) else ""
+                    clean.append(entry)
+        review["deferrals"] = clean
+    if "schedule_note" in review:
+        note = review["schedule_note"]
+        if not isinstance(note, dict):
+            del review["schedule_note"]
+        else:
+            reason = note.get("reason")
+            note["reason"] = reason[:200] if isinstance(reason, str) else ""
+            if "due" in note and not _finite_number(note["due"]):
+                del note["due"]
+
+
 def validate_store(raw, profile_id, allow_profile_rebind=False):
     """Validate relations and add ownership metadata without inventing evidence."""
     profile_id = _profile_id(profile_id)
@@ -180,6 +208,8 @@ def validate_store(raw, profile_id, allow_profile_rebind=False):
         reviews = goal.get("reviews", [])
         if not isinstance(reviews, list) or any(not isinstance(item, dict) or item.get("id") not in allowed_nodes for item in reviews):
             raise ValueError("Los repasos contienen referencias de nodo inválidas.")
+        for review in reviews:
+            _sanitize_review_schedule(review)  # adaptive_schedule_v1: metadatos de calendario; lo malformado se descarta sin rechazar la meta
         session = goal.get("session")
         if not isinstance(session, dict):
             session = {"mode": "DIAGNOSTIC", "node": None, "stack": [], "stage": "teach", "tries": 0}
