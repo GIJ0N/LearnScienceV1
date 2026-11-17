@@ -21,6 +21,10 @@ python app_legacy.py
 
 En PowerShell: `$env:LEARNSCIENCE_JUDGE_MODEL="nombre-del-modelo"`. `set` solo vale para esa ventana de terminal; sin variables todo usa `GEMINI_MODEL`.
 
+## Alojamiento, inicio de sesión y recordatorios
+
+Opcional; el uso con la IP de Tailscale (`LEARNSCIENCE_HOST=100.x.y.z`, sin contraseña) sigue igual. **Cambios respecto a antes:** sin contraseña el servidor ya no arranca en `0.0.0.0`, en una IP pública ni en una red privada que no sea Tailscale (192.168.x, 10.x…) salvo `LEARNSCIENCE_ALLOW_LAN_WITHOUT_AUTH=1`; la cabecera `Host` se valida y se añaden `X-Frame-Options`/`frame-ancestors`. Ver `docs/hosting_v1.md` (dónde correr la app, copias de seguridad) y `docs/hosting_ready_v1.md` (contrato: `LEARNSCIENCE_AUTH`, `python app_legacy.py --set-password`, calendario suscribible).
+
 ## Git
 
 ```powershell

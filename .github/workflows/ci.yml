@@ -202,6 +202,11 @@ jobs:
           node tests/graded_hints.test.js
           python tests/graded_hints_backend.test.py
 
+      - name: Test hosting readiness (optional login, calendar reminders, installable)
+        run: |
+          python tests/hosting_ready.test.py
+          node tests/hosting_ready.test.js
+
       - name: Prepare Playwright and Chromium
         run: python tools/ensure_playwright.py
 

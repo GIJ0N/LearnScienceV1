@@ -103,6 +103,29 @@ async function main() {
       const noOverflow = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth && document.body.scrollWidth <= window.innerWidth);
       assert.ok(noOverflow, 'desplazamiento horizontal en 390 px');
 
+      // hosting_ready_v1: sin configurar nada (auth «off») la app carga igual, es instalable y el panel de recordatorios cabe en 390 px.
+      {
+        const extra = await ctx.newPage();
+        const extraProblems = [];
+        extra.on('pageerror', e => extraProblems.push('pageerror: ' + e.message));
+        await extra.goto(url);
+        const head = await extra.evaluate(() => ({ manifest: !!document.querySelector('link[rel="manifest"]'), touch: !!document.querySelector('link[rel="apple-touch-icon"]'), theme: document.querySelectorAll('meta[name="theme-color"]').length,
+          login: !!document.getElementById('login-form') }));
+        assert.deepEqual(head, { manifest: true, touch: true, theme: 2, login: false }, 'modo off: la app normal, sin pantalla de login');
+        assert.equal((await extra.request.get(url + 'manifest.webmanifest')).status(), 200);
+        assert.deepEqual(await (await extra.request.get(url + 'api/auth/status')).json(), { auth: 'off', logged_in: true });
+        const pick = extra.getByRole('button', { name: PROFILE });
+        if (await pick.count()) await pick.click();   // el perfil puede restaurarse solo desde localStorage
+        await extra.getByRole('button', { name: 'Menú', exact: true }).click();
+        assert.equal(await extra.getByRole('button', { name: 'Cerrar sesión', exact: true }).count(), 0, 'sin auth no hay «Cerrar sesión»');
+        await extra.getByRole('button', { name: 'Preferencias', exact: true }).click();
+        await extra.getByRole('button', { name: 'Activar recordatorios', exact: true }).waitFor({ state: 'visible', timeout: 10000 });
+        const fits = await extra.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+        assert.ok(fits, 'el panel de recordatorios desborda en 390 px');
+        assert.deepEqual(extraProblems, []);
+        await extra.close();
+      }
+
       // Barra: no cubre más del 15 % del alto tras desplazarse.
       await page.evaluate(() => window.scrollTo(0, 1400));
       const cover = await page.evaluate(() => {

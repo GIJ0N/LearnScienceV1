@@ -1,0 +1,10 @@
+.git
+.github
+data
+tests
+tools
+docs
+evals
+__pycache__
+*.sqlite3*
+.env
