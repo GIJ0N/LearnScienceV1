@@ -52,13 +52,17 @@ Estado de cada tema, derivado de las respuestas (nunca guardado como dominio):
 
 `POST /api/placement/answer` → `{profile_id, goal_id, item_id, attempt_id, selected_option_id | null, learner_confidence?, reasoning?}` → `{status: CORRECT | MISCONCEPTION | UNKNOWN, correct_option_id, explanation, selected_misconception, node_id}`. Idempotente por `attempt_id`: repetir la misma respuesta devuelve la misma corrección; el mismo `attempt_id` con otra respuesta se rechaza.
 
+## Producción tras el acierto (`placement_production_v1`)
+
+En los temas clave (hasta 3, planificados al empezar), un acierto de opción múltiple no basta para `held`: se pide una respuesta abierta corta que califica el juez. `held` exige opción múltiple correcta **y** producción correcta; las producciones van a `placement.productions` (no a `answers`), no reinician `lastFailure`, no son independientes y no cuentan como contradicción de suficiencia. Una producción fallida o no disponible deja el tema `fragile`. «Seguir solo con opción múltiple» vuelve a la regla de la tabla anterior para lo no preguntado. Contrato completo: `docs/placement_production_v1.md`.
+
 ## Compatibilidad y rollback
 
 Tablas nuevas `placement_items` y `placement_answers` con `CREATE TABLE IF NOT EXISTS`; nada cambia en las existentes. `goal.placement` es un campo opcional: metas sin él se comportan como antes. Revertir deja eventos `PLACEMENT_SKIP` que la versión anterior ignora (sus temas volverían a la ruta normal) y eventos de diagnóstico que siguen siendo auditables.
 
 ## Fuera de alcance
 
-Preguntas abiertas en el diagnóstico y uso de las relaciones entre metas para deducir.
+Uso de las relaciones entre metas para deducir. (Las preguntas abiertas ya no están fuera de alcance: ver `docs/placement_production_v1.md`.)
 
 El repaso programado de los temas saltados ya existe: ver `docs/placement_skip_review_v1.md`.
 

@@ -49,13 +49,13 @@ assert.equal(policy.probedPlacementStatus([{ status: 'CORRECT', learner_confiden
 
 // First question enters at the most advanced topic.
 {
-  const g = attach(goal()); policy.startPlacement(g);
+  const g = attach(goal()); policy.startPlacement(g); delete g.placement.production; // contrato de solo opción múltiple (diagnóstico anterior a placement_production_v1)
   assert.equal(policy.nextPlacementNode(g), 'd');
 }
 
 // Una sola respuesta correcta no deduce nada; con dos aciertos directos se deducen los prerrequisitos. Saltar no concede dominio.
 {
-  const g = attach(goal()); policy.startPlacement(g);
+  const g = attach(goal()); policy.startPlacement(g); delete g.placement.production; // contrato de solo opción múltiple (diagnóstico anterior a placement_production_v1)
   answer(g, 'd', 'CORRECT', 90);
   let st = policy.placementStatuses(g);
   assert.equal(st.d, 'held');
@@ -80,7 +80,7 @@ assert.equal(policy.probedPlacementStatus([{ status: 'CORRECT', learner_confiden
 
 // A miss at the top walks down by halving; misconception propagates as a gap to dependents.
 {
-  const g = attach(goal()); policy.startPlacement(g);
+  const g = attach(goal()); policy.startPlacement(g); delete g.placement.production; // contrato de solo opción múltiple (diagnóstico anterior a placement_production_v1)
   answer(g, 'd', 'MISCONCEPTION', 90);
   const second = policy.nextPlacementNode(g);
   assert.notEqual(second, 'd');
@@ -99,7 +99,7 @@ assert.equal(policy.probedPlacementStatus([{ status: 'CORRECT', learner_confiden
 
 // Low-confidence success does not propagate and is reconfirmed at the end.
 {
-  const g = attach(goal()); policy.startPlacement(g);
+  const g = attach(goal()); policy.startPlacement(g); delete g.placement.production; // contrato de solo opción múltiple (diagnóstico anterior a placement_production_v1)
   answer(g, 'd', 'CORRECT', 30);
   const st = policy.placementStatuses(g);
   assert.equal(st.d, 'fragile'); assert.equal(st.c, 'unprobed');
@@ -113,7 +113,7 @@ assert.equal(policy.probedPlacementStatus([{ status: 'CORRECT', learner_confiden
 
 // Conflict: a held dependent and a gap below a shared topic force a direct question.
 {
-  const g = attach(goal()); policy.startPlacement(g);
+  const g = attach(goal()); policy.startPlacement(g); delete g.placement.production; // contrato de solo opción múltiple (diagnóstico anterior a placement_production_v1)
   answer(g, 'a', 'UNKNOWN');
   answer(g, 'c', 'CORRECT', 90);
   assert.equal(policy.placementStatuses(g).b, 'inferred_gap', 'Con un solo acierto directo aún no se deduce hacia atrás');
@@ -128,14 +128,14 @@ assert.equal(policy.probedPlacementStatus([{ status: 'CORRECT', learner_confiden
   const g = attach(goal());
   policy.record(g, 'a', 'INDEPENDENT', 'r', { status: 'CORRECT', error_type: 'none', feedback: '', hint: '' }, 0,
     policy.normalizeActivityContract({ activity_id: 'act-a', node_id: 'a', stage: 'INDEPENDENT', kind: 'application', observable_dimensions: ['conceptual'], supports_independence: true, role: 'independent_practice' }), 'prior-a');
-  policy.startPlacement(g);
+  policy.startPlacement(g); delete g.placement.production; // contrato de solo opción múltiple (diagnóstico anterior a placement_production_v1)
   assert.deepEqual(g.placement.evidenced_nodes, ['a']);
   assert.equal(policy.placementStatuses(g).a, 'evidenced');
 }
 
 // Skips are revoked by later learning failures on the topic or prerequisite errors above it.
 {
-  const g = attach(goal()); policy.startPlacement(g);
+  const g = attach(goal()); policy.startPlacement(g); delete g.placement.production; // contrato de solo opción múltiple (diagnóstico anterior a placement_production_v1)
   answer(g, 'd', 'CORRECT', 95); answer(g, 'e', 'CORRECT', 95);
   policy.finishPlacement(g, 'resolved', false);
   assert.equal(policy.placementSkipped(g, 'b'), true);
@@ -148,7 +148,7 @@ assert.equal(policy.probedPlacementStatus([{ status: 'CORRECT', learner_confiden
 
 // Idempotency, inactive placement and mismatched results.
 {
-  const g = attach(goal()); policy.startPlacement(g);
+  const g = attach(goal()); policy.startPlacement(g); delete g.placement.production; // contrato de solo opción múltiple (diagnóstico anterior a placement_production_v1)
   const item = { item_id: 'x1', node_id: 'd', prompt: 'p', options: [{ id: 'a', text: 'x' }] };
   const result = { status: 'CORRECT', item_id: 'x1', node_id: 'd', correct_option_id: 'a', explanation: 'e' };
   assert.equal(policy.applyPlacementAnswer(g, item, result, 'same', 'a', 90), true);
@@ -167,7 +167,7 @@ assert.match(policy.placementFeedbackText({ status: 'CORRECT', correct_option_id
 
 // The question view renders options, confidence, reasoning and both answer buttons without a browser.
 {
-  const g = attach(goal()); policy.startPlacement(g);
+  const g = attach(goal()); policy.startPlacement(g); delete g.placement.production; // contrato de solo opción múltiple (diagnóstico anterior a placement_production_v1)
   const box = element('section');
   const view = policy.renderPlacementItem(box, g, { item_id: 'v1', node_id: 'd', prompt: '¿Cuál?', options: [{ id: 'a', text: 'uno' }, { id: 'b', text: 'dos' }, { id: 'c', text: 'tres' }] });
   assert.equal(view.choices.children.length, 3);
