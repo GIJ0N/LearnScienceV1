@@ -761,17 +761,21 @@ class CalendarTests(Server, unittest.TestCase):
     def test_profile_isolation(self):
         other = make_store('Meta del otro perfil SENTINEL_OTRO')
         other['goals'][0]['id'] = 'g9'; other['active'] = 'g9'
-        pid1, cookie, d1 = self.setup_link()
-        pid2 = self.make_profile(other, 'Otro')
-        _, _, raw = self.req('POST', '/api/reminders/save', {'profile_id': pid2, 'time': '09:00', 'days': [0, 1, 2, 3, 4, 5, 6]}, cookie=cookie)
-        d2 = json.loads(raw)
-        t1, t2 = self.fetch(d1['link_path'])[2], self.fetch(d2['link_path'])[2]
+        # Reloj inyectado: la fecha ancla sale de NOW_MS (2026-11-16 15:00 UTC), nunca del reloj real ni de la medianoche UTC.
+        real_clean, real_build = hosting.clean_reminder_settings, hosting.build_calendar
+        with patch.object(hosting, 'clean_reminder_settings', lambda data, now_ms=None: real_clean(data, now_ms=NOW_MS)), \
+             patch.object(hosting, 'build_calendar', lambda pid, store, settings, now_ms=None: real_build(pid, store, settings, now_ms=NOW_MS)):
+            pid1, cookie, d1 = self.setup_link()
+            pid2 = self.make_profile(other, 'Otro')
+            _, _, raw = self.req('POST', '/api/reminders/save', {'profile_id': pid2, 'time': '09:00', 'days': [0, 1, 2, 3, 4, 5, 6]}, cookie=cookie)
+            d2 = json.loads(raw)
+            t1, t2 = self.fetch(d1['link_path'])[2], self.fetch(d2['link_path'])[2]
         self.assertIn('Pintura en polvo', t1)
         self.assertNotIn('SENTINEL_OTRO', t1)
         self.assertIn('SENTINEL_OTRO', t2)
         self.assertNotIn('Pintura', t2)
         self.assertNotEqual(re.findall(r'UID:(\S+)', t1)[0], re.findall(r'UID:(\S+)', t2)[0])
-        self.assertIn('DTSTART:' + datetime.date.today().strftime('%Y%m%d') + 'T090000', unfold(t2))
+        self.assertIn('DTSTART:20261116T090000', unfold(t2))
 
     def test_deleting_profile_removes_its_link(self):
         pid, cookie, d = self.setup_link()
