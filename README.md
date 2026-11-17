@@ -9,6 +9,18 @@ python app_legacy.py --self-test
 python app_legacy.py
 ```
 
+## Modelos por rol (opcional)
+
+Por defecto un solo modelo (`GEMINI_MODEL`) genera, audita y califica. Para separar la auditoría y la calificación, fija las variables antes de iniciar el servidor (ver `docs/judge_model_v1.md`):
+
+```bat
+set LEARNSCIENCE_JUDGE_MODEL=nombre-del-modelo
+set LEARNSCIENCE_AUDIT_MODEL=nombre-del-modelo
+python app_legacy.py
+```
+
+En PowerShell: `$env:LEARNSCIENCE_JUDGE_MODEL="nombre-del-modelo"`. `set` solo vale para esa ventana de terminal; sin variables todo usa `GEMINI_MODEL`.
+
 ## Git
 
 ```powershell
