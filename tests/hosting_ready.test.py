@@ -771,7 +771,9 @@ class CalendarTests(Server, unittest.TestCase):
         self.assertIn('SENTINEL_OTRO', t2)
         self.assertNotIn('Pintura', t2)
         self.assertNotEqual(re.findall(r'UID:(\S+)', t1)[0], re.findall(r'UID:(\S+)', t2)[0])
-        self.assertIn('DTSTART:' + datetime.date.today().strftime('%Y%m%d') + 'T090000', unfold(t2))
+        # Sin zona enviada, el servidor ancla con la fecha UTC (no con la local de la máquina): de noche en Monterrey difieren.
+        utc_today = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d')
+        self.assertIn('DTSTART:' + utc_today + 'T090000', unfold(t2))
 
     def test_deleting_profile_removes_its_link(self):
         pid, cookie, d = self.setup_link()
