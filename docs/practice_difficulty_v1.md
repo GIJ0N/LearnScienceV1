@@ -67,6 +67,8 @@ Un fallo en `challenge` **no es una contradicción de suficiencia**. Es una prue
 
 El mismo fallo en `standard` o `base` sigue siendo una contradicción como hoy.
 
+*Nota de versión (`prerequisite_review_v1`, corrección):* un acierto independiente en banda `base` tampoco reinicia el conteo de fallos de `prerequisite_review_v1` (solo `standard`/`challenge`); no cambia ninguna política de esta versión.
+
 ## Precedencia con `lesson_adaptation`
 
 `lesson_adaptation` fija la **profundidad de la enseñanza** a partir del último intento (`initial`, `repair`, `scaffold`, `consolidate`). La banda de práctica no la reemplaza. Si ambas dan señales distintas, **gana la profundidad de la lección** y la práctica se queda en `standard`:

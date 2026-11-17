@@ -413,12 +413,12 @@ function placementSkipped(goal,id){let events=Array.isArray(goal?.events)?goal.e
 // ===== prerequisite_review_v1: propone revisar un prerrequisito P tras >=2 fallos de aprendizaje de X (error_type=prerequisite). No crea evidencia ni toca aristas. =====
 const PREREQ_REVIEW_VERSION='prerequisite_review_v1',PREREQ_REVIEW_MIN_FAILURES=2;
 function prqTime(e){return Number(e?.timestamp??e?.at)||0}
-// Intentos raíz de fallo de aprendizaje de X con error_type=prerequisite. Sustituidos por correcciones no cuentan; una corrección cuenta una vez (por su intento original).
+// Intentos raíz de fallo de aprendizaje de X con error_type=prerequisite. Solo un acierto independiente en banda standard/challenge reinicia el conteo (practice_difficulty_v1: base no demuestra). Sustituidos por correcciones no cuentan; una corrección cuenta una vez (por su intento original).
 function prqFailures(goal,id,cutoff=true){
  let all=(Array.isArray(goal?.events)?goal.events:[]).filter(e=>e&&e.type==='EVIDENCE'&&e.node_id===id&&!(e.profile_id&&goal.profile_id&&e.profile_id!==goal.profile_id)),
   byEv=new Map(all.filter(e=>e.evidence_id).map(e=>[e.evidence_id,e])),eff=effectiveEvidence(all).filter(e=>e.audit_only!==true&&e.evidence_scope!=='repair_episode'),
   when=e=>e.correction_of&&byEv.get(e.correction_of)?prqTime(byEv.get(e.correction_of)):prqTime(e),
-  lastOk=cutoff?Math.max(0,...eff.filter(e=>e.is_independent===true&&resultStatus(e.result??e.status)==='CORRECT').map(when)):-1,seen=new Map();
+  lastOk=cutoff?Math.max(0,...eff.filter(e=>e.is_independent===true&&eventBand(e)!=='base'&&resultStatus(e.result??e.status)==='CORRECT').map(when)):-1,seen=new Map();
  for(const e of eff){if(e.evidence_role!=='learning'||e.counts_as_learning_failure!==true||e.error_type!=='prerequisite'||!(when(e)>lastOk))continue;let root=e.original_attempt_id||e.attempt_id;if(root&&!seen.has(root))seen.set(root,when(e))}
  return [...seen].sort((a,b)=>a[1]-b[1]||String(a[0]).localeCompare(String(b[0]))).map(x=>x[0])
 }
@@ -427,7 +427,11 @@ function prqCandidates(goal,id){let ids=new Set((goal.nodes||[]).map(n=>n.id)),n
 function prqLedger(goal){let active=new Map();for(const e of Array.isArray(goal?.events)?goal.events:[]){if(!e||!e.proposal_id)continue;if(e.type==='PREREQUISITE_REVIEW')active.set(e.proposal_id,e);else if(e.type==='PREREQUISITE_REVIEW_REVOKED')active.delete(e.proposal_id)}return [...active.values()]}
 function prerequisiteReviews(goal){let by=new Map((goal?.nodes||[]).map(n=>[n.id,n]));return prqLedger(goal).filter(e=>{let x=by.get(e.source_node_id),p=by.get(e.prerequisite_node_id);return x&&p&&(x.prerequisites||[]).includes(p.id)}).map(e=>({proposal_id:e.proposal_id,source:e.source_node_id,prerequisite:e.prerequisite_node_id,source_name:by.get(e.source_node_id).name,prerequisite_name:by.get(e.prerequisite_node_id).name,attempt_ids:Array.isArray(e.source_attempt_ids)?[...e.source_attempt_ids]:[],at:Number(e.at)||0,action:e.action==='unskip'?'unskip':'check',review_from_due:e.review_from_due??null,review_to_due:e.review_to_due??null}))}
 function prqRevisited(goal,r){return (goal.events||[]).some(e=>e&&e.node_id===r.prerequisite&&['EVIDENCE','TEACHING_EXPOSURE','FEEDBACK_EXPOSURE'].includes(e.type)&&prqTime(e)>=r.at)}
-function prerequisiteReviewPending(goal){return prerequisiteReviews(goal).filter(r=>!prqRevisited(goal,r)&&!verified(goal,r.prerequisite)).sort((a,b)=>a.at-b.at||String(a.proposal_id).localeCompare(String(b.proposal_id)))}
+// Orden del mapa: posición de X en goal.nodes y, dentro de X, posición de P en X.prerequisites (orden declarado). Nunca `at` ni proposal_id.
+function prqMapOrder(goal,r){let nodes=goal.nodes||[],xi=nodes.findIndex(n=>n.id===r.source),x=nodes[xi];return [xi,x?(x.prerequisites||[]).indexOf(r.prerequisite):0]}
+// Huérfana (arista borrada): P deja de ser alcanzable por relevant() o sus propios prerrequisitos no están listos => inerte, no se ofrece.
+function prqOfferable(goal,r,reach){let p=(goal.nodes||[]).find(n=>n.id===r.prerequisite);return Boolean(p)&&reach.has(p.id)&&(p.prerequisites||[]).every(d=>readyToAdvance(goal,d))}
+function prerequisiteReviewPending(goal){let reach=new Set(relevant(goal).map(n=>n.id));return prerequisiteReviews(goal).filter(r=>!prqRevisited(goal,r)&&!verified(goal,r.prerequisite)&&prqOfferable(goal,r,reach)).sort((a,b)=>{let A=prqMapOrder(goal,a),B=prqMapOrder(goal,b);return A[0]-B[0]||A[1]-B[1]})}
 function prerequisiteReviewReason(r){return `Vamos a repasar «${r.prerequisite_name}» antes porque «${r.source_name}» depende de «${r.prerequisite_name}».`}
 function prqOwnEvidence(goal,id){return effectiveEvidence((goal.events||[]).filter(e=>e&&e.type==='EVIDENCE'&&e.node_id===id)).some(e=>e.audit_only!==true&&e.evidence_role==='learning'&&e.evidence_scope!=='repair_episode')}
 // Temas cuyo estado no debe verse «bloqueado» por la revisión: X (con evidencia propia) y sus dependientes transitivos.
@@ -435,16 +439,24 @@ function prqShadow(goal,reviews=prerequisiteReviews(goal)){let out=new Set(),dep
 // Calcula y registra (sin node_id, sin evidencia) propuestas y revocaciones. Idempotente: se puede llamar tras cada intento.
 function prerequisiteReviewSync(goal,at=now()){
  let out={issued:[],revoked:[]};if(!goal||!Array.isArray(goal.nodes))return out;goal.events=Array.isArray(goal.events)?goal.events:[];
- for(const e of prqLedger(goal)){let roots=prqFailures(goal,e.source_node_id,false),ids=Array.isArray(e.source_attempt_ids)?e.source_attempt_ids:[];if(ids.length>=PREREQ_REVIEW_MIN_FAILURES&&ids.every(a=>roots.includes(a)))continue;
-  let rv=Number.isFinite(e.review_to_due)?(goal.reviews||[]).find(r=>r&&r.id===e.prerequisite_node_id&&r.due===e.review_to_due):null;if(rv&&Number.isFinite(e.review_from_due))rv.due=e.review_from_due;
-  goal.events.push({type:'PREREQUISITE_REVIEW_REVOKED',proposal_id:e.proposal_id,source_node_id:e.source_node_id,prerequisite_node_id:e.prerequisite_node_id,source_attempt_ids:ids,reason:'correction',at,policy_version:PREREQ_REVIEW_VERSION,creates_evidence:false});out.revoked.push(e.proposal_id)}
+ const live=e=>{let x=goal.nodes.find(n=>n.id===e.source_node_id),p=goal.nodes.find(n=>n.id===e.prerequisite_node_id);return Boolean(x&&p&&(x.prerequisites||[]).includes(p.id))};
+ for(const e of prqLedger(goal)){if(!live(e))continue;let roots=prqFailures(goal,e.source_node_id,false),ids=Array.isArray(e.source_attempt_ids)?e.source_attempt_ids:[];if(ids.length>=PREREQ_REVIEW_MIN_FAILURES&&ids.every(a=>roots.includes(a)))continue;
+  let pid=e.prerequisite_node_id,others=prqLedger(goal).filter(o=>o.proposal_id!==e.proposal_id&&o.prerequisite_node_id===pid&&live(o)),restored=false;
+  if(!others.length){let rv=(goal.reviews||[]).find(r=>r&&r.id===pid),cands=[e,...goal.events.filter(o=>o&&o.type==='PREREQUISITE_REVIEW_REVOKED'&&o.prerequisite_node_id===pid&&o.restored===false).map(o=>goal.events.find(q=>q&&q.type==='PREREQUISITE_REVIEW'&&q.proposal_id===o.proposal_id)).filter(Boolean)].filter(c=>Number.isFinite(c.review_to_due)&&Number.isFinite(c.review_from_due)).sort((a,b)=>(Number(a.at)||0)-(Number(b.at)||0));
+   for(const c of cands)if(rv&&rv.due===c.review_to_due){rv.due=c.review_from_due;restored=true;break}}
+  goal.events.push({type:'PREREQUISITE_REVIEW_REVOKED',proposal_id:e.proposal_id,source_node_id:e.source_node_id,prerequisite_node_id:pid,source_attempt_ids:ids,reason:'correction',restored,at,policy_version:PREREQ_REVIEW_VERSION,creates_evidence:false});out.revoked.push(e.proposal_id)}
  let active=prqLedger(goal);
- for(const x of goal.nodes){let fails=prqFailures(goal,x.id);if(fails.length<PREREQ_REVIEW_MIN_FAILURES)continue;let ids=fails.slice(0,PREREQ_REVIEW_MIN_FAILURES);
-  for(const pid of prqCandidates(goal,x.id)){if(active.some(e=>e.source_node_id===x.id&&e.prerequisite_node_id===pid))continue;
-   let base=`prq:${x.id}:${pid}:${ids.join('+')}`,prior=goal.events.filter(e=>e&&e.type==='PREREQUISITE_REVIEW'&&e.proposal_id&&e.proposal_id.startsWith(base)).length,skipped=placementSkipped(goal,pid),rv=(goal.reviews||[]).find(r=>r&&r.id===pid),from=null,to=null;
-   if(skipped&&rv&&Number.isFinite(rv.due)&&rv.due>at){from=rv.due;to=at;rv.due=at}
-   let ev={type:'PREREQUISITE_REVIEW',proposal_id:prior?base+':'+prior:base,source_node_id:x.id,prerequisite_node_id:pid,source_attempt_ids:ids,action:skipped?'unskip':'check',review_from_due:from,review_to_due:to,at,policy_version:PREREQ_REVIEW_VERSION,creates_evidence:false};
-   goal.events.push(ev);active.push(ev);out.issued.push(ev.proposal_id)}}
+ for(const x of goal.nodes){
+  let mine=active.filter(e=>e.source_node_id===x.id&&live(e));
+  // Un P a la vez: mientras la propuesta vigente de X siga sin resolverse (P ni repasado ni con dominio) no se emite otra.
+  if(mine.some(e=>!prqRevisited(goal,{prerequisite:e.prerequisite_node_id,at:Number(e.at)||0})&&!verified(goal,e.prerequisite_node_id)))continue;
+  // Eventos nuevos: los fallos ya usados por propuestas vigentes de X no se reutilizan para proponer otro P.
+  let used=new Set(active.filter(e=>e.source_node_id===x.id).flatMap(e=>Array.isArray(e.source_attempt_ids)?e.source_attempt_ids:[])),fails=prqFailures(goal,x.id).filter(a=>!used.has(a));if(fails.length<PREREQ_REVIEW_MIN_FAILURES)continue;let ids=fails.slice(0,PREREQ_REVIEW_MIN_FAILURES);
+  let pid=prqCandidates(goal,x.id).find(c=>!active.some(e=>e.source_node_id===x.id&&e.prerequisite_node_id===c));if(!pid)continue;
+  let base=`prq:${x.id}:${pid}:${ids.join('+')}`,prior=goal.events.filter(e=>e&&e.type==='PREREQUISITE_REVIEW'&&e.proposal_id&&e.proposal_id.startsWith(base)).length,skipped=placementSkipped(goal,pid),rv=(goal.reviews||[]).find(r=>r&&r.id===pid),from=null,to=null;
+  if(skipped&&rv&&Number.isFinite(rv.due)&&rv.due>at){from=rv.due;to=at;rv.due=at}
+  let ev={type:'PREREQUISITE_REVIEW',proposal_id:prior?base+':'+prior:base,source_node_id:x.id,prerequisite_node_id:pid,source_attempt_ids:ids,action:skipped?'unskip':'check',review_from_due:from,review_to_due:to,at,policy_version:PREREQ_REVIEW_VERSION,creates_evidence:false};
+  goal.events.push(ev);active.push(ev);out.issued.push(ev.proposal_id)}
  return out
 }
 function placementPriorEvidence(goal){return (goal.nodes||[]).filter(n=>verified(goal,n.id)||(goal.events||[]).some(e=>e&&e.type==='EVIDENCE'&&e.node_id===n.id&&e.activity_kind!=='placement_multiple_choice'&&e.evidence_role!=='diagnostic')).map(n=>n.id)}

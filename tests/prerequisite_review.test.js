@@ -189,4 +189,137 @@ const revokes = g => g.events.filter(e => e.type === 'PREREQUISITE_REVIEW_REVOKE
   assert.equal(proposals(g)[0].review_to_due, null);
   assert.equal(modelCalls, 0, 'el disparador no llama al modelo');
 }
+
+// --- Correcciones de la revisión de Opus (fix) ---
+// Mapa a medida: nodos dados tal cual, en el orden dado.
+function goalWith(nodes, { profile = 'perfil-a', id = 'goal-fix' } = {}) {
+  const g = {
+    id, profile_id: profile, goal: 'Meta', nodes, learner: {}, events: [], reviews: [], lessons: {},
+    coverage: nodes.map(n => ({ id: n.id, name: n.name, status: 'UNKNOWN', confidence: 0, dimensions: [{ id: 'conceptual', name: 'c', required: true, status: 'UNKNOWN', evidence: [] }] })),
+    session: { mode: 'DIAGNOSTIC', node: null, stack: [], tries: 0, hints: 0 },
+  };
+  policy.setStoreForTests({ goals: [g], active: g.id });
+  return g;
+}
+const band = (b, id = 'x') => policy.normalizeActivityContract({ activity_id: 'act-b-' + (++seq), node_id: id, stage: 'INDEPENDENT', kind: 'application', observable_dimensions: ['conceptual'], supports_independence: true, role: 'independent_practice', difficulty_band: b });
+function okBand(g, id, attempt, b) { tick(); return policy.record(g, id, 'INDEPENDENT', 'r', { status: 'CORRECT', error_type: 'none', feedback: '', hint: '' }, 0, band(b, id), attempt); }
+
+// 1 (fix). Un prerrequisito a la vez, en el orden del mapa (no por `at` ni por id): [zeta, alfa, x], x.prerequisites=[zeta, alfa].
+{
+  const g = goalWith([node('zeta', 'Zeta'), node('alfa', 'Alfa'), node('x', 'X', ['zeta', 'alfa'], 1)]);
+  fail(g, 'x', 'm1'); fail(g, 'x', 'm2');
+  assert.equal(proposals(g).length, 1, 'solo una propuesta');
+  assert.equal(proposals(g)[0].prerequisite_node_id, 'zeta', 'zeta, no alfa');
+  assert.deepEqual(policy.prerequisiteReviewPending(g).map(r => r.prerequisite), ['zeta']);
+  assert.equal(policy.selectTutorAction(g, clockValue, { reselect: true }).node_id, 'zeta');
+  // No se emite por adelantado: repetir la sincronización o un tercer fallo no ofrece alfa.
+  policy.prerequisiteReviewSync(g); fail(g, 'x', 'm3');
+  assert.equal(proposals(g).length, 1);
+  // Repasado zeta (exposición), los mismos fallos no bastan: hacen falta eventos nuevos.
+  g.events.push({ type: 'TEACHING_EXPOSURE', node_id: 'zeta', at: clockValue + 1 }); tick(10);
+  policy.prerequisiteReviewSync(g);
+  assert.equal(proposals(g).length, 1, 'sin eventos nuevos no hay propuesta sobre alfa');
+  fail(g, 'x', 'm4');
+  assert.equal(proposals(g).length, 2); assert.equal(proposals(g)[1].prerequisite_node_id, 'alfa', 'con eventos nuevos, el siguiente P');
+  // El orden del selector sigue el mapa aunque `at`/proposal_id digan otra cosa.
+  const h = goalWith([node('zeta', 'Zeta'), node('alfa', 'Alfa'), node('x1', 'X1', ['alfa'], 1), node('x2', 'X2', ['zeta'], 1)]);
+  fail(h, 'x2', 'o1', 'prerequisite'); fail(h, 'x2', 'o2'); fail(h, 'x1', 'o3'); fail(h, 'x1', 'o4');
+  assert.deepEqual(policy.prerequisiteReviewPending(h).map(r => r.source), ['x1', 'x2'], 'orden del mapa (x1 antes que x2), no por at');
+}
+
+// 2 (fix). Revocar X1 no deshace el adelanto de P mientras X2 siga activa; al revocar X2 se restaura.
+{
+  const g = goalWith([node('p', 'P'), node('x1', 'X1', ['p'], 1), node('x2', 'X2', ['p'], 1)]);
+  g.events.push({ type: 'PLACEMENT_SKIP', node_id: 'p', basis: 'probed', at: clockValue, policy_version: 'placement_v1' });
+  g.reviews.push({ id: 'p', due: clockValue + 4 * DAY, step: 0, history: [], question: null, origin_attempt_id: null });
+  const originalDue = g.reviews[0].due;
+  const act1 = contract('x1'), b1 = { status: 'PARTIAL', error_type: 'prerequisite', feedback: '', hint: '', _activity: act1, _attempt_id: 'r1' };
+  tick(); policy.record(g, 'x1', 'INDEPENDENT', 'r', b1, 0, act1, 'r1'); fail(g, 'x1', 'r2');
+  const act2 = contract('x2'), b2 = { status: 'PARTIAL', error_type: 'prerequisite', feedback: '', hint: '', _activity: act2, _attempt_id: 's1' };
+  tick(); policy.record(g, 'x2', 'INDEPENDENT', 'r', b2, 0, act2, 's1'); fail(g, 'x2', 's2');
+  assert.equal(proposals(g).length, 2); assert.equal(proposals(g)[0].action, 'unskip'); assert.equal(proposals(g)[1].action, 'check', 'X2 describe lo que hace: P ya estaba sin salto');
+  const advanced = g.reviews[0].due; assert.ok(advanced < originalDue);
+  tick(); policy.applyManualCorrection(g, 'x1', 'INDEPENDENT', 'r', b1, 'CORRECT', 'r1-fix');
+  assert.equal(revokes(g).length, 1);
+  assert.equal(revokes(g)[0].reason, 'correction'); assert.equal(revokes(g)[0].restored, false);
+  assert.equal(g.reviews[0].due, advanced, 'el repaso sigue adelantado porque X2 sigue activa');
+  assert.equal(policy.placementSkipped(g, 'p'), false);
+  assert.equal(proposals(g)[1].action, 'check', 'el action de X2 no cambia');
+  tick(); policy.applyManualCorrection(g, 'x2', 'INDEPENDENT', 'r', b2, 'CORRECT', 's1-fix');
+  assert.equal(revokes(g).length, 2); assert.equal(revokes(g)[1].restored, true);
+  assert.equal(g.reviews[0].due, originalDue, 'al revocar la última se restaura');
+  assert.equal(policy.placementSkipped(g, 'p'), true);
+}
+
+// 3 (fix). M9: un fallo dentro de un episodio de reparación NO cuenta.
+{
+  const g = goal();
+  fail(g, 'x', 'e1');
+  g.events.push({ type: 'EVIDENCE', node_id: 'x', profile_id: 'perfil-a', attempt_id: 'rep1', evidence_id: 'ev-rep1', evidence_role: 'learning', evidence_scope: 'repair_episode', counts_as_learning_failure: true, error_type: 'prerequisite', result: 'PARTIAL', timestamp: ++clockValue });
+  assert.deepEqual(policy.prqFailures(g, 'x'), ['e1'], 'el fallo de reparación no cuenta');
+  policy.prerequisiteReviewSync(g); assert.equal(proposals(g).length, 0);
+}
+
+// 3 (fix). M11: un acierto CON AYUDA no reinicia el conteo.
+{
+  const g = goal();
+  fail(g, 'x', 'h1');
+  tick(); policy.record(g, 'x', 'INDEPENDENT', 'r', { status: 'CORRECT', error_type: 'none', feedback: '', hint: '' }, 1, contract('x'), 'h-help');
+  const helped = g.events.filter(e => e.type === 'EVIDENCE' && e.attempt_id === 'h-help')[0];
+  assert.notEqual(helped.is_independent, true, 'con ayuda no es independiente');
+  fail(g, 'x', 'h2');
+  assert.deepEqual(policy.prqFailures(g, 'x'), ['h1', 'h2']);
+  assert.equal(proposals(g).length, 1);
+}
+
+// 3 (fix). M5: un P con dominio no recibe propuesta.
+{
+  const g = goal();
+  const dim = g.coverage.find(c => c.id === 'p').dimensions[0];
+  for (let i = 0; i < 6; i++) dim.evidence.push({ type: 'EVIDENCE', attempt_id: 'pm' + i, evidence_id: 'pe' + i, activity_id: 'pa' + i, node_id: 'p', question: { prompt: 'Pregunta distinta ' + i }, result: 'CORRECT', status: 'CORRECT', is_independent: true, observed_dimensions: ['conceptual'], evidence_role: 'learning', timestamp: clockValue + i });
+  assert.equal(policy.verified(g, 'p'), true, 'P con dominio');
+  fail(g, 'x', 'v1'); fail(g, 'x', 'v2');
+  assert.equal(proposals(g).length, 0, 'P con dominio no recibe propuesta');
+  assert.deepEqual(policy.prerequisiteReviewPending(g), []);
+}
+
+// 4 (fix). Acierto independiente en banda base NO reinicia el conteo; en standard sí.
+{
+  const g = goal();
+  fail(g, 'x', 'b1'); okBand(g, 'x', 'bok', 'base'); fail(g, 'x', 'b2');
+  assert.deepEqual(policy.prqFailures(g, 'x'), ['b1', 'b2'], 'base no reinicia');
+  assert.equal(proposals(g).length, 1);
+  const h = goal();
+  fail(h, 'x', 'c1'); okBand(h, 'x', 'cok', 'standard'); fail(h, 'x', 'c2');
+  assert.deepEqual(policy.prqFailures(h, 'x'), ['c2'], 'standard sí reinicia');
+  assert.equal(proposals(h).length, 0);
+}
+
+// 5 (fix). Propuesta huérfana: borrar la arista X->P la deja inerte (sin selector, sin eventos nuevos).
+{
+  const g = goal(); skipP(g);
+  fail(g, 'x', 'g1'); fail(g, 'x', 'g2');
+  assert.equal(proposals(g).length, 1); assert.equal(policy.prerequisiteReviewPending(g).length, 1);
+  g.nodes.find(n => n.id === 'x').prerequisites = [];
+  const before = g.events.length, due = g.reviews[0].due;
+  assert.deepEqual(policy.prerequisiteReviews(g), [], 'ignora la propuesta');
+  assert.deepEqual(policy.prerequisiteReviewPending(g), [], 'no hay selector sobre P');
+  assert.ok(!/Vamos a repasar/.test(policy.selectTutorAction(g, clockValue, { reselect: true }).reason));
+  policy.prerequisiteReviewSync(g); policy.prerequisiteReviewSync(g);
+  assert.equal(g.events.length, before, 'no se escribe ningún evento nuevo');
+  assert.equal(g.reviews[0].due, due);
+  // Huérfana y además un disparador corregido: sigue inerte, no se escribe revocación ni se toca el repaso.
+  const o = goal(); skipP(o); const oAct = contract('x'), oBase = { status: 'PARTIAL', error_type: 'prerequisite', feedback: '', hint: '', _activity: oAct, _attempt_id: 'orf1' };
+  tick(); policy.record(o, 'x', 'INDEPENDENT', 'r', oBase, 0, oAct, 'orf1'); fail(o, 'x', 'orf2');
+  o.nodes.find(n => n.id === 'x').prerequisites = []; const oBefore = o.events.length, oDue = o.reviews[0].due;
+  tick(); policy.applyManualCorrection(o, 'x', 'INDEPENDENT', 'r', oBase, 'CORRECT', 'orf1-fix');
+  assert.equal(revokes(o).length, 0, 'la huérfana no genera revocación'); assert.equal(o.reviews[0].due, oDue);
+  assert.ok(o.events.slice(oBefore).every(e => !/^PREREQUISITE_REVIEW/.test(e.type)));
+  // Si P no es alcanzable o sus prerrequisitos no están listos, tampoco se ofrece.
+  const h = goalWith([node('q', 'Q'), node('p', 'P', ['q'], 1), node('x', 'X', ['p'], 2)]);
+  fail(h, 'x', 'k1'); fail(h, 'x', 'k2');
+  assert.equal(proposals(h).length, 1);
+  assert.deepEqual(policy.prerequisiteReviewPending(h), [], 'los prerrequisitos de P no están listos');
+}
+
 console.log('prerequisite_review.test.js OK');
