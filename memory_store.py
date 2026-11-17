@@ -1227,6 +1227,14 @@ class DurableMemory:
                              (profile_id, str(attempt_id or ""), str(goal_id or ""), str(item_id or ""))).fetchone()
         return json.loads(row["result_json"]) if row else None
 
+    def item_first_answer(self, profile_id, goal_id, item_id):
+        """Resultado ya registrado de una pregunta (cualquier attempt_id), o None. Evita calificar dos veces la misma pregunta abierta."""
+        profile_id = _profile_id(profile_id)
+        with self._lock, self._connect() as db:
+            row = db.execute("SELECT result_json FROM placement_answers WHERE profile_id=? AND goal_id=? AND item_id=? ORDER BY created_at LIMIT 1",
+                             (profile_id, str(goal_id or ""), str(item_id or ""))).fetchone()
+        return json.loads(row["result_json"]) if row else None
+
     def placement_answer_time(self, profile_id, attempt_id):
         profile_id = _profile_id(profile_id)
         with self._lock, self._connect() as db:

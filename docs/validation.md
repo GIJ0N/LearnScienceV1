@@ -84,6 +84,8 @@ python tests/evaluate_data_delimiters.test.py
 python tests/integration_novelty.test.py
 node tests/integration_novelty.test.js
 node tests/placement_skip_review.test.js
+node tests/placement_production.test.js
+python tests/placement_production.test.py
 node tests/expert_staleness.test.js
 node tests/selector_confidence.test.js
 python tests/local_production_backend.test.py

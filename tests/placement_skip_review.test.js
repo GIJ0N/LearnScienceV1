@@ -33,7 +33,7 @@ function placed(setup) {
   const g = goal();
   policy.setStoreForTests({ goals: [g], active: g.id });
   if (setup) setup(g);
-  policy.startPlacement(g);
+  policy.startPlacement(g); delete g.placement.production; // contrato de solo opción múltiple (diagnóstico anterior a placement_production_v1)
   answer(g, 'n4', 'CORRECT', 90);
   answer(g, 'n5', 'CORRECT', 100);
   return g;
@@ -82,7 +82,7 @@ function placed(setup) {
 {
   const g = goal();
   policy.setStoreForTests({ goals: [g], active: g.id });
-  policy.startPlacement(g);
+  policy.startPlacement(g); delete g.placement.production; // contrato de solo opción múltiple (diagnóstico anterior a placement_production_v1)
   policy.finishPlacement(g, 'learner_stopped', false);
   assert.equal(g.reviews.length, 0);
   assert.ok(!g.events.some(e => e.type === 'PLACEMENT_REVIEW_SCHEDULED'));
