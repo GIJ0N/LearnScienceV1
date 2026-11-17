@@ -86,6 +86,8 @@ node tests/integration_novelty.test.js
 node tests/placement_skip_review.test.js
 node tests/placement_production.test.js
 python tests/placement_production.test.py
+node tests/prerequisite_review.test.js
+python tests/prerequisite_review.test.py
 node tests/expert_staleness.test.js
 node tests/selector_confidence.test.js
 python tests/local_production_backend.test.py
@@ -466,3 +468,13 @@ Revisión del supervisor, también con prueba: una producción `base` correcta n
 Mutaciones comprobadas (rompe, falla, restaura): que `base` cuente para `sufficient()`, que la ayuda suba la banda, que un fallo en `challenge` cambie `sufficient()`, quitar la histéresis, que una producción `base` cree ancla, que el panel cuente `base`, que la exención valga sin suficiencia previa, que la lección acepte la banda sin respetar `lesson_adaptation` y quitar la lista cerrada de valores.
 
 Sin validar: Gemini real (si el modelo distingue de verdad una pregunta `base` de una `standard` o `challenge`, y la calidad de esas preguntas), navegador (la línea de nivel solo se probó con un DOM simulado) y el efecto pedagógico sobre la retención. Los umbrales (ventana 5, mínimo 3, 85 %/50 %, histéresis 2) son valores de ingeniería sin calibrar con datos reales.
+
+## prerequisite_review_v1 (lote 4a, revisión de prerrequisitos desde errores)
+
+`node tests/prerequisite_review.test.js` comprueba (cliente, sin red ni navegador): un solo fallo con `error_type='prerequisite'` no dispara y deja el salto de P intacto; dos fallos de aprendizaje en intentos distintos sí (evento `PREREQUISITE_REVIEW` sin `node_id`, `creates_evidence:false`, P deja de estar saltado y su repaso se adelanta, sin `EVIDENCE`, cobertura ni dominio en P y sin borrar `PLACEMENT_SKIP`); no cuentan los fallos de diagnóstico, `UNKNOWN`, otro `error_type`, duplicados ni los anteriores a un acierto independiente de X; la corrección manual que anula el disparador revoca (`PREREQUISITE_REVIEW_REVOKED`, sin `node_id`), devuelve el salto y la fecha del repaso, y una corrección fallo→fallo cuenta un solo intento; sin arista X→P no hay propuesta ni se crean aristas; otra meta, otro perfil y eventos de otro perfil no ven la propuesta; datos legacy sin `events`/`reviews` no fallan; en el plan P pasa a `ready`, X y su dependiente no quedan `locked` con evidencia propia, la frase llana no tiene números y el selector pone P antes que X solo cuando hay propuesta; el contador de llamadas al modelo queda en 0. `python tests/prerequisite_review.test.py` (SQLite temporal) repite los casos del disparador con la lógica real de `app.js` mediante `tests/prerequisite_review_runner.js`, comprueba cero llamadas al modelo (con `gemini` parcheado para fallar), que el servidor tolera y conserva los eventos sin `node_id`, que exportar y restaurar los conserva, que otro perfil no los ve y que los datos legacy sin propuesta se validan sin inventar nada.
+
+Tests existentes cambiados: `tests/placement.test.js` (bloque «Skips are revoked…»): antes afirmaba que **un** fallo con `error_type='prerequisite'` en `c` reabría `b`; ahora afirma que un fallo ya no lo reabre y que dos intentos distintos sí, porque la regla única de `prerequisite_review_v1` sustituye a la de un fallo. El resto de tests existentes no cambió.
+
+Mutaciones comprobadas (rompe, falla, restaura): que el disparador sea 1 fallo, que el evento lleve `node_id`, que la propuesta cree `EVIDENCE` en P, que X quede `locked` con evidencia propia, que la corrección no revoque y que se adivine P sin arista hacen fallar los tests. Diseño en `docs/prerequisite_review_v1.md`.
+
+Sin validar: Gemini real (si `error_type='prerequisite'` es fiable en el juez), navegador (solo se probó con DOM simulado), qué prerrequisito falla de verdad cuando X tiene varios.

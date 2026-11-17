@@ -68,6 +68,8 @@ jobs:
           node tests/placement_skip_review.test.js
           node tests/placement_production.test.js
           python tests/placement_production.test.py
+          node tests/prerequisite_review.test.js
+          python tests/prerequisite_review.test.py
           node tests/expert_staleness.test.js
           node tests/selector_confidence.test.js
           python tests/local_production_backend.test.py
