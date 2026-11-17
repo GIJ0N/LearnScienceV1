@@ -153,6 +153,13 @@ def _sanitize_difficulty(event):
     if event.get("difficulty_policy_version") != PRACTICE_DIFFICULTY_VERSION or event.get("difficulty_band") not in PRACTICE_BANDS:
         event.pop("difficulty_band", None)
         event.pop("difficulty_policy_version", None)
+        # La exención de un fallo en challenge depende de una banda verificable: sin ella el fallo contradice como cualquier otro.
+        result = event.get("result") or event.get("status")
+        if event.get("evidence_role") == "learning" and result in ("PARTIAL", "MISCONCEPTION"):
+            if event.get("contradicts_sufficiency") is False:
+                event["contradicts_sufficiency"] = True
+            if event.get("counts_as_learning_failure") is False:
+                event["counts_as_learning_failure"] = True
 
 
 def _sanitize_review_schedule(review):
