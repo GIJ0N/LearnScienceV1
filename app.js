@@ -337,7 +337,7 @@ function practiceBand(goal,nodeId,purpose='confirmation'){
   reason=band==='challenge'?'Ya tienes la evidencia inicial: esta práctica añade una exigencia mayor.':'Nivel estándar: el desafío espera a que tengas la evidencia inicial y un desempeño reciente estable.'
  }else{
   if(band==='challenge'&&(!enough||purpose==='lesson')){band='standard';reason=enough?'Vienes acertando con regularidad; el desafío llega como práctica aparte.':'Vienes acertando con regularidad; el desafío se abre cuando tu evidencia inicial esté completa.'}
-  else if(st.change&&st.change.to===band)reason=(st.change.to==='base'||st.change.from==='challenge'?'bajaste de nivel porque acertaste solo ':'subiste porque acertaste ')+st.change.hits+' de '+st.change.total+' sin pistas';
+  else if(st.change&&st.change.to===band)reason=st.change.to==='base'||st.change.from==='challenge'?(st.change.hits===0?'bajaste de nivel porque no acertaste ninguna de las últimas '+st.change.total+' sin pistas':'bajaste de nivel porque acertaste solo '+st.change.hits+' de '+st.change.total+' sin pistas'):'subiste porque acertaste '+st.change.hits+' de '+st.change.total+' sin pistas';
   else if(!st.total)reason='Es tu nivel de partida.';
   else if(st.total<DIFFICULTY_MIN_SAMPLE)reason='Aún hay pocas respuestas recientes para cambiar el nivel.';
   else reason='Se mantiene porque tus respuestas recientes están en un punto medio.'
