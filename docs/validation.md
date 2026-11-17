@@ -447,6 +447,10 @@ Sin validar: Windows real (permisos heredados de la carpeta, rutas reales, base 
 
 `tests/rich_content_backend.test.py` sube la lista cerrada de líneas con `compact_rich` de 27 a 29 (enunciado abierto y comentario del juez, decisión explícita).
 
+Revisión del supervisor: nuevos tests de «seguir solo con opción múltiple» (caso d/a/b/c: sigue `fragile` y no propaga), lote `ready` con pregunta solo para `e`, evidencia previa sin producciones, reconsulta con el mismo `attempt_id`, tope y reserva en el servidor (incluidas dos hilos con `attempt_id` distintos que califican una sola vez), parafraseo de la rúbrica, auditoría abierta y motivo con Anthropic.
+
+Mutaciones de la revisión (todas hicieron fallar su prueba y se restauraron): saltar deja `held` lo pendiente, lote `ready` que bloquea en el primer pendiente, producción como evidencia previa, sin reconsulta por tiempo de espera, sin tope de lote en el servidor, sin reserva antes del juez, sin liberar la reserva si el juez falla, sin comparar palabras, lote conservado con auditoría abierta y fallo del juez sin normalizar.
+
 Mutaciones comprobadas (rompe, falla, restaura): permitir `held` con producción sola, guardar las producciones en `p.answers`, dejar que la producción reinicie `lastFailure`, filtrar la rúbrica en la respuesta pública, no bloquear la inferencia `heldInf`, no sustituir un comentario que copia la rúbrica, quitar el tope de 3 y permitir recalificar la misma pregunta con otro `attempt_id`.
 
 Sin validar: Gemini real (calidad de las rúbricas y del juez, tasa de falsos negativos con respuestas legítimas), navegador (la pantalla se probó solo con un DOM simulado) y el efecto pedagógico de pedir la respuesta abierta.
