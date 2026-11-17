@@ -10,7 +10,7 @@ Para un tema X y un prerrequisito directo P con arista X→P **ya existente** en
 
 - hay **al menos 2 fallos de aprendizaje de X** (`counts_as_learning_failure=true`, `evidence_role='learning'`, `error_type='prerequisite'`),
 - en **intentos distintos**,
-- **posteriores al último acierto independiente de X**.
+- **posteriores al último acierto independiente de X en banda `standard` o `challenge`**. Un acierto independiente en banda `base` **no** reinicia el conteo (alineado con `practice_difficulty_v1`: una práctica `base` no suma para suficiencia; eventos sin banda se tratan como `standard`). Un acierto con ayuda tampoco.
 
 Se calcula solo con eventos ya guardados (`error_type` lo emite el juez que ya existe): **cero llamadas nuevas al modelo**.
 
@@ -23,7 +23,7 @@ Qué cuenta y qué no:
 | Otro `error_type` (`algebra`, `conceptual`, …) | no señala una base ausente |
 | Intentos de reparación (`evidence_scope='repair_episode'`), auditoría, sustituidos por una corrección | no son intentos vigentes |
 | Un `attempt_id` repetido | idempotencia: el duplicado se rechaza al registrar |
-| Fallos anteriores a un acierto independiente de X | X ya se demostró después |
+| Fallos anteriores a un acierto independiente de X (banda `standard`/`challenge`) | X ya se demostró después |
 | Fallo en `challenge` con suficiencia previa | ya no es contradicción (`practice_difficulty_v1`) |
 
 Una corrección manual no cuenta dos veces: se cuenta el intento raíz (`original_attempt_id`) y el evento original sustituido no entra.
@@ -41,11 +41,17 @@ Prohibido: crear `EVIDENCE`, cobertura, dominio, retención o suficiencia en cua
 
 ## Eventos
 
-`PREREQUISITE_REVIEW` y `PREREQUISITE_REVIEW_REVOKED` se guardan en `goal.events` **sin `node_id`** (como `REVIEW_DEFERRED`) y con `creates_evidence:false`, para que ninguna lectura por nodo los tome por exposición. Campos: `proposal_id`, `source_node_id` (X), `prerequisite_node_id` (P), `source_attempt_ids` (los dos primeros fallos), `action` (`unskip`|`check`), `review_from_due`, `review_to_due`, `at`, `policy_version`. Idempotente: no se emite otra propuesta mientras exista una activa para X→P; repetir la sincronización o un tercer fallo no duplica.
+`PREREQUISITE_REVIEW` y `PREREQUISITE_REVIEW_REVOKED` se guardan en `goal.events` **sin `node_id`** (como `REVIEW_DEFERRED`) y con `creates_evidence:false`, para que ninguna lectura por nodo los tome por exposición. Campos (la revocación añade `reason` y `restored`): `proposal_id`, `source_node_id` (X), `prerequisite_node_id` (P), `source_attempt_ids` (los dos primeros fallos), `action` (`unskip`|`check`), `review_from_due`, `review_to_due`, `at`, `policy_version`. Idempotente: no se emite otra propuesta mientras exista una activa para X→P; repetir la sincronización o un tercer fallo no duplica.
 
 ## Revocación
 
-Si un intento disparador se corrige manualmente y deja de ser fallo de aprendizaje con `error_type='prerequisite'` (o deja de ser vigente), se registra `PREREQUISITE_REVIEW_REVOKED {proposal_id, reason:'correction'}`; el salto de P vuelve a valer y, si el repaso seguía en la fecha adelantada, recupera `review_from_due`. Si los demás fallos siguen cumpliendo el disparador, la sincronización emite una propuesta nueva con otros intentos. Un acierto independiente posterior de X no revoca una propuesta ya emitida: solo reinicia el conteo para propuestas futuras.
+Si un intento disparador se corrige manualmente (solo para propuestas vigentes, es decir, con arista X→P existente) y deja de ser fallo de aprendizaje con `error_type='prerequisite'` (o deja de ser vigente), se registra `PREREQUISITE_REVIEW_REVOKED {proposal_id, reason:'correction'}`; el salto de P vuelve a valer y, si el repaso seguía en la fecha adelantada, recupera `review_from_due`. Si los demás fallos siguen cumpliendo el disparador, la sincronización emite una propuesta nueva con otros intentos. Un acierto independiente posterior de X no revoca una propuesta ya emitida: solo reinicia el conteo para propuestas futuras.
+
+**Revocar no deshace el adelanto de otra propuesta activa.** Si X1→P y X2→P están activas y se revoca la de X1, la fecha de repaso de P **no** se restaura mientras X2 siga activa (la revocación registra `reason:'correction'` y `restored:false`). Al revocar la última propuesta activa sobre P se restaura `review_from_due` (la del evento que hizo el adelanto, aunque su propuesta se revocase antes), solo si el repaso sigue en la fecha adelantada; el evento lleva `restored:true|false`. El `action` de cada propuesta describe el estado en el momento de emitirla (`unskip` si P estaba saltado; `check` si ya no lo estaba, p. ej. por otra propuesta activa) y no cambia después.
+
+## Propuestas huérfanas y caducidad
+
+Si la arista X→P se borra del mapa, la propuesta queda **inerte**: `prerequisiteReviews` la ignora (no escribe nada), el selector no ofrece P si ya no es alcanzable por `relevant()` o si los prerrequisitos de P no están listos (`readyToAdvance`), y la sincronización no emite revocación ni toca el repaso. Si la arista vuelve, la propuesta vuelve a valer. Una propuesta activa **no caduca por tiempo** (decisión actual); solo se resuelve al repasar P, al lograr dominio, o al revocarse por corrección.
 
 ## Lo que ve el aprendiz
 
@@ -53,7 +59,7 @@ Frase en español llano, sin números: «Vamos a repasar «P» antes porque «X�
 
 ## Límites
 
-- **No se adivina P.** `error_type='prerequisite'` no dice qué prerrequisito falla. Solo se propone cuando la arista X→P ya existe en el mapa. Si X tiene varios prerrequisitos directos sin dominio, se proponen todos (no se elige uno) y se ofrece primero el más antiguo en el orden del mapa. Sin arista no hay propuesta.
+- **No se adivina P.** `error_type='prerequisite'` no dice qué prerrequisito falla. Solo se propone cuando la arista X→P ya existe en el mapa. Si X tiene varios prerrequisitos directos sin dominio, se propone **solo uno a la vez**: el primero según el orden de `prerequisites` de X tal como lo declara el mapa de la meta (orden estable del arreglo; no `at` ni `proposal_id`). Mientras esa propuesta siga sin resolverse (P ni repasado ni con dominio) no se emite otra para X. La siguiente propuesta, sobre el siguiente P, solo se emite si el disparador se cumple con **fallos nuevos** (los intentos ya usados por una propuesta vigente de X no se reutilizan); nunca por adelantado. Entre propuestas de distintos X, el selector ofrece primero la de X que aparece antes en `goal.nodes` y, dentro de X, la de P que aparece antes en `X.prerequisites`. Sin arista no hay propuesta.
 - Solo prerrequisitos **directos** de la misma meta; nunca crédito entre metas.
 - La fiabilidad de `error_type` depende del juez del modelo; no se validó con un modelo real.
 
