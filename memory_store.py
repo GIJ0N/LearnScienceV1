@@ -141,6 +141,20 @@ def _finite_number(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool) and value == value and abs(value) != float("inf")
 
 
+PRACTICE_DIFFICULTY_VERSION = "practice_difficulty_v1"
+PRACTICE_BANDS = ("base", "standard", "challenge")
+
+
+def _sanitize_difficulty(event):
+    """practice_difficulty_v1: la banda es metadato de selección. Una banda sin versión válida o fuera de la lista se descarta
+    (el evento se trata como standard); los eventos sin banda se dejan intactos y nunca se les inventa una."""
+    if not isinstance(event, dict) or ("difficulty_band" not in event and "difficulty_policy_version" not in event):
+        return
+    if event.get("difficulty_policy_version") != PRACTICE_DIFFICULTY_VERSION or event.get("difficulty_band") not in PRACTICE_BANDS:
+        event.pop("difficulty_band", None)
+        event.pop("difficulty_policy_version", None)
+
+
 def _sanitize_review_schedule(review):
     """adaptive_schedule_v1: `deferrals` es una lista de objetos con números finitos y `schedule_note` un objeto; si no, se descartan."""
     if "deferrals" in review:
@@ -426,6 +440,10 @@ def validate_store(raw, profile_id, allow_profile_rebind=False, ctx=None):
             if not isinstance(deps, list) or any(dep not in allowed_nodes or dep == node["id"] for dep in deps):
                 raise ValueError("La meta contiene una relación de prerrequisito inválida.")
         coverage = goal.get("coverage", [])
+        for cov in coverage if isinstance(coverage, list) else []:
+            for dim in (cov.get("dimensions") if isinstance(cov, dict) and isinstance(cov.get("dimensions"), list) else []):
+                for ev in (dim.get("evidence") if isinstance(dim, dict) and isinstance(dim.get("evidence"), list) else []):
+                    _sanitize_difficulty(ev)
         if not isinstance(coverage, list) or any(not isinstance(item, dict) or item.get("id") not in allowed_nodes for item in coverage):
             raise ValueError("La cobertura contiene referencias de nodo inválidas.")
         learner = goal.get("learner", {})
@@ -455,6 +473,7 @@ def validate_store(raw, profile_id, allow_profile_rebind=False, ctx=None):
             if not isinstance(event, dict):
                 raise ValueError("El ledger contiene un evento inválido.")
             event["profile_id"] = profile_id
+            _sanitize_difficulty(event)
             if "judge_model" in event and not _valid_model_name(event["judge_model"]):
                 del event["judge_model"]  # judge_model_v1: metadato; un valor inválido se descarta sin rechazar el evento
             if event.get("node_id") is not None and event.get("node_id") not in allowed_nodes:
