@@ -146,6 +146,9 @@ ayuda (`help_used>=1`, no independiente). Ver `docs/direct_teaching_v1.md`.
 Desde `practice_difficulty_v1`, la banda de una práctica (`base`/`standard`/`challenge`) es dato de selección, nunca crédito. La política de suficiencia no cambia, con dos notas de versión:
 una práctica `base` no suma como acierto independiente para `sufficient()`, y un **fallo en `challenge`** (solo con suficiencia previa comprobada al registrar; si no la había, se registra como `standard`) **no cuenta como contradicción ni como fallo de aprendizaje**: no reinicia `lastFailure` ni quita aciertos previos. Es una excepción acotada a «Fuera del diagnóstico, únicamente `PARTIAL` y `MISCONCEPTION` cuentan como fallos de aprendizaje». Los eventos sin banda se tratan como `standard`. Ver `docs/practice_difficulty_v1.md`.
 
+## Revisión de prerrequisitos
+Desde `prerequisite_review_v1`, ≥2 fallos de aprendizaje de X con `error_type='prerequisite'` (intentos distintos, posteriores al último acierto independiente de X, arista X→P ya existente) proponen revisar P con `PREREQUISITE_REVIEW` (sin `node_id`, `creates_evidence:false`). Es una decisión de ruta y calendario: no crea `EVIDENCE`, cobertura, dominio ni suficiencia, y no borra evidencia de P. Nota de versión: sustituye a la antigua regla de `placement_v1` por la que un solo fallo con `error_type='prerequisite'` anulaba el salto de P, y revierte, solo en este caso, la decisión de `adaptive_schedule_v1` de no adelantar P tras un fallo. La política de evidencia no se reinterpreta. Ver `docs/prerequisite_review_v1.md`.
+
 ## Alcance pendiente
 
 No hay verificación semántica de paráfrasis, calibración científica del umbral de dos,
