@@ -6,7 +6,7 @@ FROM python:3.12-slim
 # Usuario sin privilegios; la base SQLite vive en el volumen /data.
 RUN useradd --system --create-home --uid 10001 ruta && mkdir /data && chown ruta /data
 WORKDIR /app
-COPY app_legacy.py memory_store.py hosting.py explore_expr.py ./
+COPY app_legacy.py memory_store.py hosting.py backup.py explore_expr.py ./
 
 ENV PYTHONUNBUFFERED=1 \
     PORT=8765 \

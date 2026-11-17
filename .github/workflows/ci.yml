@@ -207,6 +207,9 @@ jobs:
           python tests/hosting_ready.test.py
           node tests/hosting_ready.test.js
 
+      - name: Test daily database backup
+        run: python tests/backup.test.py
+
       - name: Prepare Playwright and Chromium
         run: python tools/ensure_playwright.py
 

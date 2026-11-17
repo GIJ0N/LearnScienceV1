@@ -28,6 +28,7 @@ Guía práctica; el contrato técnico está en `docs/hosting_ready_v1.md`. Nada 
 | `LEARNSCIENCE_COOKIE_SECURE` | `1` si sirves por HTTPS (cookie `Secure` y nombre `__Host-ruta_session`); es automático si `LEARNSCIENCE_ORIGINS` trae un `https://`. |
 | `LEARNSCIENCE_ALLOW_LAN_WITHOUT_AUTH` | `1` para arrancar sin contraseña en una red privada que no sea Tailscale. Léelo antes: una dirección privada puede ser alcanzable desde fuera (NAT de una nube, Docker `-p`, reenvío de puertos). |
 | `RUTA_DB_PATH` | Ruta del archivo SQLite. |
+| `LEARNSCIENCE_BACKUP_DIR` | Carpeta de las copias diarias (por defecto `backups/` junto a la base, nunca dentro del repo). Ver `docs/backup_v1.md`. |
 | `GEMINI_API_KEY` (o `ANTHROPIC_API_KEY` con `LLM_PROVIDER=anthropic`) | Clave del modelo. **Siempre por variable de entorno o gestor de secretos; nunca en el repositorio, en la imagen ni en un archivo versionado.** |
 
 La contraseña **no** es una variable: se fija con `python app_legacy.py --set-password` (mínimo 12 caracteres, se pide por `getpass`).
@@ -102,6 +103,8 @@ Solo con `LEARNSCIENCE_AUTH=required`. Riesgos reales: cualquiera en internet pu
 4. En `https://tutor.ejemplo.com` iniciarás sesión; el calendario se suscribe con `webcal://`/`https://` normal, y la cookie ya va `Secure`.
 
 ## Copia de seguridad y restauración
+
+El servidor hace además una copia diaria verificada al arrancar (ver `docs/backup_v1.md`); lo que sigue sirve para copias a mano o programadas aparte.
 
 Hay dos mecanismos y no son equivalentes:
 
