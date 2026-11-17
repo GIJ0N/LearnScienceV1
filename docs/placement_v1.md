@@ -44,7 +44,7 @@ Estado de cada tema, derivado de las respuestas (nunca guardado como dominio):
 - Cada respuesta se registra como `EVIDENCE` con `stage='DIAGNOSTIC'`, `role='placement_probe'`, `supports_independence=false`, `help_used=0`. Queda en el historial auditable y en `relevant_memory`, así la primera lección se adapta a ella (un fallo lleva a `lesson_adaptation='repair'`).
 - **No suma suficiencia**: no es independiente (opción múltiple con corrección inmediata). Un fallo de diagnóstico no cuenta como fallo de aprendizaje.
 - `PLACEMENT_SKIP` es una decisión de ruta, igual que `CURRICULUM_CONTINUED`: `readyToAdvance` deja pasar el tema, pero `verified()`, cobertura y el contador de habilidades con evidencia no cambian. Lleva `basis: 'probed' | 'inferred'`.
-- **Revocación** (derivada, sin escrituras): un salto deja de valer si después hay un fallo de aprendizaje en ese tema, o un fallo con `error_type='prerequisite'` en un tema que lo tiene como prerrequisito. Entonces vuelve a la ruta.
+- **Revocación** (derivada, sin escrituras): un salto deja de valer si después hay un fallo de aprendizaje en ese tema, o si hay una propuesta `PREREQUISITE_REVIEW` activa sobre él (≥2 fallos de aprendizaje con `error_type='prerequisite'` de un tema que lo tiene como prerrequisito; ver `docs/prerequisite_review_v1.md`). Entonces vuelve a la ruta. *Cambio de `prerequisite_review_v1`:* antes bastaba **un** fallo de un dependiente con `error_type='prerequisite'`.
 
 ## Contratos
 

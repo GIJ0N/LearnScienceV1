@@ -133,7 +133,7 @@ assert.equal(policy.probedPlacementStatus([{ status: 'CORRECT', learner_confiden
   assert.equal(policy.placementStatuses(g).a, 'evidenced');
 }
 
-// Skips are revoked by later learning failures on the topic or prerequisite errors above it.
+// Skips are revoked by later learning failures on the topic, or by a prerequisite_review_v1 proposal (>=2 prerequisite failures above it).
 {
   const g = attach(goal()); policy.startPlacement(g); delete g.placement.production; // contrato de solo opción múltiple (diagnóstico anterior a placement_production_v1)
   answer(g, 'd', 'CORRECT', 95); answer(g, 'e', 'CORRECT', 95);
@@ -141,7 +141,10 @@ assert.equal(policy.probedPlacementStatus([{ status: 'CORRECT', learner_confiden
   assert.equal(policy.placementSkipped(g, 'b'), true);
   const contract = id => policy.normalizeActivityContract({ activity_id: 'act-' + id, node_id: id, stage: 'INDEPENDENT', kind: 'application', observable_dimensions: ['conceptual'], supports_independence: true, role: 'independent_practice' });
   policy.record(g, 'c', 'INDEPENDENT', 'r', { status: 'PARTIAL', error_type: 'prerequisite', feedback: '', hint: '' }, 0, contract('c'), 'later-c');
-  assert.equal(policy.placementSkipped(g, 'b'), false, 'Un error de prerrequisito en c reabre b');
+  // prerequisite_review_v1: UN solo fallo con error_type=prerequisite ya no reabre b (antes lo hacía); hacen falta dos intentos distintos.
+  assert.equal(policy.placementSkipped(g, 'b'), true, 'Un solo error de prerrequisito en c ya NO reabre b');
+  policy.record(g, 'c', 'INDEPENDENT', 'r2', { status: 'PARTIAL', error_type: 'prerequisite', feedback: '', hint: '' }, 0, contract('c'), 'later-c2');
+  assert.equal(policy.placementSkipped(g, 'b'), false, 'Dos errores de prerrequisito en c (intentos distintos) reabren b');
   assert.equal(policy.placementSkipped(g, 'c'), false, 'El fallo en c reabre c');
   assert.equal(policy.placementSkipped(g, 'a'), true, 'a no se ve afectado');
 }
