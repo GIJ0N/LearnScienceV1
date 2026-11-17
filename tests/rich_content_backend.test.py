@@ -268,7 +268,7 @@ class Compact(unittest.TestCase):
 
     def test_compact_rich_is_used_only_on_model_content_fields(self):
         lines = [ln for ln in (ROOT / 'app_legacy.py').read_text(encoding='utf-8').splitlines() if 'compact_rich(' in ln and not ln.startswith('def ')]
-        self.assertEqual(len(lines), 27, 'lista cerrada de líneas con contenido generado; ampliarla es una decisión explícita (authentic_performance_v1 añade 6: caso y comentario del juez)')
+        self.assertEqual(len(lines), 29, 'lista cerrada de líneas con contenido generado; ampliarla es una decisión explícita (authentic_performance_v1 añade 6: caso y comentario del juez; placement_production_v1 añade 2: el enunciado abierto y el comentario del juez)')
         for ln in lines:
             for forbidden in ("data.get(", "reasoning", "response_text", "profile_id", "goal_id", "item_id", "attempt_id", "citation", "fingerprint", "json.dumps", "_hash", "answer_text"):
                 self.assertNotIn(forbidden, ln, ln[:80])
