@@ -265,24 +265,130 @@ const prodEvents = g => g.events.filter(e => e.type === 'EVIDENCE' && e.activity
     assert.equal(g.placement.production.status, 'ready');
   }
 
-  // 13. Seguir solo con opción múltiple: no concede dominio, conserva el repaso programado y las producciones ya fallidas.
+  // 13. Seguir solo con opción múltiple: no concede dominio, conserva el repaso programado y NO convierte en held lo que estaba pendiente.
   {
     const g = started();
     mc(g, 'd', 'CORRECT', 95); produce(g, 'd', 'PARTIAL');
     mc(g, 'c', 'CORRECT', 95);                     // producción pendiente
+    mc(g, 'a', 'CORRECT', 95);
     assert.equal(policy.placementStatuses(g).c, 'fragile');
     assert.equal(policy.skipPlacementProductions(g), true);
     assert.equal(policy.skipPlacementProductions(g), false);
     assert.ok(g.events.some(e => e.type === 'PLACEMENT_PRODUCTION_SKIPPED'));
     assert.equal(policy.placementPendingProduction(g), null);
+    assert.deepEqual(g.placement.production.declined_node_ids, ['c']);
     const st = policy.placementStatuses(g);
-    assert.equal(st.c, 'held', 'sin producción solicitada vale la regla de opción múltiple');
+    assert.equal(st.c, 'fragile', 'el tema cuya producción estaba pendiente queda frágil, no held');
     assert.equal(st.d, 'fragile', 'una producción ya fallida sigue contando aunque se omita el resto');
+    assert.equal(st.a, 'held', 'un tema fuera del plan sigue la regla de opción múltiple');
+    assert.equal(policy.placementProductionState(g, 'c').declined, true);
+    assert.equal(policy.nextPlacementNode(g) === 'c', false, 'no se re-pregunta por opción múltiple');
     const out = policy.finishPlacement(g, 'resolved', false);
-    assert.ok(out.skipped.includes('c') && !out.skipped.includes('d'));
-    assert.equal(policy.verified(g, 'c'), false, 'PLACEMENT_SKIP no concede dominio');
-    assert.ok(g.events.some(e => e.type === 'PLACEMENT_REVIEW_SCHEDULED' && e.node_id === 'c'), 'conserva el repaso programado');
-    assert.ok(g.reviews.some(r => r.id === 'c'));
+    assert.ok(out.skipped.includes('a') && !out.skipped.includes('c') && !out.skipped.includes('d'));
+    assert.equal(policy.verified(g, 'a'), false, 'PLACEMENT_SKIP no concede dominio');
+    assert.ok(g.events.some(e => e.type === 'PLACEMENT_REVIEW_SCHEDULED' && e.node_id === 'a'), 'conserva el repaso programado');
+    assert.ok(g.reviews.some(r => r.id === 'a'));
+  }
+
+  // 13b. Caso del supervisor (d/a/b/c): saltar no hace held a d ni propaga a sus prerrequisitos.
+  {
+    const g = started();
+    mc(g, 'd', 'CORRECT', 95);                     // tema clave, producción pendiente
+    assert.equal(policy.placementStatuses(g).c, 'unprobed');
+    policy.skipPlacementProductions(g);
+    const st = policy.placementStatuses(g);
+    assert.equal(st.d, 'fragile', 'd sigue frágil tras saltar');
+    for (const id of ['a', 'b', 'c']) assert.equal(st[id], 'unprobed', id + ' no se deduce desde un tema no confirmado');
+    mc(g, 'a', 'CORRECT', 95); mc(g, 'b', 'CORRECT', 95);
+    const after = policy.placementStatuses(g);
+    assert.equal(after.d, 'fragile'); assert.equal(after.c, 'unprobed');
+    const out = policy.finishPlacement(g, 'resolved', false);
+    assert.ok(!out.skipped.includes('d') && !out.skipped.includes('c'));
+  }
+
+  // 13c. Un lote ready con pregunta solo para e no bloquea en el primer tema pendiente (c).
+  {
+    const g = started();
+    mc(g, 'c', 'CORRECT', 95); mc(g, 'e', 'CORRECT', 95);
+    g.placement.production.status = 'ready';
+    const it = prodItem(g, 'e');
+    assert.equal(policy.placementPendingProduction(g), 'e', 'salta c (sin pregunta libre) y ofrece e');
+    produce(g, 'e', 'CORRECT');
+    assert.equal(policy.placementPendingProduction(g), null, 'c no tiene pregunta: no bloquea el diagnóstico');
+    assert.equal(policy.placementStatuses(g).c, 'fragile');
+    assert.ok(it);
+  }
+
+  // 13d. Un nuevo diagnóstico no trata como evidenciado un tema cuyo único evento fue una producción fallida.
+  {
+    const g = started();
+    mc(g, 'd', 'CORRECT', 95); produce(g, 'd', 'MISCONCEPTION');
+    assert.ok(g.events.some(e => e.type === 'EVIDENCE' && e.node_id === 'd' && e.evidence_role === 'diagnostic'));
+    assert.ok(!policy.placementPriorEvidence(g).includes('d'), 'las producciones (evidencia de diagnóstico) no cuentan como evidencia previa');
+    g.placement.status = 'done';
+    policy.startPlacement(g);
+    assert.ok(!g.placement.evidenced_nodes.includes('d'));
+    assert.ok(g.placement.production.node_ids.includes('d'), 'd vuelve a ser tema clave en el nuevo diagnóstico');
+  }
+
+  // 13e. Tiempo de espera: se consulta otra vez con el MISMO attempt_id antes de marcar no disponible.
+  {
+    const g = started();
+    mc(g, 'd', 'CORRECT', 95);
+    const item = prodItem(g, 'd');
+    const bodies = [];
+    let n = 0;
+    global.fetch = async (url, init) => {
+      bodies.push(JSON.parse(init.body)); n++;
+      if (n === 1) throw Object.assign(new Error('abortado'), { name: 'AbortError' });
+      return { ok: true, status: 200, json: async () => prodResult(item, 'CORRECT') };
+    };
+    const ui = policy.renderPlacementProductionItem(element('section'), g, item);
+    ui.answer.value = 'Una explicación suficientemente larga con mis propias palabras.';
+    await ui.send.onclick();
+    assert.equal(bodies.length, 2);
+    assert.equal(bodies[0].attempt_id, bodies[1].attempt_id, 'misma identidad de intento');
+    assert.equal(g.placement.productions.find(x => x.item_id === item.item_id).status, 'CORRECT');
+    assert.equal(policy.placementStatuses(g).d, 'held');
+    // si el segundo intento también agota el tiempo: no disponible (frágil)
+    const g2 = started();
+    mc(g2, 'd', 'CORRECT', 95);
+    const item2 = prodItem(g2, 'd');
+    let calls = 0;
+    global.fetch = async () => { calls++; throw Object.assign(new Error('abortado'), { name: 'AbortError' }); };
+    const ui2 = policy.renderPlacementProductionItem(element('section'), g2, item2);
+    ui2.answer.value = 'Una explicación suficientemente larga con mis propias palabras.';
+    await ui2.send.onclick();
+    assert.equal(calls, 2);
+    assert.equal(g2.placement.productions[0].status, 'UNAVAILABLE');
+    // un error definitivo (cuota) no se reintenta
+    const g3 = started();
+    mc(g3, 'd', 'CORRECT', 95);
+    const item3 = prodItem(g3, 'd');
+    calls = 0;
+    global.fetch = async () => { calls++; return { ok: false, status: 400, json: async () => ({ error: 'Límite local alcanzado; continúa con contenido guardado.' }) }; };
+    const ui3 = policy.renderPlacementProductionItem(element('section'), g3, item3);
+    ui3.answer.value = 'Una explicación suficientemente larga con mis propias palabras.';
+    await ui3.send.onclick();
+    assert.equal(calls, 1);
+    assert.equal(g3.placement.productions[0].reason, 'quota');
+  }
+
+  // 13f. Motivo del fallo con cualquier proveedor (el servidor normaliza el mensaje del juez).
+  {
+    assert.equal(policy.placementProductionReason(new Error('El modelo calificador (claude-x) no respondió: Anthropic respondió 529')), 'judge');
+    assert.equal(policy.placementProductionReason(new Error('Límite local alcanzado; continúa con contenido guardado.')), 'quota');
+  }
+
+  // 13g. El lote lleva la identidad del diagnóstico (tope por meta y diagnóstico en el servidor).
+  {
+    const g = started();
+    let body = null;
+    global.fetch = async (url, init) => { body = JSON.parse(init.body); return { ok: true, status: 200, json: async () => ({ items: [] }) }; };
+    mc(g, 'd', 'CORRECT', 95);
+    await policy.ensurePlacementProduction(g, 'd');
+    assert.equal(body.diagnostic, String(g.placement.started_at));
+    assert.ok(body.diagnostic.length > 0);
   }
 
   // 14. Compatibilidad: un diagnóstico anterior (sin plan) se comporta como antes y no se inventan producciones.
