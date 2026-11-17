@@ -268,5 +268,11 @@ const rest = { ok: (body = {}) => ({ ok: true, status: 200, json: async () => bo
 
   // ---------------------------------------------------------------- 5. CSS de las clases nuevas
   for (const c of ['.reminder-notice', '.reminders-panel', '.reminder-days', '.reminder-link']) assert.ok(p.VISUAL_CSS.includes(c), 'falta estilo ' + c);
+  // ---------------------------------------------------------------- 6. línea de copia de seguridad (backup_v1)
+  assert.equal(p.backupStatusText(null), 'Sin copia reciente');
+  assert.equal(p.backupStatusText({ has_backup: true, recent: false, last_at: '2026-11-10T10:00:00Z', verified: true }), 'Sin copia reciente');
+  assert.equal(p.backupStatusText({ has_backup: true, recent: true, last_at: 'basura', verified: true }), 'Sin copia reciente');
+  assert.match(p.backupStatusText({ has_backup: true, recent: true, last_at: '2026-11-16T12:00:00Z', verified: true }), /^Última copia: 2026-11-1[5-7] \d\d:\d\d · verificada$/);
+  assert.doesNotMatch(p.backupStatusText({ has_backup: true, recent: true, last_at: '2026-11-16T12:00:00Z', verified: false }), /verificada/);
   console.log('OK hosting_ready.test.js');
 })().catch(e => { console.error = console.log; console.error(e); process.exit(1); });
