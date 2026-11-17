@@ -177,6 +177,70 @@ async function main() {
       assert.equal(await page.getByRole('button', { name: 'Menú', exact: true }).getAttribute('aria-expanded'), 'false', 'navegar desde el contenido cierra el menú');
       await ctx.close();
     }
+    // --- rich_content_v1: fórmulas (MathML real) y «Explora la relación» sin desbordar a 390 px ---
+    {
+      const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+      const page = await ctx.newPage();
+      const problems = [];
+      page.on('pageerror', e => problems.push('pageerror: ' + e.message));
+      page.on('console', m => { if (m.type() === 'error') problems.push('console.error: ' + m.text()); });
+      await openGoal(page, url);
+      // Se prepara la lección EN LA PÁGINA (la semilla del demo no cambia): una fórmula válida en línea, una de bloque, una no soportada y un precio.
+      await page.evaluate(() => {
+        const goal = store.goals.find(x => x.id === 'visual-goal'), l = goal.lessons.ecuaciones;
+        l.explanation = 'Se cumple $x = \\frac{b - c}{a}$ cuando $a \\neq 0$; cuesta $5 y sube. Esto no se soporta: $\\foo{x}$ y queda tal cual.';
+        l.example = 'Resuelve $$2x + 4 = 10 \\to x = \\frac{10 - 4}{2}$$ y comprueba con $\\sqrt{x^{2}}$.';
+        const q = (id, prompt, kind, dim) => ({ activity_id: id, prompt, reference: 'r', kind, observable_dimensions: [dim] });
+        Object.assign(l, { check: q('smoke-check', '¿Por qué importa $a \\neq 0$?', 'explanation', 'conceptual'), guided: q('smoke-guided', 'Guiada', 'application', 'direct_application'), integration: q('smoke-integration', 'Integra', 'context_case', 'contextual_application') });
+        const want = lessonRequest(goal, goal.nodes.find(x => x.id === 'ecuaciones')).target_dimension; if (want) l.target_dimension = want; else delete l.target_dimension;
+        l.steps_skipped = true; l.faded_skipped = true;
+        l.explore = { title: 'Despeje de x', expression: 'm*t+c', variables: [{ name: 'm', label: 'Pendiente', unit: '', min: 1, max: 9, step: 1, value: 2 }, { name: 't', label: 'Tiempo', unit: 's', min: 0, max: 10, step: 0.5, value: 4 }, { name: 'c', label: 'Constante', unit: '', min: 0, max: 20, step: 1, value: 4 }], output: { label: 'Resultado', unit: 'u' }, prompt_before: 'Predice qué pasa con $y = m t + c$.', takeaway: 'Es lineal en t.', explore_id: 'explore-smoke' };
+        goal.session = { ...goal.session, mode: 'TEACH', node: 'ecuaciones', stack: [], tries: 0, hints: 0 };
+        page = 'session'; render();
+      });
+      await page.locator('.explore').waitFor({ state: 'visible', timeout: 10000 });
+      const info = await page.evaluate(() => {
+        const maths = [...document.querySelectorAll('math')];
+        return {
+          count: maths.length, namespaces: [...new Set(maths.map(m => m.namespaceURI))],
+          boxes: maths.map(m => { const r = m.getBoundingClientRect(); return { w: r.width, h: r.height, right: r.right, label: m.getAttribute('aria-label') }; }),
+          hasFraction: maths.some(m => m.querySelector('mfrac')), literal: document.body.textContent.includes('$\\foo{x}$') && document.body.textContent.includes('cuesta $5 y sube'),
+          scrollWidth: document.documentElement.scrollWidth, innerWidth: window.innerWidth, blockDisplay: document.querySelector('.math-block') && getComputedStyle(document.querySelector('.math-block')).display,
+        };
+      });
+      assert.ok(info.count >= 4, 'se esperan ≥ 4 elementos math, hay ' + info.count);
+      assert.deepEqual(info.namespaces, ['http://www.w3.org/1998/Math/MathML']);
+      assert.ok(info.hasFraction, 'la fracción produce <mfrac>');
+      assert.ok(info.boxes.every(b => b.w > 4 && b.h > 4), 'Chromium debe renderizar las fórmulas con tamaño real: ' + JSON.stringify(info.boxes));
+      assert.ok(info.boxes.every(b => b.right <= info.innerWidth + 0.5), 'una fórmula se sale de la pantalla: ' + JSON.stringify(info.boxes));
+      assert.ok(info.literal, 'la fórmula no soportada y el precio se muestran tal cual');
+      assert.equal(info.blockDisplay, 'block');
+      assert.ok(info.scrollWidth <= info.innerWidth, 'desplazamiento horizontal con fórmulas: ' + info.scrollWidth + ' > ' + info.innerWidth);
+      // Predecir -> explorar: deslizadores táctiles, gráfica SVG dentro de la pantalla.
+      await page.getByRole('button', { name: 'Sube', exact: true }).click();
+      const ex = await page.evaluate(() => {
+        const sliders = [...document.querySelectorAll('.explore input[type=range]')].map(i => { const r = i.getBoundingClientRect(); return { h: r.height, w: r.width, right: r.right }; });
+        const svg = document.querySelector('.explore-svg'), r = svg && svg.getBoundingClientRect();
+        return { sliders, svg: r && { w: r.width, h: r.height, right: r.right }, curve: Boolean(document.querySelector('.explore-curve')), dot: Boolean(document.querySelector('.explore-dot')),
+          stroke: svg && getComputedStyle(document.querySelector('.explore-curve')).stroke, out: document.querySelector('.explore-out')?.textContent,
+          scrollWidth: document.documentElement.scrollWidth, innerWidth: window.innerWidth };
+      });
+      assert.equal(ex.sliders.length, 3);
+      assert.ok(ex.sliders.every(s => s.h >= 43.5), 'deslizadores < 44 px: ' + JSON.stringify(ex.sliders));
+      assert.ok(ex.sliders.every(s => s.right <= ex.innerWidth + 0.5), 'deslizador fuera de pantalla');
+      assert.ok(ex.svg && ex.svg.w > 100 && ex.svg.right <= ex.innerWidth + 0.5, 'gráfica fuera de pantalla: ' + JSON.stringify(ex.svg));
+      assert.ok(ex.curve && ex.dot, 'curva y punto actual'); assert.ok(/^rgb\(/.test(ex.stroke), 'la curva usa un token de color: ' + ex.stroke);
+      assert.ok(/Resultado: 12 u/.test(ex.out), 'resultado en vivo: ' + ex.out); assert.ok(ex.scrollWidth <= ex.innerWidth, 'desplazamiento horizontal con la exploración');
+      await page.locator('.explore input[type=range]').nth(1).focus(); await page.keyboard.press('ArrowRight');
+      assert.ok(/Resultado: 1[0-9]/.test(await page.locator('.explore-out').textContent()), 'el teclado mueve el deslizador y el resultado cambia');
+      // Tema oscuro: los tokens cambian y la curva sigue siendo visible.
+      await page.evaluate(() => { document.documentElement.dataset.theme = 'dark'; });
+      const dark = await page.evaluate(() => ({ stroke: getComputedStyle(document.querySelector('.explore-curve')).stroke, bg: getComputedStyle(document.querySelector('.explore')).backgroundColor }));
+      assert.ok(/^rgb\(/.test(dark.stroke) && dark.stroke !== ex.stroke, 'el tema oscuro cambia el trazo: ' + dark.stroke + ' vs ' + ex.stroke);
+      await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
+      assert.deepEqual(problems, [], 'errores de página o consola:\n' + problems.join('\n'));
+      await ctx.close();
+    }
     // --- Escritorio 1280×900 ---
     {
       const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });

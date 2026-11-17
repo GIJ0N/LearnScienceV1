@@ -124,6 +124,10 @@ jobs:
           python tests/learner_signals_backend.test.py
       - name: Run evidence policy tests
         run: node tests/evidence_policy.test.js
+      - name: Run rich content tests
+        run: |
+          node tests/rich_content.test.js
+          python tests/rich_content_backend.test.py
 
       - name: Test read-only evidence map
         run: |

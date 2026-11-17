@@ -10,6 +10,7 @@ import sqlite3
 import threading
 import time
 import uuid
+import explore_expr
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -162,6 +163,53 @@ def _sanitize_review_schedule(review):
                 del note["due"]
 
 
+EXPLORE_RAW_MAX_BYTES = 8000      # tope de lectura antes de validar; el tamaño guardado lo fija explore_expr.STORED_MAX_BYTES
+_EXPLORE_CACHE = {}               # hash del bloque -> bloque limpio (o None); acotado
+_EXPLORE_CACHE_MAX = 256
+
+
+def _clean_explore(value):
+    """Bloque `explore` limpio o None. Resultado en caché por hash: guardar cientos de veces no revalida lo ya validado."""
+    try:
+        raw = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if len(raw.encode("utf-8")) > EXPLORE_RAW_MAX_BYTES:
+        return None
+    key = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    if key in _EXPLORE_CACHE:
+        hit = _EXPLORE_CACHE[key]
+        return copy.deepcopy(hit) if hit is not None else None
+    clean = None
+    try:
+        if isinstance(value, dict):
+            clean = explore_expr.validate_explore(value)
+            explore_id = value.get("explore_id")
+            if isinstance(explore_id, str) and 0 < len(explore_id) <= 80:
+                clean["explore_id"] = explore_id
+    except (ValueError, TypeError, OverflowError):
+        clean = None
+    if len(_EXPLORE_CACHE) >= _EXPLORE_CACHE_MAX:
+        _EXPLORE_CACHE.pop(next(iter(_EXPLORE_CACHE)))
+    _EXPLORE_CACHE[key] = copy.deepcopy(clean) if clean is not None else None
+    return clean
+
+
+def _sanitize_lesson_explore(lesson):
+    """rich_content_v1: `explore` debe pasar el mismo contrato local que el generador (expresión segura, rangos finitos, tamaño acotado).
+    Si no, se elimina; `explore_na` solo se conserva si es booleano. La lección y el resto del almacén no se rechazan."""
+    if not isinstance(lesson, dict):
+        return
+    if "explore" in lesson:
+        clean = _clean_explore(lesson["explore"])
+        if clean is None:
+            del lesson["explore"]
+        else:
+            lesson["explore"] = clean
+    if "explore_na" in lesson and not isinstance(lesson["explore_na"], bool):
+        del lesson["explore_na"]
+
+
 def validate_store(raw, profile_id, allow_profile_rebind=False):
     """Validate relations and add ownership metadata without inventing evidence."""
     profile_id = _profile_id(profile_id)
@@ -205,6 +253,8 @@ def validate_store(raw, profile_id, allow_profile_rebind=False):
             raise ValueError("El estado del estudiante contiene referencias de nodo inválidas.")
         if not isinstance(lessons, dict) or any(node_id not in allowed_nodes for node_id in lessons):
             raise ValueError("Las microlecciones contienen referencias de nodo inválidas.")
+        for lesson in lessons.values():
+            _sanitize_lesson_explore(lesson)  # rich_content_v1: el bloque `explore` malformado se descarta sin rechazar el almacén
         reviews = goal.get("reviews", [])
         if not isinstance(reviews, list) or any(not isinstance(item, dict) or item.get("id") not in allowed_nodes for item in reviews):
             raise ValueError("Los repasos contienen referencias de nodo inválidas.")
