@@ -117,6 +117,7 @@ node tests/lesson_ui.test.js
 node tests/path_ui.test.js
 node tests/motivation.test.js
 node tests/nav_menu.test.js
+node tests/mobile_polish.test.js
 python tools/ensure_playwright.py
 node tests/browser_smoke.test.js
 node tests/qa_round8.test.js
@@ -480,3 +481,11 @@ Mutaciones comprobadas (rompe, falla, restaura): que el disparador sea 1 fallo, 
 Corrección `feat/prerequisite-review-fix` (revisión de Opus): `tests/prerequisite_review.test.js` añade casos para un P a la vez en el orden del mapa (`[zeta, alfa, x]` con `x.prerequisites=['zeta','alfa']` ofrece solo `zeta`; `alfa` solo con fallos nuevos), revocar X1 sin deshacer el adelanto mientras X2 siga activa (`restored:false`; al revocar X2 se restaura), fallo en episodio de reparación que no cuenta (M9), acierto con ayuda que no reinicia el conteo (M11), P con dominio sin propuesta (M5), acierto independiente en banda `base` que no reinicia y en `standard` sí, y propuesta huérfana inerte (sin selector ni eventos nuevos). Mutaciones comprobadas (rompe, falla, restaura): quitar el filtro `repair_episode` en `prqFailures`, permitir acierto con ayuda, quitar `!verified` en `prqCandidates`, quitar el filtro de banda `base`, ordenar por `at`/`proposal_id`, restaurar siempre al revocar, quitar `prqOfferable` y revocar huérfanas.
 
 Sin validar: Gemini real (si `error_type='prerequisite'` es fiable en el juez), navegador (solo se probó con DOM simulado), qué prerrequisito falla de verdad cuando X tiene varios.
+
+## mobile_polish_v1 (lote 5, pulido para iPhone)
+
+`node tests/mobile_polish.test.js` comprueba (cliente, DOM simulado, sin red ni navegador): el borrador de la respuesta abierta se guarda con la clave `ls-draft:<profile_id>:<activity_id>`, se restaura al volver, se conserva si el envío falla y se borra al enviar con éxito; un borrador de otro perfil no aparece ni se mezcla; un `localStorage` que lanza no rompe la página; el borrador no genera llamadas al servidor (contador de `fetch`), ni eventos, ni entra en la meta ni en la petición de evaluación. También hace comprobaciones textuales de `VISUAL_CSS` (cuatro `env(safe-area-inset-*)`, `min-height:44px;min-width:44px` y `font-size:16px` en el bloque de 600 px) y de `viewport-fit=cover` en `app_legacy.py`. Una prueba textual no prueba el aspecto real.
+
+Mutaciones comprobadas (rompe, falla, restaura): quitar el borrado al enviar con éxito y quitar el perfil de la clave. Ambas hacen fallar el test (se probaron sobre copias de `app.js` con `LS_APP_JS`).
+
+Sin validar: Safari/iPhone real (muesca, teclado, zoom al enfocar), Gemini real y otros anchos de teléfono. Ver `docs/mobile_polish_v1.md`.

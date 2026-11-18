@@ -216,6 +216,9 @@ jobs:
       - name: Test daily database backup
         run: python tests/backup.test.py
 
+      - name: Test mobile polish (safe-area, touch targets, local draft)
+        run: node tests/mobile_polish.test.js
+
       - name: Prepare Playwright and Chromium
         run: python tools/ensure_playwright.py
 
