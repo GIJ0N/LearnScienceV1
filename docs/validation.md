@@ -109,6 +109,7 @@ python tests/teaching_ladder_backend.test.py
 node tests/teaching_ladder.test.js
 python tests/judge_model.test.py
 node tests/judge_model.test.js
+python tests/judge_calibration.test.py
 node tests/adaptive_schedule.test.js
 python tests/adaptive_schedule_backend.test.py
 node tests/study_plan.test.js
@@ -489,3 +490,7 @@ Sin validar: Gemini real (si `error_type='prerequisite'` es fiable en el juez), 
 Mutaciones comprobadas (rompe, falla, restaura): quitar el borrado al enviar con éxito y quitar el perfil de la clave. Ambas hacen fallar el test (se probaron sobre copias de `app.js` con `LS_APP_JS`).
 
 Sin validar: Safari/iPhone real (muesca, teclado, zoom al enfocar), Gemini real y otros anchos de teléfono. Ver `docs/mobile_polish_v1.md`.
+
+## Informe de calibración del juez (`judge_calibration_v1`)
+
+`python tests/judge_calibration.test.py` (SQLite temporal con eventos sintéticos, sin red ni proveedor) comprueba que `tools/judge_calibration.py`: calcula el acuerdo juez↔confirmación local y el desacuerdo, cuenta la corrección manual aparte (no como evaluación ni acuerdo), nunca cuenta `UNKNOWN` (del juez o de la confirmación) ni campos ausentes de datos anteriores como acuerdo, agrupa los eventos sin `judge_model` como «unknown (dato anterior)», marca «insuficiente» sin porcentaje toda celda con menos de 30 casos, no incluye texto de respuestas ni de preguntas ni el id de perfil en claro (solo hash corto), no modifica la base (hash antes y después) y rechaza `--out` igual a la base. Mutaciones comprobadas (rompe, falla, restaura): contar `UNKNOWN` como acuerdo, quitar la marca de insuficiente (`MIN_CELL=0`) e imprimir el id de perfil en claro hacen fallar el test. Diseño en `docs/judge_calibration_v1.md`. Sin validar: datos reales (pocos casos todavía) ni Gemini real.
