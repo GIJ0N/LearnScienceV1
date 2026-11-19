@@ -125,6 +125,8 @@ jobs:
           python tests/prompt_bench.test.py
       - name: Run LLM provider tests
         run: python tests/llm_provider.test.py
+      - name: Run LaTeX escape tests
+        run: python tests/latex_escapes.test.py
       - name: Run learner signal tests
         run: |
           node tests/learner_signals.test.js
