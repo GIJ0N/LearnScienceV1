@@ -68,6 +68,8 @@ node tests/delayed_review.test.js
 python tests/delayed_review_backend.test.py
 python tests/durable_memory.test.py
 node tests/durable_memory_frontend.test.js
+python tests/store_conflict_backend.test.py
+node tests/store_conflict.test.js
 node tests/insecure_context_ids.test.js
 node tests/microtutoring_repair_episode.test.js
 node tests/repair_teaching_v2.test.js
@@ -134,6 +136,8 @@ Git almacena los archivos de este repositorio con LF, pero un checkout de Window
 `python tests/reachable_dimensions.test.py` simula sin red el generador activo, normaliza mapa y microlección en el backend y entrega las preguntas a `app.js`. Verifica para `variables`, `units`, `equation_manipulation` y `method_selection` el recorrido contrato → evaluación simulada → evento → evidencia → cobertura, además de los casos negativos de familia, rol, ayuda, `UNKNOWN`, idempotencia, reparación hija y datos legacy. También fuerza contratos dirigidos incompatibles y comprueba que el rechazo deja la cobertura intacta, conserva `target_dimension` y ofrece un reintento explícito de una sola solicitud.
 
 `python tests/durable_memory.test.py` usa una base SQLite temporal. Verifica persistencia tras reinicio, aislamiento de perfiles, respuesta y evaluación completas, conflicto de revisión sin sobreescritura, importación idempotente sin evidencia inventada, exportación/restauración y contexto de memoria acotado con procedencia. `node tests/durable_memory_frontend.test.js` verifica el error visible de escritura, su recuperación, la asociación de perfil y la pausa de una sesión breve sin escribir el progreso completo en `localStorage`.
+
+`python tests/store_conflict_backend.test.py` usa SQLite temporal y HTTP local. Verifica que un conflicto de revisión responde con `code: 'STORE_CONFLICT'`, que otros errores de validación no lo llevan y que el historial previo queda intacto. `node tests/store_conflict.test.js` usa DOM simulado y un servidor falso con semántica de revisión: no reenvía la revisión obsoleta tras un conflicto, ofrece descargar y recargar con confirmación, avisa al cerrar solo con cambios pendientes y conserva el borrador `ls-draft:*` hasta el guardado durable exitoso. Ver `docs/store_conflict_v1.md`.
 
 `node tests/repair_teaching_v2.test.js` recorre diagnóstico, selección de laguna, enseñanza, omisión mediante CHECK, ayuda guiada, retirada de apoyo, actividad independiente alternativa, retorno al padre, pausa, recarga, checkpoint e idempotencia. `python tests/repair_teaching_backend.test.py` usa respuestas controladas y valida los dos contratos del generador y la persistencia durable. Ninguna de estas pruebas llama a Gemini.
 
