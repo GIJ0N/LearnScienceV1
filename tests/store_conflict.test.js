@@ -143,6 +143,7 @@ async function scenarioDownloadAndReloadWithConfirmation() {
   const server = fakeServer(2);
   const policy = load();
   policy.setStoreForTests(localStore());
+  policy.setPageForTests('profiles');
   policy.setProfileForTests(profile(), 1);
   await policy.save();
   const before = server.requests.length;
@@ -172,6 +173,7 @@ async function scenarioUnloadGuardFollowsDirtyState() {
   const server = fakeServer(2);
   const policy = load();
   policy.setStoreForTests(localStore());
+  policy.setPageForTests('profiles');
   policy.setProfileForTests(profile(), 2);
   assert.equal(await policy.save(), true);
   assert.equal(dom.listeners.has('beforeunload'), false, 'sin cambios pendientes no hay aviso al cerrar');
