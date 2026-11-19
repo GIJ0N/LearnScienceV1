@@ -42,6 +42,7 @@ def normalize_hint_level(value):
 
 SCHEMA_VERSION = 2
 STORE_SCHEMA_VERSION = 5
+STORE_CONFLICT_PREFIX = "STORE_CONFLICT: "
 PROFILE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$")
 DEFAULT_PREFERENCES = {
     "engineering_context": False,
@@ -1595,7 +1596,7 @@ class DurableMemory:
             if not current:
                 raise ValueError("El perfil local no existe.")
             if expected_revision is not None and int(expected_revision) != current["revision"]:
-                raise ValueError("La memoria cambió en otra sesión; recarga antes de guardar.")
+                raise ValueError(STORE_CONFLICT_PREFIX + "La memoria cambió en otra sesión; recarga antes de guardar.")
             revision = current["revision"] + 1
             db.execute("UPDATE stores SET store_json=?,revision=?,updated_at=? WHERE profile_id=?", (_json(store), revision, now, profile_id))
             db.execute("UPDATE profiles SET updated_at=? WHERE profile_id=?", (now, profile_id))
