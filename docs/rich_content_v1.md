@@ -143,3 +143,7 @@ Diagramas generados por el modelo, imágenes y gráficas arbitrarias; fórmulas 
 ## Sin validar
 
 Safari/iPhone reales (MathML Core, barra de direcciones dinámica, `range` táctil, VoiceOver con `aria-label` en `math`); Gemini real (la calidad de las fórmulas y de los bloques generados, y si respeta la nota del subconjunto); calidad pedagógica de las predicciones; lectores de pantalla.
+
+## Nota de versión: escapes LaTeX
+
+La salida del modelo ya no pierde la barra de `\frac`, `\beta`, `\times` y similares, ni falla con escapes JSON inválidos como `\sqrt` o `\alpha`. La reparación ocurre antes de cualquier recorte, dentro de `gemini()`, y no cambia ninguna regla de render ni de `compact()`. Detalles y límites en `docs/latex_escapes_v1.md`.

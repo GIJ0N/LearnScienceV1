@@ -27,6 +27,7 @@ python tests/spaced_practice_backend.test.py
 node tests/step_lessons.test.js
 python tests/step_lessons_backend.test.py
 python tests/llm_provider.test.py
+python tests/latex_escapes.test.py
 node tests/placement.test.js
 node tests/qa_round1.test.js
 node tests/content_trust.test.js
@@ -246,6 +247,8 @@ modifica y el resultado no demuestra retención humana.
 `node tests/step_lessons.test.js` y `python tests/step_lessons_backend.test.py` cubren `step_lessons_v1`: ciclo predecir → enseñar → comprobar, reparación con tope de 2 y paso `unresolved`, ninguna creación de `EVIDENCE`, idempotencia por `attempt_id`, reinicio si la lección cambia, pasos inválidos descartados (menos de 2 → respaldo), corrección sin proveedor, aislamiento entre diagnóstico y pasos, y reparación que toma la idea errónea del servidor y rechaza aciertos o respuestas inexistentes.
 
 `python tests/llm_provider.test.py` cubre el cambio de proveedor: contrato HTTP de Anthropic (cabeceras, modelo, herramienta forzada, esquema en JSON Schema), que todos los esquemas de la app sean objetos en raíz, salida truncada y estructura faltante rechazadas, errores en español sin eco de la clave, cuota compartida y proveedor por defecto Gemini. Usa una red simulada; no contacta a ningún proveedor.
+
+`python tests/latex_escapes.test.py` cubre los escapes LaTeX de la salida del modelo (`docs/latex_escapes_v1.md`): reintento tolerante de JSON con barras inválidas, reparo por objeto de `\f`, `\b` y de `\t`/`\n`/`\r` solo dentro de comandos soportados, idempotencia, casos negativos (texto legítimo, `\\` ya escapado, `$$` con saltos reales, rutas) y la igualdad entre la lista de comandos de Python y las tablas `TEX_*` de `app.js`. Usa respuestas controladas y no contacta a ningún proveedor.
 
 ## Ronda QA 1 (`fix/qa-round-1`)
 Corrige lo hallado en la prueba real con Gemini: `maxOutputTokens` con margen para tokens de razonamiento (causa del `MAX_TOKENS`); la lección por pasos que falla ya no se desactiva para siempre (aviso visible y botón para reintentar); el diagnóstico solo deduce prerrequisitos con ≥2 aciertos directos y termina en una pantalla de resultados; las áreas muestran ✓ solo con verificación y ≈ si se saltaron por diagnóstico; la etiqueta experta pasa a «Iniciando» con avance parcial; el prompt exige español correcto y ejemplos exactos. `node tests/qa_round1.test.js` cubre lo verificable sin proveedor real. No sustituye una segunda prueba en el navegador ni una revisión semántica de las preguntas.
