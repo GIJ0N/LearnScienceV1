@@ -21,7 +21,8 @@ Es presentación y comodidad local: no toca evidencia, eventos, cobertura ni cal
 4. **Borrador local de respuesta abierta.** En el flujo principal (`renderQuestion`, el cuadro «Tu idea y por qué») el texto se
    guarda mientras se escribe en `localStorage` con la clave `ls-draft:<profile_id>:<activity_id>` (si la pregunta no trae
    `activity_id` se usa `<nodo>:<fase>:<hash del enunciado>`, para que sea estable al volver). Todo va en `try/catch`.
-   Se restaura al volver a la actividad y se borra cuando `/api/evaluate` responde con éxito. Un envío fallido lo conserva.
+   Se restaura al volver a la actividad. Desde `store_conflict_v1` se borra solo cuando la evaluación respondió con éxito **y** el intento
+   quedó guardado en la memoria durable; un envío fallido o un guardado fallido lo conservan (ver `docs/store_conflict_v1.md`).
    Sin perfil o sin actividad no hay clave: nunca hay borrador global. Tope de 4000 caracteres.
 5. Sin `innerHTML` con datos; no se añadieron clases nuevas (no hay `className=` nuevo).
 

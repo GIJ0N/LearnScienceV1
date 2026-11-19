@@ -173,6 +173,11 @@ jobs:
       - name: Run durable frontend tests
         run: node tests/durable_memory_frontend.test.js
 
+      - name: Run store conflict tests
+        run: |
+          python tests/store_conflict_backend.test.py
+          node tests/store_conflict.test.js
+
       - name: Run insecure context ID tests
         run: node tests/insecure_context_ids.test.js
 
