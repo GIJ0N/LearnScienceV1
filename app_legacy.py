@@ -416,7 +416,47 @@ def validate_role_env():
         raw=os.getenv(env,'').strip()
         if raw:validate_model_name(raw,env)
 
+# Comandos LaTeX que app.js interpreta (tablas TEX_* y parser). tests/latex_escapes.test.py los compara con app.js.
+LATEX_COMMAND_NAMES=frozenset((
+    'Delta', 'Gamma', 'Lambda', 'Omega', 'Phi', 'Pi', 'Psi', 'Sigma', 'Theta', 'Xi', 'alpha', 'approx',
+    'beta', 'cdot', 'cdots', 'chi', 'circ', 'cos', 'delta', 'dfrac', 'dots', 'epsilon', 'eta', 'exp', 'frac',
+    'gamma', 'ge', 'geq', 'infty', 'int', 'iota', 'kappa', 'lambda', 'ldots', 'le', 'left', 'leq', 'ln',
+    'log', 'mathbf', 'mathrm', 'mp', 'mu', 'ne', 'neq', 'nu', 'omega', 'partial', 'phi', 'pi', 'pm', 'prod',
+    'psi', 'qquad', 'quad', 'rho', 'right', 'rightarrow', 'sigma', 'sin', 'sqrt', 'sum', 'tan', 'tau', 'text',
+    'textbf', 'textrm', 'tfrac', 'theta', 'times', 'to', 'varepsilon', 'varphi', 'vartheta', 'xi', 'zeta',
+))
+_LATEX_CONTROL_LETTER={'\t':'t','\n':'n','\r':'r'}
+_LATEX_CONTROL_RUN=re.compile(r'([\t\n\r])([A-Za-z]*)')
+_JSON_BAD_BACKSLASH=re.compile(r'\\(\\|["/bfnrt]|u[0-9a-fA-F]{4})|\\')
+
+def _parse_model_json(text):
+    """json.loads; si falla, reintenta duplicando solo las barras que no forman un escape JSON válido.
+    Si el reintento también falla, se re-lanza el error original."""
+    try:return json.loads(text)
+    except ValueError as exc:
+        try:return json.loads(_JSON_BAD_BACKSLASH.sub(lambda m:m.group(0) if m.group(1) else '\\\\',text))
+        except ValueError:raise exc
+
+def _restore_latex_command(m):
+    run=m.group(2)
+    name=_LATEX_CONTROL_LETTER[m.group(1)]+run
+    return '\\'+name if run and name in LATEX_COMMAND_NAMES else m.group(0)
+
+def repair_latex_escapes(value):
+    """Repara valores ya decodificados (solo valores, nunca claves). \\f y \\b siempre; \\t \\n \\r solo si el
+    carácter de control y la racha completa de letras forman un comando soportado. Idempotente."""
+    if isinstance(value,str):
+        text=value.replace('\x0c','\\f').replace('\x08','\\b')
+        return _LATEX_CONTROL_RUN.sub(_restore_latex_command,text)
+    if isinstance(value,dict):return {k:repair_latex_escapes(v) for k,v in value.items()}
+    if isinstance(value,list):return [repair_latex_escapes(v) for v in value]
+    return value
+
 def gemini(prompt, schema, max_tokens=2000, images=None, role=None):
+    """Entrada única para toda llamada al modelo; el resultado pasa por repair_latex_escapes."""
+    return repair_latex_escapes(_model_call(prompt,schema,max_tokens,images,role))
+
+def _model_call(prompt, schema, max_tokens=2000, images=None, role=None):
     """Single entry point for every model call. Provider is chosen by LLM_PROVIDER.
 
     role: generate (default, MODEL), judge (grades the learner's answer) or audit (reviews generated content).
@@ -471,7 +511,7 @@ def _gemini_request(prompt, schema, max_tokens, images, trace, model=None):
     try:
         candidate=answer['candidates'][0]
         text=''.join(x.get('text','') for x in candidate['content']['parts'])
-        result=json.loads(text)
+        result=_parse_model_json(text)
         trace['ok']=True
         return result
     except (IndexError,KeyError,TypeError,ValueError):
