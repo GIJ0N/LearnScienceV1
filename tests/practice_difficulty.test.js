@@ -290,9 +290,9 @@ const coversAll = goal => p.deriveCoverage(goal.coverage[0]).mastered === true;
     assert.equal(p.anchorOffer(modelBase, 'n1'), null);
     const modelStd = baseGoal(); evidence(modelStd, { band: 'standard', model: true }); attach(modelStd);
     assert.ok(p.anchorSuggest(modelStd, 'n1'), 'contraste: tras un acierto estándar sí');
-    assert.ok(find(p.anchorOffer(modelStd, 'n1'), e => e.textContent === 'Confirma con una pregunta rápida'));
+    assert.ok(find(p.anchorOffer(modelStd, 'n1'), e => e.textContent === 'Resuelve un problema escrito'));
     const modelBase2 = baseGoal(); evidence(modelBase2, { band: 'base', model: true }); evidence(modelBase2, { band: 'base', model: true }); attach(modelBase2);
-    assert.equal(find(p.anchorOffer(modelBase2, 'n1') || element(), e => e.textContent === 'Confirma con una pregunta rápida'), null);
+    assert.equal(find(p.anchorOffer(modelBase2, 'n1') || element(), e => e.textContent === 'Resuelve un problema escrito'), null);
 
     // (4) Un fallo en base contradice, reinicia lastFailure y abre reparación; el desafío solo exime con suficiencia previa.
     const q = band => ({ prompt: 'Fallo en ' + band, reference: 'c', kind: 'application', observable_dimensions: ['direct_application'], difficulty_band: band });

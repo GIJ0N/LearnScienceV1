@@ -46,8 +46,12 @@ for (const legacy of ['DISCRIMINATION', 'COMPOSITION', 'CONFIRMATION', 'ERROR_FI
   assert.equal(p.sufficient(d), false, 'marcador legacy degradado');
   assert.equal(p.sufficient(dim([model(), model(), hardAnchor()])), true, 'marcador nuevo ancla');
   assert.equal(p.sufficient(dim([model(), model(), legacyAnchor()]), { acceptLegacyAnchors: true }), true, 'solo para medir impacto');
+  assert.equal(p.trustAnchored({ id: 'g', coverage: [{ id: 'a', dimensions: [dim([model(), legacyAnchor()])] }] }, 'a'), false, 'trustAnchored también degrada el marcador legacy');
   assert.equal(p.isHardAnchor(hardAnchor()), true);
   assert.equal(p.isHardAnchor(legacyAnchor()), false);
+  const sourceNoVersion = { ...hardAnchor(), anchor_policy_version: undefined };
+  assert.equal(p.isHardAnchor(sourceNoVersion), false, 'origen PRODUCTION sin versión no ancla');
+  assert.equal(p.sufficient(dim([model(), model(), sourceNoVersion])), false, 'ni cuenta para suficiencia');
   assert.equal(p.isHardAnchor({ ...hardAnchor(), source: 'CONFIRMATION' }), false, 'origen CONFIRMATION no ancla');
 }
 
@@ -146,13 +150,32 @@ for (const legacy of ['DISCRIMINATION', 'COMPOSITION', 'CONFIRMATION', 'ERROR_FI
   const helped = { ...ev, evidence_id: 'm2', attempt_id: 'm2', help_used: 1, is_independent: false };
   g.events.push(helped);
   assert.equal(p.makeMilestone(g, 'a', helped).unaided, 1, 'con ayuda no cuenta');
+  g.events.push({ ...ev, evidence_id: 'm3', attempt_id: 'm3', is_independent: false, help_used: 0, phase: 'GUIDED' });
+  assert.equal(p.makeMilestone(g, 'a', ev).unaided, 1, 'guiado sin ayuda tampoco cuenta como sin ayuda por tu cuenta');
   assert.equal(p.milestoneUnaidedText(0), 'Aún sin aciertos por tu cuenta en esta visita');
 }
 
-// (10) Intercalado justo antes de un repaso invalida la recuperación diferida; legacy DISCRIMINATION también.
+// (10) Intercalado justo antes de un repaso: la exposición queda marcada en el repaso (retención no elegible) sin tocar due.
 {
   const g = freshGoal();
+  g.reviews[0].question = { prompt: 'repaso' };
+  const due = g.reviews[0].due;
   g.events.push({ type: 'DISCRIMINATION', node_id: 'a', attempt_id: 'x', at: NOW - 1000 });
   assert.equal(p.lastExposure(g, 'a') > 0, true, 'DISCRIMINATION legacy cuenta como exposición');
+  p.recordFormativeExposure(g, 'a', 'BETO', 'beto-10', NOW - 500);
+  assert.equal(g.reviews[0].last_exposure_at, NOW - 500);
+  assert.equal(g.reviews[0].exposure_before_response, true, 'la exposición llega antes de responder el repaso');
+  assert.equal(g.reviews[0].due, due, 'due no cambia');
 }
+// (8b) Reto: el compromiso de predicción marca exposición formativa una sola vez y no crea evidencia.
+{
+  const g = freshGoal();
+  g.challenge = { status: 'active', stage: 'prediction', item_id: 'ch1', node_id: 'a', pub: {} };
+  const res = { item_id: 'ch1', node_id: 'a', stage: 'commit', prediction: 'Predigo que sube', confidence: 60, materials: [], steps: ['Paso uno'], evidence_fields: [{ id: 'f1', label: 'Dato' }] };
+  assert.equal(p.applyChallengeCommit(g, res, 'ch-att-1'), true);
+  assert.equal(g.events.filter(e => e.type === 'FORMATIVE_EXPOSURE' && e.source === 'CHALLENGE').length, 1);
+  assert.equal(g.events.filter(e => e.type === 'EVIDENCE').length, 0);
+  assert.equal(g.reviews[0].due, NOW + 9 * DAY);
+}
+
 console.log('evidence_hardening.test.js OK');

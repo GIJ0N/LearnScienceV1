@@ -47,7 +47,8 @@ const res = (status, it) => ({ status, item_id: it.item_id, node_id: it.node_id,
   g = attach(goal([{ id: 'a', due: Date.now() - DAY, step: 1, question: null, history: [] }]));
   const hm = p.startMixed(g, 'error_hunt');
   hm.items = [item(7)];
-  const reviewBefore = JSON.stringify(g.reviews);
+  const scheduleOnly = reviews => JSON.stringify((reviews || []).map(r => ({ ...r, last_exposure_at: undefined, exposure_before_response: undefined })));
+  const reviewBefore = scheduleOnly(g.reviews);
   const fixRes = (status, it, extra = {}) => ({ status, item_id: it.item_id, node_id: it.node_id, ...extra });
   assert.equal(p.applyDiscrimination(g, hm.items[0], { ...res('CORRECT', hm.items[0]), needs_fix: true }, 'q1', 'a', 80), true);
   assert.equal(hm.status, 'done', 'la corrección llega cuando la práctica ya avanzó: no exige que siga activa');
@@ -60,7 +61,7 @@ const res = (status, it) => ({ status, item_id: it.item_id, node_id: it.node_id,
   assert.equal(p.applyErrorFix(g, hm.items[0], fixRes('PARTIAL', hm.items[0]), 'fx1', 'x'), false, 'idempotente por attempt_id');
   assert.equal(g.events.filter(e => e.type === 'ERROR_FIX').length, 1);
   assert.equal(g.events.filter(e => e.type === 'EVIDENCE').length, 0);
-  assert.equal(JSON.stringify(g.reviews), reviewBefore, 'la corrección no mueve el repaso');
+  assert.equal(scheduleOnly(g.reviews), reviewBefore, 'la corrección no mueve el calendario (evidence_hardening_v1 solo marca la exposición)');
   assert.equal(p.expertOutcome(fx), null, 'una calificación provisional no cuenta para el panel experto');
   assert.throws(() => p.applyErrorFix(g, item(99), fixRes('CORRECT', item(99)), 'fx2', 'x'), /ya no corresponde/);
   assert.throws(() => p.applyErrorFix(g, hm.items[0], fixRes('UNKNOWN', hm.items[0]), 'fx3', 'x'), /no corresponde a la corrección/);

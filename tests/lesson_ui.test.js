@@ -103,7 +103,7 @@ const evidence = g => g.events.filter(e => e.type === 'EVIDENCE');
   // 5. Hito: datos puros.
   {
     const g = goal('INTEGRATE'); attach(g);
-    g.events.push({ type: 'TEACHING_EXPOSURE', node_id: 'a', at: 1000 }, { type: 'EVIDENCE', node_id: 'a', result: 'CORRECT', help_used: 0, timestamp: 2000, attempt_id: 'x1' }, { type: 'EVIDENCE', node_id: 'a', result: 'CORRECT', help_used: 1, timestamp: 3000, attempt_id: 'x2' }, { type: 'EVIDENCE', node_id: 'a', result: 'CORRECT', help_used: 0, timestamp: 500, attempt_id: 'old' });
+    g.events.push({ type: 'TEACHING_EXPOSURE', node_id: 'a', at: 1000 }, { type: 'EVIDENCE', node_id: 'a', result: 'CORRECT', help_used: 0, is_independent: true, timestamp: 2000, attempt_id: 'x1' }, { type: 'EVIDENCE', node_id: 'a', result: 'CORRECT', help_used: 1, timestamp: 3000, attempt_id: 'x2' }, { type: 'EVIDENCE', node_id: 'a', result: 'CORRECT', help_used: 0, timestamp: 500, attempt_id: 'old' });
     for (const result of ['PARTIAL', 'MISCONCEPTION', 'UNKNOWN', undefined]) assert.equal(p.makeMilestone(g, 'a', { result, help_used: 0, attempt_id: 'x2' }), null, 'sin hito para ' + result);
     assert.equal(p.makeMilestone(g, 'a', null), null);
     const m = p.makeMilestone(g, 'a', { result: 'CORRECT', help_used: 0, attempt_id: 'x2' });

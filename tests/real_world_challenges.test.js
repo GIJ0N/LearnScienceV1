@@ -53,7 +53,8 @@ const ready = g => { const c = p.startChallenge(g); c.item_id = 'chal-1'; c.pub 
   const ev = g.events.find(e => e.type === 'CHALLENGE_REPORT');
   assert.deepEqual([ev.status, ev.provisional, ev.prediction_confidence, ev.prediction_match, ev.policy_version], ['CORRECT', true, 70, 'YES', 'real_world_challenges_v1']);
   assert.equal(g.events.filter(e => e.type === 'EVIDENCE').length, 0);
-  assert.equal(JSON.stringify(g.reviews), before);
+  // evidence_hardening_v1: el reporte marca la exposición del repaso; el calendario (due, step, historial) no cambia
+  assert.equal(JSON.stringify(g.reviews.map(r => ({ ...r, last_exposure_at: undefined, exposure_before_response: undefined }))), JSON.stringify(JSON.parse(before).map(r => ({ ...r, last_exposure_at: undefined, exposure_before_response: undefined }))));
   assert.equal(p.expertOutcome(ev), null, 'el panel experto ignora lo provisional');
   assert.throws(() => p.applyChallengeReport(g, reportRes(c, 'SUPPORTED'), 'r2'), /no espera un informe/);
 })();
