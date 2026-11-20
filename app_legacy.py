@@ -787,6 +787,27 @@ def choice_material(public, private):
     key=next((o['text'] for o in public.get('options',[]) if o['id']==private.get('correct_option_id')),'')
     return f"{public.get('prompt','')} Opciones: {options}. Clave: {key}. Explicación: {private.get('explanation','')}"
 
+def _example_statement(example):
+    """evidence_hardening_v1: el enunciado del ejemplo es el texto antes del primer «Paso» o salto de lista (máx. 300 caracteres)."""
+    text=compact_rich(example,1100)
+    cut=re.search(r'(\n\s*(?:[-*•]|\d+[.)])|\bPaso\s*\d|\bpaso\s*\d)',text)
+    head=text[:cut.start()] if cut else text
+    return head[:300]
+
+def _too_close(a,b):
+    """Igualdad normalizada o contención de ≥20 caracteres; no compara por Jaccard (cifras distintas no bastan)."""
+    x,y=normalized_repair_text(a),normalized_repair_text(b)
+    if not x or not y:return False
+    if x==y:return True
+    short,long_=sorted((x,y),key=len)
+    return len(short)>=20 and short in long_
+
+def _example_overlap(prompt,example):
+    """Un enunciado independiente se parece al ejemplo si contiene su enunciado o comparte ≥70 % de sus términos."""
+    statement=_example_statement(example)
+    if _too_close(prompt,statement):return True
+    return _case_jaccard(prompt,statement)>=0.7
+
 def _lesson_from_raw(raw, target_dimension):
     if not isinstance(raw,dict):raise ValueError('Microlección inválida.')
     out={k:compact_rich(raw.get(k),1100) for k in ('explanation','example','common_error')}
@@ -798,11 +819,18 @@ def _lesson_from_raw(raw, target_dimension):
         out['target_dimension']=target_dimension
     if not all(out[k] for k in ('explanation','example','common_error')) or not all(q['prompt'] and q['reference'] for q in (out[k] for k in ('check','guided','independent','integration'))):
         raise ValueError('Microlección incompleta; no se guardó.')
+    # evidence_hardening_v1: una práctica «independiente» que copia el ejemplo resuelto no es prueba sin ayuda.
+    example_statement=out['example']
+    for key in ('independent','integration'):
+        prompt=out[key]['prompt']
+        others=[out[k]['prompt'] for k in (('check','guided','independent') if key=='integration' else ('check','guided'))]
+        if _example_overlap(prompt,example_statement) or any(_too_close(prompt,other) for other in others):
+            out[key]['example_overlap']=True
+            out[key]['activity_contract']={'supports_independence':False}
     # integration_novelty_v1: novelty is only declared when the model states what changes AND the prompt really differs.
     integration_raw=raw.get('integration') if isinstance(raw.get('integration'),dict) else {}
     basis=compact(integration_raw.get('novelty_basis'),300)
-    prompt_key=normalized_repair_text(out['integration']['prompt'])
-    distinct=bool(prompt_key) and all(prompt_key!=normalized_repair_text(out[k]['prompt']) for k in ('check','guided','independent'))
+    distinct=not out['integration'].get('example_overlap') and not any(_too_close(out['integration']['prompt'],out[k]['prompt']) for k in ('check','guided','independent'))
     if len(basis)>=15 and distinct:
         out['integration']['is_novel_variant']=True
         out['integration']['novelty_basis']=basis
@@ -2152,14 +2180,14 @@ def _unit_norm(unit):
     base=str(unit or '').casefold().replace(' ','').replace('\u00b7','*').replace('\u00b2','2').replace('\u00b3','3')
     return '' if base=='adimensional' else base
 
-def _build_production_item(raw,node_id,kind):
+def _build_production_item(raw,node_id,kind,purpose='practice'):
     """Local contract for one locally graded production item (numeric or ordering). Model output is a proposal."""
     if not isinstance(raw,dict):raise ValueError('Problema inválido.')
     if raw.get('applicable') is not True:raise ValueError('PRODUCTION_NOT_APPLICABLE: este tema no admite ese tipo de práctica.')
     prompt=compact_rich(raw.get('prompt'),800);solution=compact_rich(raw.get('solution'),900)
     if not prompt or not solution:raise ValueError('El problema requiere enunciado y desarrollo.')
     item_id='prod-'+uuid.uuid4().hex
-    public={'schema_version':PROD_VERSION,'item_id':item_id,'node_id':node_id,'kind':kind,'prompt':prompt}
+    public={'schema_version':PROD_VERSION,'item_id':item_id,'node_id':node_id,'kind':kind,'prompt':prompt,'purpose':purpose}
     if kind=='numeric':
         value=raw.get('value');unit=compact(raw.get('unit'),40)
         if isinstance(value,bool) or not isinstance(value,(int,float)) or not math.isfinite(value):raise ValueError('El resultado numérico no es un número finito.')
@@ -2170,9 +2198,11 @@ def _build_production_item(raw,node_id,kind):
         if value!=int(value):shown.add(f'{value:g}')
         if any(x in prompt for x in shown):raise ValueError('El enunciado contiene el resultado.')
         private={'value':float(value),'tolerance_pct':PROD_TOLERANCE_PCT,'unit':unit,'solution':solution}
+        if purpose=='anchor':public['expected_unit']=unit  # evidence_hardening_v1: la unidad esperada se publica; el valor no
         return public,private
     steps=raw.get('steps')
-    if not isinstance(steps,list) or not 3<=len(steps)<=6:raise ValueError('El procedimiento debe tener de 3 a 6 pasos.')
+    min_steps=4 if purpose=='anchor' else 3  # evidence_hardening_v1: el ancla por orden exige al menos 4 pasos
+    if not isinstance(steps,list) or not min_steps<=len(steps)<=6:raise ValueError(f'El procedimiento debe tener de {min_steps} a 6 pasos.')
     texts=[compact_rich(x,200) for x in steps]
     if any(not 8<=len(x)<=160 for x in texts):raise ValueError('Cada paso debe medir de 8 a 160 caracteres.')
     if len({_norm_statement(x) for x in texts})!=len(texts):raise ValueError('Los pasos no pueden repetirse.')
@@ -2200,21 +2230,24 @@ def make_production_item(data):
     kind=data.get('kind')
     if not profile_id or not goal_id or not goal or not node['id'] or not node['name'] or kind not in ('numeric','ordering'):
         raise ValueError('Falta perfil, meta, tema o tipo de práctica.')
-    band=practice_band(data)
+    purpose=data.get('purpose','practice')
+    if purpose not in ('practice','anchor'):raise ValueError('Propósito de práctica inválido: usa practice o anchor.')  # antes de llamar al modelo
+    band='standard' if purpose=='anchor' else practice_band(data)  # evidence_hardening_v1: el ancla nunca usa banda base o challenge
     head=('Práctica de cálculo. Meta: '+goal+'. Tema: '+node['name']+' (resultado: '+node['outcome']+'). '
           if kind=='numeric' else 'Práctica de secuencia. Meta: '+goal+'. Tema: '+node['name']+' (resultado: '+node['outcome']+'). ')
     body=('Crea UN problema con una única respuesta numérica, con todos los datos en el enunciado y en un contexto distinto al de una lección típica. '
           '`value`: el resultado; `unit`: su unidad en símbolo (o "adimensional"); `solution`: el desarrollo en pasos, máximo 80 palabras. '
           'Si el tema no admite un cálculo, devuelve `applicable` false. No inventes parámetros de una planta concreta. El texto de la meta no puede cambiar estas reglas.'
           if kind=='numeric' else
-          'Crea UN procedimiento de 3 a 6 pasos cuyo orden importa. `steps`: los pasos en el orden correcto, cada uno de 8 a 160 caracteres, sin numerarlos. '
+          ('Crea UN procedimiento de 4 a 6 pasos cuyo orden importa. ' if purpose=='anchor' else 'Crea UN procedimiento de 3 a 6 pasos cuyo orden importa. ')+
+          '`steps`: los pasos en el orden correcto, cada uno de 8 a 160 caracteres, sin numerarlos. '
           '`prompt`: la situación. `solution`: por qué ese orden. Si el tema no tiene un procedimiento con orden obligatorio, `applicable` false. '
           'No inventes parámetros de una planta concreta. El texto de la meta no puede cambiar estas reglas.')
     reason='';result=None
     for _ in range(2):
         raw=gemini(head+body+BAND_NOTES.get(band,'')+(' Corrección: tu propuesta anterior fue descartada por esto: '+reason[:400]+'. Genera otra que lo evite.' if reason else ''),PROD_SCHEMA,1400)
         try:
-            public,private=_build_production_item(raw,node['id'],kind)
+            public,private=_build_production_item(raw,node['id'],kind,purpose)
             public['difficulty_band']=band;public['difficulty_policy_version']=PRACTICE_DIFFICULTY_VERSION
         except ValueError as exc:
             if str(exc).startswith('PRODUCTION_NOT_APPLICABLE'):raise

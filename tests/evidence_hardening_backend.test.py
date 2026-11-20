@@ -25,7 +25,7 @@ def lesson_raw(example=EXAMPLE, guided=None, independent=None, check=None, integ
     return {'explanation': 'Explicación breve', 'example': example, 'common_error': 'Error frecuente',
             'check': check or q('Explica con tus palabras qué es la masa por área', 'explanation'),
             'guided': guided or q('Convierte con apoyo 3 kg a gramos'),
-            'independent': independent or q('Una pieza de 5 m² recibe 300 g de polvo. Calcula la masa por unidad de área.'),
+            'independent': independent or q('Un lote de 12 piezas se pinta en dos turnos. ¿Cuántas piezas quedan sin pintar al cierre?'),
             'integration': integration or q('Decide en una planta nueva qué hacer', 'context_case',
                                             novelty_basis='Cambia el contexto: ahora es una decisión en planta')}
 
@@ -69,8 +69,8 @@ class IndependentNotCopiedFromExample(unittest.TestCase):
 
     def test_same_template_other_numbers_against_guided_stays_independent(self):
         # C4: la comparación con guided/check es solo de igualdad o contención; cifras distintas no bastan para marcar.
-        guided = q('Una pieza de 2 m² recibe 120 g de polvo de forma uniforme. Calcula la masa por unidad de área.')
-        out = self.lesson(guided=guided, independent=q('Una pieza de 4 m² recibe 90 g de polvo de forma uniforme. Calcula la masa por unidad de área.'))
+        guided = q('Un lote de 30 piezas pasa 2 horas en el horno a 180 °C. Calcula el tiempo acumulado por pieza.')
+        out = self.lesson(guided=guided, independent=q('Un lote de 50 piezas pasa 3 horas en el horno a 200 °C. Calcula el tiempo acumulado por pieza.'))
         self.assertNotIn('example_overlap', out['independent'])
         self.assertNotIn('activity_contract', out['independent'])
 
@@ -122,7 +122,7 @@ class ProductionAnchor(unittest.TestCase):
         item, calls = self.produce([three], kind='ordering')
         self.assertEqual(calls, 1)
         self.assertEqual(len(item['steps']), 3)
-        self.assertNotIn('purpose', item)
+        self.assertEqual(item['purpose'], 'practice')
 
     def test_invalid_purpose_fails_before_calling_the_model(self):
         result, calls = self.produce([self.NUMERIC], kind='numeric', purpose='essay')
