@@ -27,3 +27,6 @@ Campos aditivos. Las lecciones ya guardadas no cambian y se leen igual. Revertir
 La declaración la hace el modelo y el servidor solo verifica que haya una justificación y que el enunciado sea distinto: no
 comprueba que de verdad sea un contexto nuevo. Por eso sigue siendo evidencia, no certeza de transferencia; la transferencia
 duradera exige además sus propias evidencias.
+
+## Actualización: evidence_hardening_v1
+La integración que reproduce el enunciado del ejemplo, o lo copia de check o guided, no declara novedad. La práctica independiente con el enunciado del ejemplo queda con `supports_independence=false`. La comparación con el ejemplo usa el enunciado (texto antes del primer paso), no la lección completa. Ver `docs/evidence_hardening_v1.md`.
