@@ -60,7 +60,7 @@ function practice(g, result = 'CORRECT') {
 }
 const failure = (g, status, at, extra = {}) => { const ev = { type: 'EVIDENCE', evidence_id: 'f-' + at, attempt_id: 'f-' + at, activity_id: 'fa-' + at, node_id: 'a', evidence_role: 'learning', phase: 'INDEPENDENT', result: status, status, error_type: 'conceptual', is_independent: false, help_used: 0, observed_dimensions: ['variables'], question: { prompt: 'Fallo ' + at }, at, ...extra }; g.events.push(ev); return ev; };
 const find = (label, root = roots.app) => { if (root && root.textContent === label) return root; for (const c of (root && root.children) || []) { const f = find(label, c); if (f) return f; } return null; };
-const findType = (type, root = roots.app) => { if (root && root.type === type) return root; for (const c of (root && root.children) || []) { const f = findType(type, c); if (f) return f; } return null; };
+const findExample = (root = roots.app) => { if (root && root.className === 'worked-example') return root; for (const c of (root && root.children) || []) { const f = findExample(c); if (f) return f; } return null; };
 const has = (needle, root = roots.app) => { if (root && String(root.textContent || '').includes(needle)) return true; return ((root && root.children) || []).some(c => has(needle, c)); };
 async function renderTeach(g) { roots.app.children = []; await p.session(); }
 const teachingEvents = g => g.events.filter(e => e.type === 'TEACHING_SUPPORT');
@@ -143,6 +143,11 @@ const teachingEvents = g => g.events.filter(e => e.type === 'TEACHING_SUPPORT');
     assert.equal(g.lessons.a.support, 'lean');
     assert.equal(p.isStudyAnswer(teachingEvents(g)[0]), false, 'no cuenta como estudio');
     assert.equal(p.EXPOSURE_TYPES.includes('TEACHING_SUPPORT'), false, 'no es exposición');
+    // Congelada: si desaparece la señal que la produjo, repintar no la recalcula.
+    g.lessons.a.adaptation_mode = 'initial';
+    await renderTeach(g);
+    assert.equal(g.lessons.a.support, 'lean', 'sin recalcular en cada render');
+    assert.equal(teachingEvents(g).length, 1);
   }
 
   // 5. Vista lean: sin pasos ni ejemplos con huecos; ejemplo cerrado en <details>; «Ahora lo intento» pasa a comprobación.
@@ -153,7 +158,7 @@ const teachingEvents = g => g.events.filter(e => e.type === 'TEACHING_SUPPORT');
     assert.equal(routeCalls('/api/lesson/steps').length, 0, 'lean no pide pasos');
     assert.equal(routeCalls('/api/lesson/faded').length, 0, 'lean no pide ejemplos con huecos');
     assert.equal(p.fadedAllowed(g.lessons.a), false, 'fadedAllowed es falso en lean');
-    const det = findType('details');
+    const det = findExample();
     assert.ok(det, 'el ejemplo va en un details');
     assert.equal(det.open, undefined, 'cerrado por defecto');
     assert.ok(find('Ver un ejemplo resuelto'), 'resumen del ejemplo');
@@ -214,8 +219,7 @@ const teachingEvents = g => g.events.filter(e => e.type === 'TEACHING_SUPPORT');
     calls = []; stepsResponse = { code: 'STEPS_NOT_NEEDED', steps: [] }; roots.status.textContent = ''; clock = T0 + 1000;
     const g = attach(goal({ adaptation_mode: 'initial' }));
     await renderTeach(g);
-    assert.equal(g.lessons.a.support, 'full', 'la decisión cliente es full');
-    assert.equal(routeCalls('/api/lesson/steps').length, 1);
+    assert.equal(routeCalls('/api/lesson/steps').length, 1, 'el cliente pidió pasos una vez (decisión full)');
     assert.equal(g.lessons.a.support, 'lean', 'el servidor manda lean');
     assert.ok(!has('No pude preparar', roots.status), 'sin aviso de error');
     assert.ok(find('Ver un ejemplo resuelto'), 'la vista es lean');
@@ -230,7 +234,7 @@ const teachingEvents = g => g.events.filter(e => e.type === 'TEACHING_SUPPORT');
     assert.equal(g.lessons.a.support, 'full');
     assert.equal(routeCalls('/api/lesson/steps').length, 1);
     assert.equal(routeCalls('/api/lesson/steps')[0].body.learner_requested, false);
-    assert.equal(findType('details'), null, 'sin details en full');
+    assert.equal(findExample(), null, 'sin ejemplo en details en full');
   }
 
   console.log('teaching_support.test.js OK');

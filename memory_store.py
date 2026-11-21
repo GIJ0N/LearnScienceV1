@@ -482,8 +482,9 @@ def validate_store(raw, profile_id, allow_profile_rebind=False, ctx=None):
                 raise ValueError("El ledger contiene un evento inválido.")
             event["profile_id"] = profile_id
             _sanitize_difficulty(event)
-            if event.get("type") in ("TOPIC_SELF_EXPLANATION", "TOPIC_CLOSURE_OPENED"):
+            if event.get("type") in ("TOPIC_SELF_EXPLANATION", "TOPIC_CLOSURE_OPENED", "TEACHING_SUPPORT"):
                 # topic_closure_v1: estos eventos son presentación y autoexplicación; nunca crean evidencia.
+                # worked_examples_v1 (L4a): TEACHING_SUPPORT decide la presentación de la lección; tampoco es evidencia.
                 if event.get("type") == "TOPIC_SELF_EXPLANATION":
                     event["text"] = str(event.get("text") or "")[:600]
                 event["creates_evidence"] = False
