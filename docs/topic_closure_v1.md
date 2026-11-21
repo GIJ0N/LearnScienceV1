@@ -30,7 +30,7 @@ No se muestran ideas si el tema tiene confirmación diferida pendiente (`awaitin
 ## Eventos nuevos
 
 - `TOPIC_CLOSURE_OPENED {version, node_id, source, at, creates_evidence:false}`: solo al abrir el resumen con botón, nunca al pintar. `source` ∈ `path`, `map`, `review_milestone`, `delayed_confirmed`.
-- `TOPIC_SELF_EXPLANATION {version, node_id, closure_id, source, text, at, creates_evidence:false}`: al guardar «Guardar mi explicación». `text` tiene 1 a 600 caracteres. No lleva `attempt_id`, `phase`, `result`, `evidence_role` ni `dimensions`.
+- `TOPIC_SELF_EXPLANATION {version, node_id, closure_id, source, text, at, creates_evidence:false}`: al guardar «Guardar mi explicación». `source` es `reopen` si el resumen se abrió con botón y `closure` si apareció solo tras el acierto. `text` tiene 1 a 600 caracteres. No lleva `attempt_id`, `phase`, `result`, `evidence_role` ni `dimensions`.
 
 Ninguno está en `EXPOSURE_TYPES`, `TEACHING_REF_TYPES` ni `isStudyAnswer`. No se envían a `/api/evaluate` ni al modelo. No alimentan `self_explanation`. El servidor (`validate_store`) recorta `text` a 600, fuerza `creates_evidence=false` y mantiene la regla de `node_id` existente.
 
@@ -38,7 +38,7 @@ Por qué no son evidencia ni exposición: leer el resumen es exposición, no des
 
 ## Backend
 
-- `/api/graph/get` acepta `node_id` opcional. Con `node_id` devuelve solo las cadenas de ese tema y las proposiciones que usan o citan ese tema. Cada proposición lleva `node_ids` y `lesson_refs` (sin duplicados, tomados de `sources`). Sin `node_id` la respuesta es la de siempre, con los dos campos adicionales.
+- `/api/graph/get` acepta `node_id` opcional. Con `node_id` devuelve solo las cadenas de ese tema y las proposiciones que usan o citan ese tema. Cada proposición lleva `node_ids` (todas sus fuentes, sin duplicados ni vacíos, así una idea fusionada cita a todos sus temas) y `lesson_refs` (acotado al tema cuando hay `node_id`). Sin `node_id` la respuesta es la de siempre, con los dos campos adicionales.
 - `load_graph` ordena proposiciones por `created_at, prop_id` (orden determinista).
 - No hay cambio de esquema SQLite. `extract_graph` sigue devolviendo la misma forma, con los campos adicionales.
 

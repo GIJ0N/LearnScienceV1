@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 function element(type = 'div') { return { type, textContent: '', value: '', children: [], style: {}, className: '', append(...x) { this.children.push(...x); }, appendChild(x) { this.children.push(x); return x; }, replaceChildren(...x) { this.children = x; }, setAttribute() {}, prepend() {}, focus() {} }; }
 const roots = { app: element(), status: element() };
-global.document = { getElementById: id => roots[id], createElement: element, documentElement: { dataset: {} } };
+global.document = { getElementById: id => roots[id], createElement: element, createElementNS: (ns, name) => { const e = element(name); e.ns = ns; return e; }, createTextNode: s => ({ type: '#text', textContent: s, children: [] }), documentElement: { dataset: {} } };
 global.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
 global.confirm = () => true;
 const calls = [];
@@ -156,6 +156,43 @@ const PAYLOAD_EXAMPLE = { propositions: GRAPH.propositions.slice(0, 2).map(x => 
     for (const result of ['PARTIAL', 'MISCONCEPTION', 'UNKNOWN']) assert.equal(p.closureFromPractice(g, 'a', 'completed', { attempt_id: 'x-' + result, result }), null, result);
     assert.equal(p.closureFromPractice(g, 'a', 'completed', null), null, 'sin evidencia no hay cierre');
     assert.equal(p.closureActive(g), false);
+  }
+
+  // 6c. Fórmulas: $…$ se pinta como MathML (X), y el enunciado hostil sigue siendo texto.
+  {
+    const payload = { propositions: [
+      { prop_id: 'q1', statement: 'La mitad es $\\frac{1}{2}$ del total.', node_ids: ['a'], lesson_refs: ['L1'] },
+      { prop_id: 'q2', statement: '<img src=x onerror=alert(1)> hostil', node_ids: ['a'], lesson_refs: ['L1'] },
+      { prop_id: 'q3', statement: 'Entonces vale $\\frac{1}{4}$ en total.', node_ids: ['a'], lesson_refs: ['L1'] }],
+      chains: [{ chain_id: 'cq', node_id: 'a', premises: ['q1', 'q2'], conclusion: 'q3' }] };
+    const g = goal();
+    const wrap = p.closureBody(g, 'a', payload, g.lessons.a);
+    const all = []; walk(wrap, e => all.push(e));
+    const maths = all.filter(e => e.type === 'math' && e.ns === 'http://www.w3.org/1998/Math/MathML');
+    assert.ok(maths.length >= 2, 'las fórmulas de ideas y cadenas salen como MathML');
+    assert.ok(all.some(e => e.textContent === '<img src=x onerror=alert(1)> hostil' || String(e.textContent).includes('<img src=x onerror=alert(1)> hostil')), 'enunciado hostil como texto');
+    assert.ok(!all.some(e => e.type === 'img'), 'no se crea ningún img');
+    const src = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+    const block = src.slice(src.indexOf('// topic_closure_v1 BEGIN'), src.indexOf('// topic_closure_v1 END'));
+    assert.ok(!/E\('(li|p|div|span)',(i\.text|t|c\.[a-z_]+|lesson\.common_error|String\(lesson)/.test(block), 'texto del tema no pasa por E() directo');
+  }
+
+  // 6d. Origen de la autoexplicación: 'reopen' al reabrir, 'closure' en el cierre automático.
+  {
+    const g = attach(goal('COMPREHENSION', { graph: { chains: [], extracted: { a: 'L1' } } }));
+    p.openTopicClosure(g, 'a', 'path', 'plan');
+    await settle(20);
+    const area = findAll(e => e.type === 'textarea')[0]; area.value = 'Reabriendo: mi explicación.';
+    findAll(e => e.textContent === 'Guardar mi explicación')[0].onclick();
+    assert.equal(g.events.filter(e => e.type === 'TOPIC_SELF_EXPLANATION').at(-1).source, 'reopen');
+    const g2 = attach(goal('INTEGRATE'));
+    p.setClosureForTests(null);
+    g2.events.push({ type: 'EVIDENCE', attempt_id: 'auto-1', node_id: 'a', result: 'CORRECT' });
+    p.closureFromPractice(g2, 'a', 'completed', { attempt_id: 'auto-1', result: 'CORRECT' });
+    await p.session(); await settle(20);
+    const area2 = findAll(e => e.type === 'textarea')[0]; area2.value = 'Automático: mi explicación.';
+    findAll(e => e.textContent === 'Guardar mi explicación')[0].onclick();
+    assert.equal(g2.events.filter(e => e.type === 'TOPIC_SELF_EXPLANATION').at(-1).source, 'closure');
   }
 
   // 7. Lectura del grafo falla: respaldo con lección, sin bucle ni mensaje de error.
