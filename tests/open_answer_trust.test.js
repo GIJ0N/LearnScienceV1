@@ -14,7 +14,8 @@ const model = () => ok({ evaluator_trust: 'model_single', trust_policy_version: 
 const local = () => ok({ evaluator_trust: 'deterministic', trust_policy_version: p.TRUST_POLICY_VERSION });
 const legacy = () => ok({});
 const fail = () => { n++; return { type: 'EVIDENCE', evidence_id: 'f' + n, attempt_id: 'f' + n, node_id: 'a', result: 'MISCONCEPTION', status: 'MISCONCEPTION', observed_dimensions: ['conceptual'], timestamp: NOW - 1000 + n }; };
-const anchor = (id = 'src') => ({ type: 'TRUST', status: 'CORRECT', source_attempt_id: id, timestamp: NOW - 1000 + (++n) });
+// evidence_hardening_v1: solo cuentan los marcadores de producción calificada localmente con la versión nueva.
+const anchor = (id = 'src') => ({ type: 'TRUST', status: 'CORRECT', source: 'PRODUCTION', anchor_policy_version: 'evidence_hardening_v1', source_attempt_id: id, timestamp: NOW - 1000 + (++n) });
 const dim = evidence => ({ id: 'conceptual', name: 'Comprensión', required: true, evidence });
 
 assert.equal(p.TRUST_POLICY_VERSION, 'open_answer_trust_v1');
@@ -58,8 +59,8 @@ assert.equal(p.activityEvidence({ prompt: 'p' }, { status: 'CORRECT' }, 0, { cor
 
 // createTrustAnchor: evento + marcador en todas las dimensiones; idempotente; otro tema no se ve afectado.
 const goal = { id: 'g', nodes: [{ id: 'a', name: 'A', outcome: 'o', prerequisites: [] }, { id: 'b', name: 'B', outcome: 'o', prerequisites: [] }], events: [], reviews: [], coverage: [] };
-assert.equal(p.createTrustAnchor(goal, 'a', 'PRODUCTION', 'att1', NOW), true);
-assert.equal(p.createTrustAnchor(goal, 'a', 'PRODUCTION', 'att1', NOW), false);
+assert.equal(p.createTrustAnchor(goal, 'a', 'PRODUCTION', 'att1', NOW, { basis: 'numeric' }), true);
+assert.equal(p.createTrustAnchor(goal, 'a', 'PRODUCTION', 'att1', NOW, { basis: 'numeric' }), false);
 const anchors = goal.events.filter(e => e.type === 'TRUST_ANCHOR');
 assert.equal(anchors.length, 1);
 assert.equal(anchors[0].source, 'PRODUCTION');
@@ -70,12 +71,12 @@ assert.equal(p.trustAnchored(goal, 'a'), true);
 assert.equal(p.trustAnchored(goal, 'b'), false, 'ancla de otro tema no sirve');
 assert.equal(goal.events.filter(e => e.type === 'EVIDENCE').length, 0, 'el ancla no es un intento');
 
-// anchorNeed: 2 aciertos del modelo sin ancla ofrecen confirmar; con ancla o confirmación hecha no.
+// anchorNeed: 2 aciertos del modelo sin ancla piden una respuesta escrita; con ancla ya no.
 const g2 = { id: 'g', nodes: goal.nodes, events: [], reviews: [], coverage: [{ id: 'a', dimensions: [dim([model(), model()])] }] };
 const need = p.anchorNeed(g2, 'a');
 assert.ok(need);
 g2.events.push({ type: 'CONFIRMATION', confirms_type: 'OPEN_ANSWER', confirms_attempt_id: need, status: 'MISCONCEPTION', node_id: 'a' });
-assert.equal(p.anchorNeed(g2, 'a'), null, 'ya confirmada esa respuesta');
+assert.equal(p.anchorNeed(g2, 'a'), need, 'evidence_hardening_v1: una confirmación de opción múltiple no ancla; sigue pidiendo la respuesta escrita');
 assert.equal(p.trustAnchored(g2, 'a'), false, 'MISCONCEPTION no crea ancla');
 const g3 = { id: 'g', nodes: goal.nodes, events: [], reviews: [], coverage: [{ id: 'a', dimensions: [dim([model(), model(), anchor()])] }] };
 assert.equal(p.anchorNeed(g3, 'a'), null);
@@ -94,11 +95,13 @@ assert.equal(p.anchorNeed(g3, 'a'), null);
   run(g, 'BETO_SESSION', 'CORRECT', 3);
   assert.equal(p.trustAnchored(g, 'a'), false, 'otro confirms_type no crea ancla');
   assert.equal(p.sufficient(g.coverage[0].dimensions[0]), false);
+  // evidence_hardening_v1: una pregunta de opción múltiple ya no ancla respuestas escritas calificadas por el modelo.
   g = mk();
   run(g, 'OPEN_ANSWER', 'CORRECT', 4);
-  assert.equal(p.trustAnchored(g, 'a'), true);
-  assert.equal(g.events.filter(e => e.type === 'TRUST_ANCHOR' && e.source === 'CONFIRMATION' && e.source_attempt_id === 'src-4').length, 1);
-  assert.equal(p.sufficient(g.coverage[0].dimensions[0]), true, 'con ancla los dos aciertos del modelo ya cuentan');
+  assert.equal(p.trustAnchored(g, 'a'), false, 'OPEN_ANSWER CORRECT no ancla');
+  assert.equal(g.events.filter(e => e.type === 'TRUST_ANCHOR').length, 0);
+  assert.equal(p.sufficient(g.coverage[0].dimensions[0]), false, 'los dos aciertos del modelo siguen por confirmar');
+  assert.ok(p.anchorNeed(g, 'a') || p.anchorSuggest(g, 'a'), 'el tema sigue pidiendo una respuesta escrita comprobada');
   assert.equal(g.events.filter(e => e.type === 'EVIDENCE').length, 0, 'la confirmación nunca crea EVIDENCE');
 }
 
@@ -114,16 +117,16 @@ assert.equal(p.anchorNeed(g3, 'a'), null);
   const anchoredGoal = mk(open('INDEPENDENT')); anchoredGoal.coverage[0].dimensions[0].evidence.push(anchor());
   assert.equal(p.anchorSuggest(anchoredGoal, 'a'), null, 'con ancla no se ofrece');
   const done = mk(open('INDEPENDENT')); done.events.push({ type: 'CONFIRMATION', confirms_attempt_id: done.events[0].attempt_id, status: 'MISCONCEPTION', node_id: 'a' });
-  assert.equal(p.anchorSuggest(done, 'a'), null, 'esa respuesta ya se confirmó');
+  assert.equal(p.anchorSuggest(done, 'a'), done.events[0].attempt_id, 'evidence_hardening_v1: confirmar con opción múltiple no ancla; la respuesta escrita sigue pendiente');
   // Con otra práctica activa no se ofrece; sin ella sí, y solo el caso de 2 aciertos muestra «Falta…».
   const el = () => ({ textContent: '', children: [], append(...x) { this.children.push(...x); } });
   const one = mk(open('INDEPENDENT'));
   const offer = p.anchorOffer(one, 'a');
-  assert.ok(offer.children.some(c => c.textContent === 'Confirma con una pregunta rápida'));
-  assert.equal(offer.children.some(c => c.textContent === 'Falta una confirmación rápida'), false);
+  assert.ok(offer.children.some(c => c.textContent === 'Resuelve un problema escrito'));
+  assert.equal(offer.children.some(c => c.textContent === 'Falta una respuesta escrita comprobada'), false);
   assert.equal(p.anchorOffer({ ...one, mixed: { status: 'active' } }, 'a'), null);
   const two = { id: 'g', nodes: goal.nodes, reviews: [], events: [], coverage: [{ id: 'a', dimensions: [dim([model(), model()])] }] };
-  assert.ok(p.anchorOffer(two, 'a').children.some(c => c.textContent === 'Falta una confirmación rápida'));
+  assert.ok(p.anchorOffer(two, 'a').children.some(c => c.textContent === 'Falta una respuesta escrita comprobada'));
 }
 
 console.log('OK open_answer_trust');

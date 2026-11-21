@@ -54,3 +54,6 @@ La unidad se pide sin decir en cuál se espera el resultado: un resultado correc
 se marca como fallo. La tolerancia (2 %) y las longitudes son valores de ingeniería. El problema lo propone el modelo y lo audita otra
 llamada que falla abierta: la clave podría ser incorrecta aunque pase el filtro; por eso existe el botón de reporte de contenido para el resto
 de actividades (esta práctica aún no lo incluye). Sin foto, tabla ni cálculo con varias respuestas.
+
+## Actualización: evidence_hardening_v1
+Una producción calificada localmente con banda distinta de `base` crea el ancla. `purpose='anchor'` fuerza banda `standard`, exige 4 pasos en el orden, publica `expected_unit` en cálculo sin revelar el valor, y guarda `anchor_for_attempt_id` en el evento. Un fallo de ancla enfría el tema hasta una nueva enseñanza o 24 horas. Ver `docs/evidence_hardening_v1.md`.

@@ -65,9 +65,10 @@ const res = (status, it, extra = {}) => ({ status, item_id: it.item_id, node_id:
   assert.throws(() => p.applyDiscrimination(g, m.items[0], { ...res('CORRECT', m.items[0]), status: 'OK' }, 'x4', 'a', 80), /no corresponde/);
 
   // Acierto: no sube el peldaño ni crea EVIDENCE.
-  const before = JSON.stringify(g.reviews.find(r => r.id === 'a'));
+  const scheduleOnly = r => JSON.stringify({ ...r, last_exposure_at: undefined, exposure_before_response: undefined }); // evidence_hardening_v1: la exposición se marca, el calendario no cambia
+  const before = scheduleOnly(g.reviews.find(r => r.id === 'a'));
   assert.equal(p.applyDiscrimination(g, m.items[0], res('CORRECT', m.items[0]), 'at1', 'a', 90), true);
-  assert.equal(JSON.stringify(g.reviews.find(r => r.id === 'a')), before);
+  assert.equal(scheduleOnly(g.reviews.find(r => r.id === 'a')), before);
   assert.equal(m.index, 1);
   // Repetir el mismo attempt_id no duplica.
   assert.equal(p.applyDiscrimination(g, m.items[1], res('MISCONCEPTION', m.items[1]), 'at1', 'b', 90), false);

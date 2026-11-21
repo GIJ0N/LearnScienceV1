@@ -132,10 +132,7 @@ guardar y exportar respaldo; el frontend anterior no reconoce esa fase nueva. Co
 siempre la base actual antes de una restauración.
 
 ## Ancla local
-Desde `open_answer_trust_v1`, los aciertos independientes con `evaluator_trust:'model_single'` y `trust_policy_version` solo cuentan
-para suficiencia si el tema tiene un ancla (acierto corregido localmente posterior a la última contradicción: práctica de cálculo
-o confirmación `OPEN_ANSWER`). Los aciertos deterministas cuentan sin ancla y los eventos anteriores a la política cuentan como antes.
-Una contradicción posterior invalida el ancla. Ver `docs/open_answer_trust_v1.md`.
+Desde `evidence_hardening_v1` (que sustituye la regla de `open_answer_trust_v1`), solo una producción calificada localmente ancla un tema: cálculo (`numeric`) o procedimiento de al menos 4 pasos (`ordering`), con banda distinta de `base`. La confirmación de opción múltiple (`CONFIRMATION`, incluida la de `OPEN_ANSWER`) es formativa y no ancla. Los aciertos deterministas cuentan sin ancla; los calificados solo por el modelo cuentan únicamente si existe un marcador con `source='PRODUCTION'` y `anchor_policy_version='evidence_hardening_v1'` posterior a la última contradicción. Los marcadores anteriores se degradan al leer y no se borran. Ver `docs/evidence_hardening_v1.md` y `docs/open_answer_trust_v1.md`.
 
 ## Enseñanza directa
 Desde `direct_teaching_v1`, un «No sé» declarado en la práctica principal abre una explicación corta. Leerla es exposición y su comprobación

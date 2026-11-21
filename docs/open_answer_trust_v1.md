@@ -37,3 +37,6 @@ y vuelve a contar los aciertos del modelo; los marcadores `TRUST` se ignoran.
 
 ## Ajuste (auditoría del plan)
 Además del aviso «Falta una confirmación rápida» (2 aciertos del modelo sin ancla), tras un solo acierto abierto calificado por el modelo en práctica independiente, integración o repaso se ofrece «Confirma con una pregunta rápida» (`anchorSuggest`), si el tema no tiene ancla, esa respuesta no se confirmó ya y no hay otra práctica ni reparación activa. El nacimiento del ancla se prueba por el flujo real de `applyDiscrimination`.
+
+## Actualización: evidence_hardening_v1
+Esta política queda sustituida en su parte de anclas. La confirmación de opción múltiple (`OPEN_ANSWER` incluida) ya no crea ancla; solo lo hace una producción calificada localmente (cálculo, o procedimiento de 4 pasos o más). Los marcadores de esta versión no cuentan. Ver `docs/evidence_hardening_v1.md`.

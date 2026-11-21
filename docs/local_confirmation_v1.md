@@ -34,3 +34,6 @@ solo, pero puede abrir la puerta a evidencia firme.
 ## Límites
 - La confirmación es una sola pregunta: abre la puerta a «partial/met» en una capa, no concede dominio.
 - No sustituye la verificación de que el reto se hizo de verdad: solo comprueba que la idea se aplica.
+
+## Actualización: evidence_hardening_v1
+Una confirmación `OPEN_ANSWER` correcta ya no crea ancla. La confirmación sigue siendo formativa: no crea `EVIDENCE` y no cambia la cobertura. El tema sigue pidiendo una respuesta escrita calificada localmente. Ver `docs/evidence_hardening_v1.md`.

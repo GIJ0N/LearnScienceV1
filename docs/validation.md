@@ -501,3 +501,13 @@ Sin validar: Safari/iPhone real (muesca, teclado, zoom al enfocar), Gemini real 
 ## Informe de calibración del juez (`judge_calibration_v1`)
 
 `python tests/judge_calibration.test.py` (SQLite temporal con eventos sintéticos, sin red ni proveedor) comprueba que `tools/judge_calibration.py`: calcula el acuerdo juez↔confirmación local y el desacuerdo, cuenta la corrección manual aparte (no como evaluación ni acuerdo), nunca cuenta `UNKNOWN` (del juez o de la confirmación) ni campos ausentes de datos anteriores como acuerdo, agrupa los eventos sin `judge_model` como «unknown (dato anterior)», marca «insuficiente» sin porcentaje toda celda con menos de 30 casos, no incluye texto de respuestas ni de preguntas ni el id de perfil en claro (solo hash corto), no modifica la base (hash antes y después) y rechaza `--out` igual a la base. Mutaciones comprobadas (rompe, falla, restaura): contar `UNKNOWN` como acuerdo, quitar la marca de insuficiente (`MIN_CELL=0`) e imprimir el id de perfil en claro hacen fallar el test. Diseño en `docs/judge_calibration_v1.md`. Sin validar: datos reales (pocos casos todavía) ni Gemini real.
+
+## evidence_hardening_v1
+
+- `node tests/evidence_hardening.test.js` (cliente, DOM simulado): el ancla no nace de una confirmación de opción múltiple; los marcadores legacy o sin origen PRODUCTION no cuentan; un ancla por orden exige 4 pasos; la exposición formativa no crea evidencia ni cambia el calendario; el hito cuenta solo aciertos independientes sin ayuda; el aviso de política es idempotente; un fallo de ancla enfría el tema.
+- `python tests/evidence_hardening_backend.test.py` (sin proveedor: respuestas simuladas): la pregunta independiente que copia el enunciado del ejemplo queda como práctica; `purpose` inválido falla antes de llamar al modelo; la práctica de ancla fuerza banda standard, pide 4 pasos y publica `expected_unit` sin el valor.
+- `python tests/evidence_hardening_store.test.py` (SQLite temporal): los eventos nuevos sobreviven guardar, cargar, exportar y restaurar; un marcador legacy se conserva sin versión. Es una guarda de regresión: pasa también antes del cambio.
+
+Mutaciones comprobadas (rompe, falla, restaura): filtro de origen en `createTrustAnchor`, filtro de versión en `isHardAnchor`, mínimo de pasos, comparación con el enunciado del ejemplo, filtro de independencia del hito, exposición del reto y tipos legacy de `EXPOSURE_TYPES`.
+
+Sin validar: aceptación con Gemini real (las pruebas usan respuestas controladas), navegador real y calibración de la paráfrasis. Ver `docs/evidence_hardening_v1.md`.

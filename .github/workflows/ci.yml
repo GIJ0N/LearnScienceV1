@@ -244,6 +244,12 @@ jobs:
           python tools/criterion_benchmark.py
           python tests/controlled_demo.test.py
 
+      - name: Run evidence hardening tests
+        run: |
+          node tests/evidence_hardening.test.js
+          python tests/evidence_hardening_backend.test.py
+          python tests/evidence_hardening_store.test.py
+
       - name: Run the legacy app self-test
         run: python app_legacy.py --self-test
 
