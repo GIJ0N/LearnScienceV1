@@ -278,6 +278,11 @@ jobs:
           node tests/teaching_support.test.js
           python tests/teaching_support_backend.test.py
 
+      - name: Run the contrast and interleave tests (contrast_interleave_v1)
+        run: |
+          node tests/contrast_interleave.test.js
+          python tests/contrast_interleave_backend.test.py
+
       - name: Run the legacy app self-test
         run: python app_legacy.py --self-test
 
