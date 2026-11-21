@@ -511,3 +511,15 @@ Sin validar: Safari/iPhone real (muesca, teclado, zoom al enfocar), Gemini real 
 Mutaciones comprobadas (rompe, falla, restaura): filtro de origen en `createTrustAnchor`, filtro de versión en `isHardAnchor`, mínimo de pasos, comparación con el enunciado del ejemplo, filtro de independencia del hito, exposición del reto y tipos legacy de `EXPOSURE_TYPES`.
 
 Sin validar: aceptación con Gemini real (las pruebas usan respuestas controladas), navegador real y calibración de la paráfrasis. Ver `docs/evidence_hardening_v1.md`.
+
+## delayed_mastery_v1 (L2a: dominio confirmado otro día)
+
+- `node tests/delayed_mastery.test.js` (cliente, TZ `America/Mexico_City` fijada en el archivo; incluye `America/New_York` con DST): el dominio exige un acierto escrito local de otro día, 8 h después de la última enseñanza; el mismo día no confirma; la releitura no confirma; los negativos (banda base, ayuda, corregido, modelo sin ancla, clave de colocación, anterior a una contradicción, acierto con ayuda o corregido de otro día) no confirman y cada uno tiene su control positivo; el selector ofrece `CONTINUE` con propósito `wait` el mismo día y `CONFIRM` con propósito `delayed` al día siguiente; el cierre de INTEGRATE no escribe `CURRICULUM_CONTINUED`; `POLICY_NOTICE` no bloquea el selector; el reconocimiento es idempotente por versión.
+- `node tests/evidence_l2_fixes.test.js` (cliente): C-a (la práctica normal no ancla; el propósito `anchor` sí), C-b (texto exacto de ancla no disponible), C-c (malformado no marca el tema; cuatro pasos para ordenar en el ancla; ambas no aplicables se registran una vez) y producción diferida.
+- `python tests/delayed_mastery_store.test.py` (SQLite temporal): regresión; no se guarda `first_teaching_at`.
+
+Pruebas existentes ajustadas a la regla nueva (ver el historial de `feat/delayed-mastery`): `adaptive_cycle`, `authentic_performance`, `evidence_hardening`, `evidence_map`, `evidence_policy`, `evidence_sufficiency`, `expert_panel`, `expert_staleness`, `lesson_ui`, `local_production`, `open_answer_trust`, `path_ui`, `practice_difficulty` (JS y puente Python), `prerequisite_review`, `study_plan`. Ninguna aserción de dominio se debilitó; donde el comportamiento nuevo es el correcto, la expectativa se cambió con un comentario.
+
+Mutaciones comprobadas (se rompe, falla, se restaura, hash de `app.js` igual): sin mínimo de 8 h; fecha UTC; evidencia cruda; primera enseñanza en vez de la última; sin `awaitingDelayed` en `readyToAdvance`; sin filtro de versión en el reconocimiento; acierto de modelo que confirma; sin `purpose === 'anchor'` (C-a); bucle antiguo (C-c); sin `settled` en `nextAfterLesson`.
+
+Sin validar: aceptación con Gemini real (las pruebas usan respuestas controladas), navegador real, rechazo de timestamps futuros (C6 parcial), helper común de `TEACHING_EXPOSURE` (C1 parcial) y revisión completa de los usos de `settled` (C2 parcial). Ver `docs/delayed_mastery_v1.md`.

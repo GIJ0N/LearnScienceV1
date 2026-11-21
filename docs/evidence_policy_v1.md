@@ -152,3 +152,10 @@ No hay verificación semántica de paráfrasis, calibración científica del umb
 evaluadores deterministas especializados ni certificación de expertise. Se conserva la
 persistencia SQLite y la arquitectura legacy. El comparador textual rechaza copias exactas
 normalizadas, no demuestra diversidad cognitiva ni transferencia.
+
+
+## Nota de versión L2a (`delayed_mastery_v1`)
+
+- El dominio exige suficiencia y un acierto escrito local de otro día, al menos 8 h después de la última enseñanza. Ver `docs/delayed_mastery_v1.md`.
+- Un acierto de opción múltiple, de colocación o calificado por el modelo no confirma lo diferido, aunque la suficiencia esté completa.
+- `TEACHING_EXPOSURE` y `FORMATIVE_EXPOSURE` pasan a ser la referencia temporal de la confirmación. Releer no confirma por sí mismo.

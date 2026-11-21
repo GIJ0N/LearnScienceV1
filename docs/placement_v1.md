@@ -67,3 +67,10 @@ Uso de las relaciones entre metas para deducir. (Las preguntas abiertas ya no es
 El repaso programado de los temas saltados ya existe: ver `docs/placement_skip_review_v1.md`.
 
 Si la revisión descarta todas las preguntas del diagnóstico, se regenera una vez con el motivo; un descarte parcial no reintenta (ronda QA 7).
+
+
+## Nota de versión L2a
+
+- La clave de colocación (opción múltiple del diagnóstico) no confirma el dominio diferido. Solo la producción escrita calificada localmente lo hace.
+- La regla de C-c (`ordering` solo ante `PRODUCTION_NOT_APPLICABLE`) está en `fetchProduction`, que es la producción de tema. No se revisó si la producción de colocación necesita el mismo cambio.
+- Ver `docs/delayed_mastery_v1.md`.

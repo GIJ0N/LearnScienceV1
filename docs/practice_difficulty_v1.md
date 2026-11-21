@@ -120,3 +120,10 @@ Una lección guardada recuerda la banda que pidió (`difficulty_requested`). Al 
 ## Pruebas
 
 `tests/practice_difficulty.test.py` (con `tests/practice_difficulty_runner.js`) y `tests/practice_difficulty.test.js`.
+
+
+## Nota de versión L2a
+
+- `nodeSufficientForBand` exige dominio completo, con acierto diferido. Una práctica de desafío requiere ese dominio.
+- El acierto diferido también entra en la muestra de banda como cualquier evidencia. Las pruebas que construyen dominio completo lo reflejan en sus conteos.
+- Ver `docs/delayed_mastery_v1.md`.

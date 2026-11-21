@@ -62,3 +62,10 @@ la etiqueta es «Iniciando». La acción siguiente de una capa caducada es «Haz
 - Solo lectura: el panel no escribe eventos ni cambia dominio, evidencia ni calendario de repasos.
 
 Rollback: revertir la vista; no hay datos nuevos. Límite: 60 días es un valor de ingeniería, no un umbral científico universal.
+
+
+## Nota de versión L2a
+
+- La capa de independencia pasa a `met` solo con un acierto escrito local de otro día (`delayedConfirmed`). Dos aciertos del mismo día quedan en `partial`.
+- Las pruebas de `expert_panel` y `expert_staleness` se ajustaron a esa regla.
+- Ver `docs/delayed_mastery_v1.md`.
