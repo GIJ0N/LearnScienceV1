@@ -80,6 +80,7 @@ jobs:
           node tests/worked_examples.test.js
           node tests/open_answer_trust.test.js
           node tests/daily_session.test.js
+          node tests/discrimination_daily.test.js
           python tests/expert_profile_backend.test.py
           node tests/expert_profile.test.js
           python tests/practice_difficulty.test.py

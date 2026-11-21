@@ -2107,7 +2107,7 @@ function dailySync(goal,at=now()){
 }
 function dailySummary(goal,at=now()){
  const d=dailyToday(goal,at);if(!d)return null;const since=d.started_at||0,evs=goal.events||[];
- const correct=evs.filter(e=>e&&((e.type==='EVIDENCE'&&Number(e.timestamp)>=since)||(['DISCRIMINATION','COMPOSITION','CONFIRMATION'].includes(e.type)&&Number(e.at)>=since))&&resultStatus(e.result??e.status)==='CORRECT').length;
+ const correct=evs.filter(e=>e&&((e.type==='EVIDENCE'&&Number(e.timestamp)>=since)||(['COMPOSITION','CONFIRMATION'].includes(e.type)&&Number(e.at)>=since))&&resultStatus(e.result??e.status)==='CORRECT').length;
  const next=(goal.reviews||[]).map(r=>r&&r.due).filter(x=>Number.isFinite(x)&&x>at).sort((a,b)=>a-b)[0];
  return {reviews_done:d.plan.filter(b=>b.kind==='review'&&b.status==='done').length,correct,skipped:d.plan.filter(b=>b.status==='skipped').length,next_review:next?dailyDate(next):null}
 }
