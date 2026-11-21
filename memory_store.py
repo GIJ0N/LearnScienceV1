@@ -482,7 +482,8 @@ def validate_store(raw, profile_id, allow_profile_rebind=False, ctx=None):
                 raise ValueError("El ledger contiene un evento inválido.")
             event["profile_id"] = profile_id
             _sanitize_difficulty(event)
-            if event.get("type") in ("TOPIC_SELF_EXPLANATION", "TOPIC_CLOSURE_OPENED", "TEACHING_SUPPORT", "WORKED_WHY", "WORKED_LADDER_END"):
+            if event.get("type") in ("TOPIC_SELF_EXPLANATION", "TOPIC_CLOSURE_OPENED", "TEACHING_SUPPORT", "WORKED_WHY", "WORKED_LADDER_END", "CONTRAST_SHOWN"):
+                # contrast_interleave_v1: CONTRAST_SHOWN es exposición formativa del contraste; nunca crea evidencia.
                 # topic_closure_v1: estos eventos son presentación y autoexplicación; nunca crean evidencia.
                 # worked_examples_v1 (L4a): TEACHING_SUPPORT decide la presentación de la lección; tampoco es evidencia.
                 # worked_examples_v1 (L4b): WORKED_WHY (porqué autoevaluado) y WORKED_LADDER_END son formativos; text se recorta.
@@ -493,6 +494,8 @@ def validate_store(raw, profile_id, allow_profile_rebind=False, ctx=None):
                 del event["judge_model"]  # judge_model_v1: metadato; un valor inválido se descarta sin rechazar el evento
             if event.get("node_id") is not None and event.get("node_id") not in allowed_nodes:
                 raise ValueError("El ledger contiene una referencia de nodo inválida.")
+            if event.get("type") == "CONTRAST_SHOWN" and event.get("confused_node_id") not in allowed_nodes:
+                raise ValueError("El ledger contiene una referencia de contraste inválida.")
             if event.get("type") == "EVIDENCE" and "hint_level_max" in event:
                 level = normalize_hint_level(event.get("hint_level_max"))
                 event["hint_level_max"] = level
