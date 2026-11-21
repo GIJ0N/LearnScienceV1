@@ -175,3 +175,10 @@ normalizadas, no demuestra diversidad cognitiva ni transferencia.
 ## Nota de versión L4a (`worked_examples_v1`)
 
 - La inversión por pericia (`TEACHING_SUPPORT`, `lean`/`full`) es presentación. No crea `EVIDENCE`, no entra en `EXPOSURE_TYPES`, `TEACHING_REF_TYPES` ni `isStudyAnswer`, y no cambia cobertura, calendario ni suficiencia. Un acierto independiente en la dimensión objetivo solo sirve para decidir el apoyo, no para acreditar dominio. Ver `docs/worked_examples_v1.md`.
+
+## Nota de versión L4b (`worked_examples_v1`)
+
+- Los huecos del ejemplo resuelto, el problema solo y los porqués son formativos. Sus evaluaciones usan `evaluator_version` `worked-local-v1` (no `local-production`), así que `writtenDeterministic` no los reconoce y no confirman lo diferido. No crean `EVIDENCE`, `TRUST`, cobertura, calendario ni ancla, y no llaman a `applyProductionResult` ni a `createTrustAnchor`.
+- `WORKED_WHY` no entra en `EXPOSURE_TYPES`, `TEACHING_REF_TYPES` ni `isStudyAnswer`, y no cambia la última exposición ni la revisión. Su texto (≤600) no llega al modelo.
+- Los huecos del ejemplo con `worked_version` no cuentan para la racha de estudio: `isStudyAnswer` los excluye. Los demás `FADED_STEP` no cambian.
+- Un hueco o porqué solo cuenta su primera respuesta por ítem; las siguientes no cambian nada. Ver `docs/worked_examples_v1.md`.

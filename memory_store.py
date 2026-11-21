@@ -482,10 +482,11 @@ def validate_store(raw, profile_id, allow_profile_rebind=False, ctx=None):
                 raise ValueError("El ledger contiene un evento inválido.")
             event["profile_id"] = profile_id
             _sanitize_difficulty(event)
-            if event.get("type") in ("TOPIC_SELF_EXPLANATION", "TOPIC_CLOSURE_OPENED", "TEACHING_SUPPORT"):
+            if event.get("type") in ("TOPIC_SELF_EXPLANATION", "TOPIC_CLOSURE_OPENED", "TEACHING_SUPPORT", "WORKED_WHY", "WORKED_LADDER_END"):
                 # topic_closure_v1: estos eventos son presentación y autoexplicación; nunca crean evidencia.
                 # worked_examples_v1 (L4a): TEACHING_SUPPORT decide la presentación de la lección; tampoco es evidencia.
-                if event.get("type") == "TOPIC_SELF_EXPLANATION":
+                # worked_examples_v1 (L4b): WORKED_WHY (porqué autoevaluado) y WORKED_LADDER_END son formativos; text se recorta.
+                if event.get("type") in ("TOPIC_SELF_EXPLANATION", "WORKED_WHY"):
                     event["text"] = str(event.get("text") or "")[:600]
                 event["creates_evidence"] = False
             if "judge_model" in event and not _valid_model_name(event["judge_model"]):
@@ -1342,14 +1343,23 @@ class DurableMemory:
             row = db.execute("SELECT created_at FROM placement_answers WHERE profile_id=? AND attempt_id=?", (profile_id, str(attempt_id or ""))).fetchone()
         return row["created_at"] if row else 0
 
-    def record_placement_answer(self, profile_id, goal_id, item_id, attempt_id, fingerprint, result):
-        """Idempotent by attempt_id: the same answer returns the stored result; a different one is rejected."""
+    def record_placement_answer(self, profile_id, goal_id, item_id, attempt_id, fingerprint, result, first_per_item=False):
+        """Idempotent by attempt_id: the same answer returns the stored result; a different one is rejected.
+
+        worked_examples_v1 (L4b): con first_per_item solo cuenta la primera respuesta de cada ítem; las siguientes
+        devuelven la primera marcada como ya respondida, sin escribir nada.
+        """
         profile_id = _profile_id(profile_id)
         attempt_id = str(attempt_id or "").strip()
         if not attempt_id:
             raise ValueError("Falta attempt_id para la respuesta de diagnóstico.")
         with self._lock, self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
+            if first_per_item:
+                prior = db.execute("SELECT attempt_id, result_json FROM placement_answers WHERE profile_id=? AND item_id=? ORDER BY created_at LIMIT 1",
+                                   (profile_id, str(item_id or ""))).fetchone()
+                if prior and prior["attempt_id"] != attempt_id:
+                    return {**json.loads(prior["result_json"]), "already_answered": True}
             row = db.execute("SELECT * FROM placement_answers WHERE profile_id=? AND attempt_id=?", (profile_id, attempt_id)).fetchone()
             if row:
                 if row["fingerprint"] != fingerprint:
