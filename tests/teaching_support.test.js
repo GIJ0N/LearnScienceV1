@@ -11,16 +11,19 @@ const p = require('../app.js');
 const T0 = Date.UTC(2026, 10, 21, 9);
 let clock = T0 + 1000;
 p.setClockForTests(() => clock);
-let calls = [], stepsResponse = null;
+let calls = [], stepsResponse = null, lessonResponse = null;
 global.fetch = async (route, options) => {
   const body = JSON.parse(options.body);
   calls.push({ route, body });
   if (route === '/api/profile/save') return { ok: true, json: async () => ({ ok: true, revision: 2 }) };
+  if (route === '/api/lesson/steps' && calls.filter(c => c.route === route).length > 6) throw Error('bucle de pasos: se pidieron pasos más de 6 veces');
   if (route === '/api/lesson/steps') return { ok: true, json: async () => stepsResponse };
   if (route === '/api/lesson/faded') return { ok: true, json: async () => ({ schema_version: 'faded_examples_v1' }) };
+  if (route === '/api/lesson') return { ok: true, json: async () => lessonResponse };
   throw Error('Ruta inesperada ' + route);
 };
 const routeCalls = route => calls.filter(c => c.route === route);
+const settle = () => new Promise(resolve => setImmediate(resolve));
 
 const stepItem = n => ({ schema_version: 'step_lessons_v1', item_id: 'step-' + n, node_id: 'a', prompt: '¿Cuál?', options: [{ id: 'a', text: 'x' }, { id: 'b', text: 'y' }, { id: 'c', text: 'z' }] });
 const stepsOk = () => ({ steps: [1, 2].map(n => ({ step_id: 'step-' + n, predict: { prompt: 'Predice ' + n }, resolution: 'Resolución ' + n, body: 'Cuerpo ' + n, check: stepItem(n) })) });
@@ -218,9 +221,12 @@ const teachingEvents = g => g.events.filter(e => e.type === 'TEACHING_SUPPORT');
   {
     calls = []; stepsResponse = { code: 'STEPS_NOT_NEEDED', steps: [] }; roots.status.textContent = ''; clock = T0 + 1000;
     const g = attach(goal({ adaptation_mode: 'initial' }));
-    await renderTeach(g);
+    await renderTeach(g); await settle();
     assert.equal(routeCalls('/api/lesson/steps').length, 1, 'el cliente pidió pasos una vez (decisión full)');
     assert.equal(g.lessons.a.support, 'lean', 'el servidor manda lean');
+    assert.equal(teachingEvents(g).length, 1, 'el registro se actualiza, no se duplica');
+    assert.equal(teachingEvents(g)[0].support, 'lean');
+    assert.ok(teachingEvents(g)[0].reasons.includes('servidor_consolidate'), 'el motivo queda registrado');
     assert.ok(!has('No pude preparar', roots.status), 'sin aviso de error');
     assert.ok(find('Ver un ejemplo resuelto'), 'la vista es lean');
     assert.equal(routeCalls('/api/lesson/steps').length, 1, 'no vuelve a pedir pasos');
@@ -235,6 +241,74 @@ const teachingEvents = g => g.events.filter(e => e.type === 'TEACHING_SUPPORT');
     assert.equal(routeCalls('/api/lesson/steps').length, 1);
     assert.equal(routeCalls('/api/lesson/steps')[0].body.learner_requested, false);
     assert.equal(findExample(), null, 'sin ejemplo en details en full');
+  }
+
+  // 10. Servidor STEPS_NOT_NEEDED con un veto activo: la decisión full se mantiene, sin aviso y sin pedir pasos otra vez.
+  {
+    calls = []; stepsResponse = { code: 'STEPS_NOT_NEEDED', steps: [] }; roots.status.textContent = ''; clock = T0 + 1000;
+    const g = attach(goal({ adaptation_mode: 'consolidate' }));
+    failure(g, 'MISCONCEPTION', T0 + 10);
+    await renderTeach(g); await settle();
+    assert.equal(g.lessons.a.support, 'full', 'el veto de fallo mantiene full');
+    assert.ok(g.lessons.a.support_reasons.includes('fallo_posterior'));
+    assert.equal(routeCalls('/api/lesson/steps').length, 1, 'no vuelve a pedir pasos');
+    assert.ok(!has('No pude preparar', roots.status), 'sin aviso de error');
+    assert.equal(teachingEvents(g).length, 1);
+    assert.equal(teachingEvents(g)[0].support, 'full');
+    assert.ok(!teachingEvents(g)[0].reasons.includes('servidor_consolidate'));
+  }
+
+  // 11. B1: «No lo entendí» desde COMPREHENSION con la lección sin congelar: full, con pasos pedidos con learner_requested.
+  {
+    calls = []; stepsResponse = stepsOk(); clock = T0 + 1000;
+    // Sin pregunta de comprobación no se abre la explicación directa: «No lo entendí» vuelve a la lección (TEACH).
+    const g = attach(goal({ adaptation_mode: 'consolidate', check: { prompt: '', reference: 'r', kind: 'explanation' } }));
+    g.session.mode = 'COMPREHENSION';
+    roots.app.children = []; await p.session(); await settle();
+    assert.equal(g.lessons.a.support, undefined, 'fixture: la lección no está congelada');
+    find('No lo entendí; vuelve al ejemplo').onclick();
+    await settle();
+    assert.equal(g.lessons.a.support, 'full', 'no queda lean');
+    assert.equal(g.lessons.a.support_returned, true);
+    assert.equal(g.lessons.a.support_optin, true);
+    assert.equal(teachingEvents(g).length, 1, 'se registra la decisión full');
+    assert.equal(teachingEvents(g)[0].support, 'full');
+    await renderTeach(g); await settle();
+    const steps = routeCalls('/api/lesson/steps');
+    assert.ok(steps.length >= 1, 'pide pasos');
+    assert.ok(steps.every(c => c.body.learner_requested === true), 'con learner_requested');
+    assert.equal(g.lessons.a.support, 'full');
+  }
+
+  // 12. B1: directFull desde GUIDED sin congelar: full y pasos con learner_requested.
+  {
+    calls = []; stepsResponse = stepsOk(); clock = T0 + 1000;
+    const g = attach(goal({ adaptation_mode: 'consolidate' }));
+    g.session.mode = 'GUIDED';
+    p.directFull(g, node); await settle();
+    assert.equal(g.lessons.a.support, 'full', 'directFull no deja lean');
+    assert.equal(g.lessons.a.support_returned, true);
+    assert.equal(teachingEvents(g).length, 1);
+    assert.equal(teachingEvents(g)[0].support, 'full');
+    await renderTeach(g); await settle();
+    const steps = routeCalls('/api/lesson/steps');
+    assert.ok(steps.length >= 1, 'pide pasos');
+    assert.ok(steps.every(c => c.body.learner_requested === true), 'con learner_requested');
+  }
+
+  // 13. Menor: regenerar una lección conserva la primera creación del tema y el veto de fallo anterior.
+  {
+    calls = []; stepsResponse = stepsOk(); clock = T0 + 5000; roots.status.textContent = '';
+    const g = attach(goal({ adaptation_mode: 'consolidate', target_dimension: 'units', support: 'lean', support_at: T0, support_reasons: ['consolidate'] }));
+    g.events.push({ type: 'TEACHING_SUPPORT', version: 'worked_examples_v1', node_id: 'a', lesson_created_at: T0, support: 'lean', reasons: ['consolidate'], creates_evidence: false, at: T0 });
+    failure(g, 'MISCONCEPTION', T0 + 10);
+    const check = { prompt: 'c', reference: 'r', kind: 'explanation' };
+    lessonResponse = { explanation: 'Explicación nueva', example: 'Ejemplo nuevo', common_error: 'Error', target_dimension: 'variables', difficulty_band: 'standard', adaptation_mode: 'consolidate', check, guided: check, independent: check, integration: check };
+    await renderTeach(g); await settle(); await renderTeach(g); await settle();
+    assert.equal(g.lessons.a.created_at, clock, 'la lección regenerada tiene created_at nuevo');
+    assert.equal(g.lessons.a.first_created_at, T0, 'conserva la primera creación del tema');
+    assert.equal(g.lessons.a.support, 'full', 'el fallo anterior sigue vetando lean');
+    assert.ok(g.lessons.a.support_reasons.includes('fallo_posterior'));
   }
 
   console.log('teaching_support.test.js OK');
