@@ -159,3 +159,10 @@ normalizadas, no demuestra diversidad cognitiva ni transferencia.
 - El dominio exige suficiencia y un acierto escrito local de otro día, al menos 8 h después de la última enseñanza. Ver `docs/delayed_mastery_v1.md`.
 - Un acierto de opción múltiple, de colocación o calificado por el modelo no confirma lo diferido, aunque la suficiencia esté completa.
 - `TEACHING_EXPOSURE` y `FORMATIVE_EXPOSURE` pasan a ser la referencia temporal de la confirmación. Releer no confirma por sí mismo.
+
+## Nota de versión L2b (`transfer_probe_v1`)
+
+- La transferencia se acredita solo con un sondeo escrito, determinista y emitido por el servidor (`transfer_probe_v1`). Ver `docs/transfer_probe_v1.md`.
+- Esta nota **sustituye** la regla de este documento que decía «el nuevo endpoint de comprobación nunca concede transferencia» y la de «novedad autorizada por su contrato» como base de la transferencia: ya no basta la novedad declarada en INTEGRATE.
+- Los eventos anteriores con novedad no se borran; se cuentan solo para medir el aviso L3 (`legacyTransfer`).
+- `TRANSFER_PROBE_ISSUED`, `TRANSFER_UNAVAILABLE` y el enfriamiento tras un fallo de transferencia no son evidencia. Un fallo solo contradice la dimensión `transfer`.
