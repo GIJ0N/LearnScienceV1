@@ -16,7 +16,9 @@ Una lección con pasos y ejemplos resueltos ayuda a un aprendiz que aún no domi
   - acierto independiente en la dimensión objetivo `lesson.target_dimension` (no en otra).
 - Vetos (anulan `lean` y dejan `full`): modos `repair` y `scaffold`; último intento del tema `UNKNOWN` (incluido «No sé; enséñamelo») o con `lack_of_exposure`; fallo de aprendizaje posterior a la creación de la lección; revisión o desbloqueo (`unskip`) de prerrequisito activa en el tema; `support_optin`; pasos ya iniciados; lección guardada sin `support` (legado, comportamiento de hoy).
 - La decisión se congela en `lesson.support` (con `support_reasons` y `support_at`) en la primera visita. Repintar no la recalcula.
-- Retorno a `full` (una sola dirección, con `support_returned=true`): un fallo posterior o un «No sé» tras `lean`, «No lo entendí» y `directFull` lo provocan.
+- Retorno a `full` (una sola dirección, con `support_returned=true` y `support_optin=true`): un fallo posterior o un «No sé» tras `lean` lo provocan. «No lo entendí» y `directFull` también lo hacen aunque la lección aún no esté congelada, y escriben el registro `full` si no existe.
+- Ventana del fallo posterior: desde la primera creación de la lección del tema (`first_created_at`, recuperada del `TEACHING_SUPPORT` guardado) o desde el último acierto, lo que proteja más. Regenerar la lección no reinicia la ventana.
+- Un único `TEACHING_SUPPORT` por lección (clave `lesson_created_at`); cambiar la decisión lo actualiza en lugar de duplicarlo.
 - Evento `TEACHING_SUPPORT` `{version:'worked_examples_v1', node_id, support, reasons, creates_evidence:false}`, uno por lección nueva. No está en `EXPOSURE_TYPES`, `TEACHING_REF_TYPES` ni `isStudyAnswer`. `validate_store` fuerza `creates_evidence=false`.
 
 ### Vista
@@ -26,7 +28,7 @@ Una lección con pasos y ejemplos resueltos ayuda a un aprendiz que aún no domi
 
 ### Servidor
 
-`POST /api/lesson/steps` calcula `lesson_adaptation(relevant_memory(...), target_dimension)`. Si el resultado es `consolidate` y no llega `learner_requested=true`, responde `{code:'STEPS_NOT_NEEDED', steps:[]}` sin llamar al modelo. El cliente trata esa respuesta en silencio: pasa a `lean` sin aviso de error ni `stepsUnavailable` permanente.
+`POST /api/lesson/steps` calcula `lesson_adaptation(relevant_memory(...), target_dimension)`. Si el resultado es `consolidate` y no llega `learner_requested=true`, responde `{code:'STEPS_NOT_NEEDED', steps:[]}` sin llamar al modelo. El cliente trata esa respuesta en silencio. Si la decisión de full no tenía veto, pasa a `lean` y actualiza el registro con el motivo `servidor_consolidate`. Si tenía veto (fallo posterior, «No sé», opt-in, retorno o lección legada), se mantiene `full` y la lección se muestra sin pasos, sin aviso y sin volver a pedirlos.
 
 ### Evidencia
 
