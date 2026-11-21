@@ -532,3 +532,11 @@ Sin validar: aceptación con Gemini real (las pruebas usan respuestas controlada
 - `tests/judge_model.test.py`: registra `_transfer_attempts` como sitio de generación (no se tocó el juez).
 - Pruebas existentes actualizadas por la nueva regla de transferencia: `evidence_sufficiency.test.js`, `expert_panel.test.js`, `expert_profile.test.js`. Ver `docs/transfer_probe_v1.md`.
 - Sin validar: Gemini real, navegador real, y el efecto de «Seguir con la ruta» sobre el orden de la ruta.
+
+## transfer_probe_v1: correcciones del supervisor (PR #67)
+
+- `node tests/transfer_probe.test.js`, bloque 13: un fallo de sondeo no dispara `REPAIR` ni `PREREQUISITE` (tema propio y prerrequisito) y `chooseNext` no borra `goal.lessons`.
+- Bloque 14: un acierto del sondeo de otro día confirma `delayedConfirmed` (numeric; ordering de 4 pasos); ordering de 3 pasos y el mismo día no confirman. Este bloque ya pasaba con la regla de confirmación existente; sirve de regresión.
+- Bloque 15: el acuse L3 escribe un `CURRICULUM_CONTINUED` por tema afectado, sin duplicar, y el selector no vuelve a elegir ese tema (R1).
+- Bloque 16: la línea de transferencia del tablero solo aparece si el sondeo es ofrecible, está topado o no hay práctica escrita posible.
+- Mutaciones de estas correcciones: quitar la exclusión, acuse L3 sin continuación y línea en cada tema; cada una falla y se restaura.

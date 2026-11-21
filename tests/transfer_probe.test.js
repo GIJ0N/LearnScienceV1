@@ -209,5 +209,72 @@ const blockOf = (goal, at = NOW, node = 'a') => p.transferBlock(goal, node, at);
   assert.equal(g.events.filter(e => e.type === 'EVIDENCE' && e.transfer_probe_version).length, 0, 'seguir con la ruta no crea evidencia');
 }
 
+// (13) Selector: un fallo de sondeo no dispara REPAIR ni PREREQUISITE y no borra la lección, ni en el tema ni en un prerrequisito.
+{
+  const lesson = { check: { prompt: 'c' }, example: 'e' };
+  const g = goalOf([...readyEvents(), probe(mx(11, 12), 'MISCONCEPTION')], { dims: appDims(), lessons: { a: lesson } });
+  const before = JSON.stringify(g.lessons);
+  for (const at of [mx(11, 13), mx(13, 12)]) {
+    const decision = p.selectTutorAction(g, at);
+    assert.ok(!['REPAIR', 'PREREQUISITE'].includes(decision.action), 'el fallo de sondeo no dispara reparación: ' + decision.action);
+  }
+  const realNow = Date.now;
+  Date.now = () => mx(11, 13);
+  try { p.chooseNext(g); } finally { Date.now = realNow; }
+  assert.equal(JSON.stringify(g.lessons), before, 'la lección no se borra tras chooseNext');
+}
+{
+  const g = goalOf([...readyEvents(), probe(mx(11, 12), 'MISCONCEPTION')], { dims: appDims(), lessons: {} });
+  g.nodes[1].prerequisites = ['a'];
+  g.coverage.push({ id: 'b', name: 'Tema B', dimensions: [{ id: 'direct_application', name: 'Aplicación', required: true, evidence: [] }] });
+  const decision = p.selectTutorAction(g, mx(11, 13), { focus: 'b' });
+  assert.notEqual(decision.action, 'PREREQUISITE', 'un sondeo fallido en un prerrequisito no lo refuerza');
+  assert.equal(decision.inputs.models.find(m => m.node_id === 'a').dimensions.some(d => d.difficulty), false, 'la dificultad del prerrequisito no sale del sondeo');
+}
+
+// (14) Un acierto del sondeo de otro día confirma lo diferido; el mismo día no; ordenar exige 4 pasos.
+{
+  const base = [teach(mx(10, 9))];
+  const dims = () => [{ ...TRANSFER_DIM, evidence: [] }];
+  const numeric = goalOf([...base, probe(mx(11, 10), 'CORRECT', { production_kind: 'numeric' })], { dims: dims() });
+  assert.equal(p.delayedConfirmed(numeric.coverage[0], numeric.events), true, 'numeric de otro día confirma');
+  const four = goalOf([...base, probe(mx(11, 10), 'CORRECT', { production_kind: 'ordering', ordering_steps: 4 })], { dims: dims() });
+  assert.equal(p.delayedConfirmed(four.coverage[0], four.events), true, 'ordering de 4 pasos de otro día confirma');
+  const three = goalOf([...base, probe(mx(11, 10), 'CORRECT', { production_kind: 'ordering', ordering_steps: 3 })], { dims: dims() });
+  assert.equal(p.delayedConfirmed(three.coverage[0], three.events), false, 'ordering de 3 pasos no confirma');
+  const sameDay = goalOf([teach(mx(10, 9)), probe(mx(10, 10), 'CORRECT', { production_kind: 'numeric' })], { dims: dims() });
+  assert.equal(p.delayedConfirmed(sameDay.coverage[0], sameDay.events), false, 'el mismo día no confirma');
+}
+
+// (15) Acuse L3: un CURRICULUM_CONTINUED por tema afectado (como L1 y L2), sin duplicar; el selector no vuelve a elegir ese tema.
+{
+  const dimsA = [{ id: 'direct_application', name: 'Aplicación', required: true, evidence: [] }, { ...TRANSFER_DIM, evidence: [] }];
+  const legacyEvents = [teach(mx(10, 9)), written(mx(11, 10), 'p1'), written(mx(11, 11), 'p2'), legacyNovel(mx(11, 12)), legacyNovel(mx(11, 13))];
+  const sameDayB = [teach(mx(10, 9), 'b'), written(mx(10, 10), 'pb1', { node_id: 'b' }), written(mx(10, 11), 'pb2', { node_id: 'b' })];
+  const g = goalOf([...legacyEvents, ...sameDayB], {
+    dims: dimsA,
+    extraNodes: [{ id: 'b', name: 'Tema B', dimensions: [{ id: 'direct_application', name: 'Aplicación', required: true, evidence: [] }] }],
+  });
+  g.coverage[1].dimensions[0].evidence = sameDayB.filter(e => e.type === 'EVIDENCE');
+  p.acknowledgePolicyNotice(g, mx(20, 10), p.DELAYED_VERSION);
+  p.acknowledgePolicyNotice(g, mx(20, 10), p.TRANSFER_VERSION);
+  p.acknowledgePolicyNotice(g, mx(20, 11), p.TRANSFER_VERSION);
+  const continued = g.events.filter(e => e.type === 'CURRICULUM_CONTINUED' && e.source === 'POLICY_NOTICE' && e.policy_version === p.TRANSFER_VERSION);
+  assert.deepEqual(continued.map(e => e.node_id), ['a'], 'una sola continuación por tema afectado y acuse');
+  assert.equal(p.learningState(g, 'a', mx(20, 12)).dims_sufficient, false, 'R1: el tema acusado sin dimensiones suficientes no se repite');
+  assert.notEqual(p.selectTutorAction(g, mx(20, 12)).node_id, 'a', 'el selector avanza tras el acuse');
+}
+
+// (16) La línea de transferencia solo aparece si el sondeo es ofrecible o está topado o no disponible.
+{
+  NOW = mx(20, 12); // el reloj lo fijan las pruebas anteriores; aquí se evalúa el 20 de noviembre
+  const sameDay = goalOf([teach(mx(10, 9)), written(mx(10, 10), 'p1'), written(mx(10, 11), 'p2')], { dims: appDims() });
+  assert.equal(p.transferOffer(sameDay, 'a'), null, 'pendiente sin sondeo posible: sin línea');
+  const ready = goalOf(readyEvents(), { dims: appDims() });
+  assert.notEqual(p.transferOffer(ready, 'a'), null, 'ofrecible: con el botón');
+  const capped = goalOf(readyEvents([issued(mx(11, 12), 'q1'), issued(mx(12, 12), 'q2'), issued(mx(13, 12), 'q3'), issued(mx(14, 12), 'q4')]), { dims: appDims() });
+  assert.match(JSON.stringify(p.transferOffer(capped, 'a')), /Este tema ya tiene 4 sondeos/, 'topado: explica el tope');
+}
+
 console.log('transfer_probe.test.js OK');
 })().catch(error => { console.error(error); process.exit(1); });

@@ -100,6 +100,7 @@ intento. La oferta muestra «Intentar de nuevo» una sola vez y la salida **«Se
 | `TRANSFER_PROBE_ISSUED` | `node_id`, `item_id`, `context_family`, `at`, `policy_version` | No (registro de emisión) |
 | `TRANSFER_UNAVAILABLE` | `node_id`, `at`, `policy_version`, `retry_used` | No (formativo) |
 | `CURRICULUM_CONTINUED` (`source:'TRANSFER_PENDING'`) | `node_id`, `pending_dimensions`, `at`, `policy_version` | No |
+| `CURRICULUM_CONTINUED` (`source:'POLICY_NOTICE'`, `policy_version:'transfer_probe_v1'`) | `node_id`, `pending_dimensions`, `at` | No |
 | `POLICY_NOTICE_ACK` (`policy_version:'transfer_probe_v1'`) | `policy_version`, `at` | No |
 | `EVIDENCE` del sondeo | `transfer_probe_version`, `context_family`, `purpose`, `evaluator_trust` | Sí, con las reglas de siempre |
 
@@ -114,8 +115,20 @@ dominados con la regla anterior y ya no lo están. El texto: «Cambiamos otra re
 por buena con preguntas del propio tutor. En M tema(s) se comprobará con un problema nuevo en otro contexto. No se borró nada.
 Puedes seguir con la ruta.»
 
-El acuse escribe solo `POLICY_NOTICE_ACK`. A diferencia de L1 y L2, **no** escribe `CURRICULUM_CONTINUED` por tema: la transferencia
-pendiente no bloquea nada y no debe marcarse como curricularmente continuada.
+El acuse escribe un `CURRICULUM_CONTINUED` con `source:'POLICY_NOTICE'` y `policy_version:'transfer_probe_v1'` por cada tema afectado, y
+un `POLICY_NOTICE_ACK`, igual que L1 y L2. Así el botón no queda muerto. Regla R1 (`selectorDone`): ese `CURRICULUM_CONTINUED` cuenta como
+continuado porque el tema afectado no tiene las dimensiones suficientes; el selector avanza (prueba de `transfer_probe.test.js`, bloque 15).
+
+### Un fallo de sondeo no es dificultad (selector)
+
+`learningState` no toma los sondeos de transferencia (`transfer_probe_version`) como la última dificultad observada de una dimensión.
+Así `selectTutorAction` no devuelve `REPAIR` ni `PREREQUISITE` por un sondeo fallido, ni en el tema ni en un prerrequisito, y
+`chooseNext` no borra `goal.lessons`. Lo prueba el bloque 13 de `transfer_probe.test.js`.
+
+### Línea de estado en el tablero
+
+`transferOffer` solo muestra línea cuando el sondeo es ofrecible, está topado (`TRANSFER_LIMIT`) o no hay práctica escrita posible.
+En los demás casos (no toca todavía, ocupado, hoy, enfriamiento) el tema no muestra nada.
 
 ## Qué no hace
 
@@ -167,6 +180,9 @@ Cada una se rompió, falló la prueba indicada y se restauró (verificado por ha
 | Quitar la válvula (cliente) | `transfer_probe.test.js` (6) |
 | Quitar el candado en vuelo | `test_concurrent_requests_generate_once` |
 | Quitar Jaccard frente a la misma meta | `test_same_node_high_jaccard_rejects_and_retries` |
+| Quitar la exclusión del sondeo en `learningState` | `transfer_probe.test.js` (13) |
+| Acuse L3 sin `CURRICULUM_CONTINUED` | `transfer_probe.test.js` (15) |
+| Línea de transferencia en cada tema | `transfer_probe.test.js` (16) |
 
 ## Sin validar
 

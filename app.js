@@ -1351,8 +1351,8 @@ function impactRow(goal,c,opts){return {node_id:c.id,name:(goal.nodes||[]).find(
 function acknowledgePolicyNotice(goal,at=now(),version=HARDENING_VERSION){
  goal.events=Array.isArray(goal.events)?goal.events:[];
  if(goal.events.some(e=>e&&e.type==='POLICY_NOTICE_ACK'&&e.policy_version===version))return {written:0,acknowledged:true};
- // transfer_probe_v1: el aviso L3 solo acusa; el tema pendiente de sondeo no se marca como continuado ni bloquea la ruta.
- const impact=version===TRANSFER_VERSION?[]:version===DELAYED_VERSION?delayedImpact(goal):hardeningImpact(goal);
+ // transfer_probe_v1: el aviso L3 deja un CURRICULUM_CONTINUED por tema afectado, como L1 y L2, para que el botón no quede muerto.
+ const impact=version===TRANSFER_VERSION?transferImpact(goal):version===DELAYED_VERSION?delayedImpact(goal):hardeningImpact(goal);
  let written=0;
  for(let t of impact){
   if(goal.events.some(e=>e&&e.type==='CURRICULUM_CONTINUED'&&e.node_id===t.node_id&&e.policy_version===version&&e.source==='POLICY_NOTICE'))continue;
@@ -1450,15 +1450,17 @@ function transferOffer(goal,nodeId){
  if(!transferDim||sufficient(transferDim,{events:goal.events||[]}))return null;
  const h=E('div');h.className='transfer-offer';h.setAttribute?.('role','group');
  const un=transferUnavailableEvents(goal,nodeId).at(-1);
- h.append(E('small','Transferencia: comprobar con un problema nuevo en otro contexto.'));
+ // Solo hay línea si el sondeo es ofrecible, está topado o no hay práctica escrita posible; en los demás casos el tema no la muestra.
  if(un){
-  h.append(E('p',TRANSFER_UNAVAILABLE_NOTE));
+  h.append(E('small','Transferencia pendiente: no hay una práctica escrita posible para este tema.'),E('p',TRANSFER_UNAVAILABLE_NOTE));
   if(un.retry_used!==true)h.append(B('Intentar de nuevo',()=>{startTransferProbe(goal,nodeId,{retry:true});page='session';render()},true));
   h.append(transferContinueButton(goal,nodeId));
   return h
  }
  const block=transferBlock(goal,nodeId,now());
- if(block){h.append(E('small',TRANSFER_BLOCK_TEXT[block]||'Aún no se puede comprobar.'));return h}
+ if(block&&block!=='TRANSFER_LIMIT')return null;
+ h.append(E('small','Transferencia: comprobar con un problema nuevo en otro contexto.'));
+ if(block){h.append(E('small',TRANSFER_BLOCK_TEXT[block]));return h}
  h.append(B('Comprobar transferencia',()=>{startTransferProbe(goal,nodeId);page='session';render()},true));
  return h
 }
@@ -1686,7 +1688,8 @@ function effectiveEvidence(events=[]){const superseded=new Set(events.map(e=>e.c
 function lastExposure(goal,id,ignoreAttempt=null){return Math.max(0,...(goal.events||[]).filter(e=>e.node_id===id&&(!ignoreAttempt||e.for_attempt_id!==ignoreAttempt)&&EXPOSURE_TYPES.includes(e.type)).map(e=>Number(e.timestamp??e.at)||0))}
 function learningState(goal,id,now){
  const coverage=(goal.coverage||[]).find(c=>c.id===id),dimensions=(coverage?.dimensions||[{id:'conceptual',required:true,evidence:[]},{id:'direct_application',required:true,evidence:[]}]).filter(d=>d.required!==false).map(d=>{
-  const events=effectiveEvidence(d.evidence||[]).filter(e=>e.type!=='TRUST'&&e.evidence_scope!=='repair_episode'),successes=independentSuccesses(d),last=events.filter(e=>resultStatus(e.result??e.status)!=='UNKNOWN').at(-1),enough=sufficient(d);
+  // transfer_probe_v1 (L2b): un sondeo de transferencia fallido no es dificultad observada del tema: no dispara REPAIR ni PREREQUISITE.
+  const events=effectiveEvidence(d.evidence||[]).filter(e=>e.type!=='TRUST'&&e.evidence_scope!=='repair_episode'),successes=independentSuccesses(d),last=events.filter(e=>e.transfer_probe_version!==TRANSFER_VERSION&&resultStatus(e.result??e.status)!=='UNKNOWN').at(-1),enough=sufficient(d);
   const difficulty=Boolean(last&&isContradiction(last)),assisted=events.some(e=>e.result==='CORRECT'&&!e.is_independent),positive=events.some(e=>e.result==='CORRECT');
   return {id:d.id,sufficient:enough,independent_successes:successes.length,assisted,positive,difficulty,
    state:enough?'SUFFICIENT':difficulty?'RECENT_DIFFICULTY':d.id==='memory'&&successes.length?'DELAYED_RETRIEVAL_NEEDED':successes.length?'INDEPENDENT_CHECK_NEEDED':positive?'ASSISTED_PERFORMANCE':'INSUFFICIENT_OBSERVATIONS',
@@ -1694,7 +1697,7 @@ function learningState(goal,id,now){
  });
  const review=(goal.reviews||[]).find(r=>r.id===id),exposure=lastExposure(goal,id);
  // selector_confidence_v1: the last effective learning result is a failure given with high declared confidence (new-style events only).
- const lastLearning=effectiveEvidence((goal.events||[]).filter(e=>e&&e.node_id===id&&e.type==='EVIDENCE'&&e.evidence_role==='learning'&&e.evidence_scope!=='repair_episode'&&!(eventBand(e)==='challenge'&&resultStatus(e.result??e.status)!=='CORRECT'))).filter(e=>resultStatus(e.result??e.status)!=='UNKNOWN').at(-1),committed=Boolean(lastLearning&&lastLearning.learner_signal_version&&lastLearning.calibration_signal==='committed_misconception'&&resultStatus(lastLearning.result??lastLearning.status)!=='CORRECT');
+ const lastLearning=effectiveEvidence((goal.events||[]).filter(e=>e&&e.node_id===id&&e.type==='EVIDENCE'&&e.evidence_role==='learning'&&e.evidence_scope!=='repair_episode'&&e.transfer_probe_version!==TRANSFER_VERSION&&!(eventBand(e)==='challenge'&&resultStatus(e.result??e.status)!=='CORRECT'))).filter(e=>resultStatus(e.result??e.status)!=='UNKNOWN').at(-1),committed=Boolean(lastLearning&&lastLearning.learner_signal_version&&lastLearning.calibration_signal==='committed_misconception'&&resultStatus(lastLearning.result??lastLearning.status)!=='CORRECT');
  const dimsSufficient=dimensions.length>0&&dimensions.every(d=>d.sufficient),delayedOk=dimsSufficient&&delayedConfirmed(coverage||{dimensions:[]},goal.events||[]);return {node_id:id,committed_misconception:committed,committed_at:committed?Number(lastLearning.timestamp)||0:0,dimensions,dims_sufficient:dimsSufficient,delayed_confirmed:delayedOk,delayed_ready:dimsSufficient&&!delayedOk&&delayedReady(goal,id,now),sufficient:dimsSufficient&&delayedOk,review_due:Boolean(review&&Number.isFinite(review.due)&&review.due<=now),review_due_at:review?.due??null,last_exposure:exposure};
 }
 function selectTutorAction(goal,now,options={}){
