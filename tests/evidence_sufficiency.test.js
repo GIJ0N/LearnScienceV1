@@ -18,8 +18,10 @@ function observation(dimension, prompt, extra = {}) {
   const activity = policy.activityContract({ prompt, reference: 'Criterio', kind,
     observable_dimensions: [dimension], supports_transfer: dimension === 'transfer',
     is_novel_variant: dimension === 'transfer' }, 'n1', dimension === 'transfer' ? 'transfer_check' : 'evidence_confirmation');
+  // transfer_probe_v1 (L2b): la transferencia solo se acredita con un sondeo determinista emitido por el servidor.
+  const probe = dimension === 'transfer' ? { transfer_probe_version: 'transfer_probe_v1', evaluator_trust: 'deterministic' } : {};
   return { ...policy.activityEvidence(activity, { status: 'CORRECT', evaluator_version: 'local-fixture' }, 0,
-    { attempt_id: `attempt-${id}`, timestamp: id * DAY }), ...extra };
+    { attempt_id: `attempt-${id}`, timestamp: id * DAY }), ...probe, ...extra };
 }
 function dimension(id, evidence) { return { id, required: true, evidence }; }
 function goal(id = 'units') {
@@ -43,6 +45,13 @@ function find(root, label) {
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
 (async () => {
+  // transfer_probe_v1 (L2b): la novedad declarada sin sondeo no acredita transferencia; legacyTransfer solo mide el aviso.
+  {
+    const plain = ({ transfer_probe_version, evaluator_trust, ...rest }) => rest;
+    const novel = [plain(observation('transfer', 'Primera situación')), plain(observation('transfer', 'Segunda situación'))];
+    assert.equal(policy.sufficient(dimension('transfer', novel)), false, 'la novedad sin sondeo no acredita transferencia');
+    assert.equal(policy.sufficient(dimension('transfer', novel), { legacyTransfer: true }), true, 'legacyTransfer solo para medir el aviso');
+  }
   // Every dimension needs at least two independent, observed, distinct questions.
   for (const id of [...Object.keys(policy.CONFIRMATION_KINDS), 'transfer']) {
     const a = observation(id, 'Primera situación'), b = observation(id, 'Segunda situación', { phase: id === 'memory' ? 'REVIEW' : 'CONFIRMATION' });
