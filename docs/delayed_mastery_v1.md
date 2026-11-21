@@ -31,12 +31,12 @@ La referencia se deriva del ledger de eventos al leer. No se guarda ningún camp
 
 | Id | Corrección | Estado |
 |----|-----------|--------|
-| C1 | Hay seis lugares que escriben `TEACHING_EXPOSURE`. | Parcial. Las escrituras siguen dispersas (`submitStepPrediction`, `applyStepRepair`, `session`, `directTeachingView`, `fadedStage`, `prqRevisited`). No se añadió un helper común. La lectura del ledger las ve todas, así que la regla funciona, pero el helper pedido no existe. |
-| C2 | `settled(goal,id) = verified || awaitingDelayed` en lugar de `verified` donde un tema por confirmar no debe bloquear. | Parcial. `settled` se usa en `nextAfterLesson` y en el cierre de INTEGRATE (`finishAwaitingDelayed`). Los demás puntos de la lista (`prerequisite_review`, placement, áreas, camino, botón «Comprobar evidencia») no se revisaron uno por uno contra la lista. |
+| C1 | Hay seis lugares que escriben `TEACHING_EXPOSURE`. | Cumplido. `noteTeachingExposure(goal,id,at)` es el único punto de escritura (los seis sitios lo llaman; el evento no cambia). Prueba: `delayed_mastery_settled.test.js` (guarda estática: una sola escritura literal). |
+| C2 | `settled(goal,id) = verified || awaitingDelayed` en lugar de `verified` donde un tema por confirmar no debe bloquear. | Cumplido. Revisado punto por punto: `prqCandidates`, `prerequisiteReviewPending`, `prerequisiteReviewSync` y `studyPlan` usan `settled`; `placementPriorEvidence` y `finishPlacement` usan `settled`; `incompleteTopics` y `shouldAutoExpand` usan `settled` (las áreas se abren); `renderAreas` usa `settled` en «≈»; el botón «Comprobar evidencia» usa `canOfferEvidenceCheck` (sin espera y con dimensiones pendientes). `verified` estricto se mantiene en `masteredCount` (conteo de dominados), `mixedCandidates` (repaso mixto solo de temas verificados), `readyToAdvance` (sí incluye espera) y la etiqueta de confianza. |
 | C3 | `learningState` expone `dims_sufficient` además de `sufficient`. El selector no escribe `CURRICULUM_CONTINUED` al esperar. | Cumplido. Prueba: `CONTINUE` con propósito `wait` el mismo día. |
 | C4 | El camino de confirmación es una producción escrita con propósito `delayed`, alcanzable aunque exista un `CURRICULUM_CONTINUED` de política. | Cumplido. `selectorDone` ignora `CURRICULUM_CONTINUED` con `source` `POLICY_NOTICE`. |
 | C5 | La referencia es la última exposición anterior al acierto, derivada del ledger, no un campo confiado. | Cumplido. Prueba: releer el mismo día no confirma. |
-| C6 | Sanear timestamps nuevos (no finitos, no positivos, cadenas). | Parcial. `eventTime` descarta valores no finitos y no positivos. No rechaza timestamps futuros. |
+| C6 | Sanear timestamps nuevos (no finitos, no positivos, cadenas, futuros). | Parcial. `eventTime` descarta no finitos, no positivos y los futuros de más de 5 min (`FUTURE_MARGIN_MS`). El saneo ocurre al leer; `normalizeGoal` y la restauración no reescriben esos eventos, que se conservan pero no cuentan. Prueba: `delayed_mastery_settled.test.js`. |
 | C-a | Solo una práctica de propósito `anchor` crea ancla local. | Cumplido (`applyProductionResult` y `createTrustAnchor`). Ver `evidence_l2_fixes.test.js`. |
 | C-b | Texto explícito de «práctica escrita no disponible» en lugar de un reintento vacío. | Cumplido (`ANCHOR_UNAVAILABLE_NOTE` en `policyNoticeView` y `anchorOffer`). Solo aparece tras un intento fallido. |
 | C-c | `fetchProduction` pasa de `numeric` a `ordering` solo ante `PRODUCTION_NOT_APPLICABLE`. Una respuesta malformada no marca el tema como sin práctica. | Cumplido. Prueba: `evidence_l2_fixes.test.js`. |
@@ -72,6 +72,7 @@ La referencia se deriva del ledger de eventos al leer. No se guarda ningún camp
 - `node tests/delayed_mastery.test.js` (TZ `America/Mexico_City`; incluye el caso `America/New_York` con DST).
 - `node tests/evidence_l2_fixes.test.js` (C-a, C-b, C-c y producción diferida).
 - `python tests/delayed_mastery_store.test.py` (guarda: no se guarda `first_teaching_at`).
+- `node tests/delayed_mastery_settled.test.js` (revisión: C2 en áreas, prerrequisitos y botón; C1 con guarda estática; C6 futuros).
 - Tests existentes ajustados al dominio diferido: ver el mensaje del commit `Ajusta pruebas existentes al dominio diferido (L2a)`.
 
 Mutaciones comprobadas (se rompe, falla, se restaura, y el hash de `app.js` coincide): sin mínimo de 8 h; fecha UTC; evidencia cruda; primera enseñanza; sin `awaitingDelayed`; sin filtro de versión del reconocimiento; acierto de modelo que confirma; sin `purpose === 'anchor'` (C-a); bucle antiguo (C-c); sin `settled` en `nextAfterLesson`.
@@ -80,5 +81,5 @@ Mutaciones comprobadas (se rompe, falla, se restaura, y el hash de `app.js` coin
 
 - Aceptación con Gemini real. Las pruebas usan respuestas controladas.
 - Navegador real. Las pruebas usan un DOM simulado.
-- Rechazo de timestamps futuros (C6 parcial) y helper común de `TEACHING_EXPOSURE` (C1 parcial).
-- Revisión completa de todos los usos de `settled` frente a la lista C2.
+- Saneo de timestamps en `normalizeGoal` y restauración (C6 parcial: solo al leer).
+- Botón del tablero (`dashboard`) sin prueba de DOM: su condición está en `canOfferEvidenceCheck`, que sí se prueba.
