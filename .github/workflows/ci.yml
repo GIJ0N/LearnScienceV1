@@ -266,6 +266,11 @@ jobs:
           node tests/transfer_probe.test.js
           python tests/transfer_probe_backend.test.py
 
+      - name: Run the topic closure tests
+        run: |
+          node tests/topic_closure.test.js
+          python tests/topic_closure_backend.test.py
+
       - name: Run the legacy app self-test
         run: python app_legacy.py --self-test
 
