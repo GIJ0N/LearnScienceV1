@@ -106,7 +106,9 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   ui.answer.value = 'Segunda respuesta independiente'; await ui.submit.onclick();
   const continueButton = find(ui.feedback, 'Continuar');
   assert.equal(continueButton.onclick(), true); await settle();
-  assert.equal(policy.verified(value, 'n1'), true);
+  // L2a: dos aciertos de opción múltiple del mismo instante no confirman el dominio; queda por confirmar otro día.
+  assert.equal(policy.verified(value, 'n1'), false);
+  assert.equal(policy.awaitingDelayed(value, 'n1'), true);
   assert.equal(generationCalls, 1); assert.equal(evaluationCalls, 1);
   assert.equal(continueButton.onclick(), false);
   assert.equal(value.events.filter(e => e.phase === 'CONFIRMATION' && e.type === 'EVIDENCE').length, 1);

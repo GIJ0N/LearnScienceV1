@@ -45,3 +45,12 @@ Ver `docs/validation.md`, sección `evidence_hardening_v1`. Las pruebas de funci
 ## Mutaciones comprobadas
 
 Rompe, confirma el fallo y restaura: filtro de origen en `createTrustAnchor`, filtro de versión en `isHardAnchor`, mínimo de 4 pasos, comparación con el enunciado del ejemplo, filtro de independencia del hito, exposición formativa del reto y tipos legacy de `EXPOSURE_TYPES`.
+
+
+## Nota de versión L2a (C-a, C-b, C-c)
+
+- C-a: solo una práctica de propósito `anchor` crea ancla local, y `createTrustAnchor` exige `meta.purpose === 'anchor'`. La práctica normal correcta ya no crea ancla.
+- C-b: cuando el ancla no está disponible tras un intento fallido, el aviso muestra el texto explícito `ANCHOR_UNAVAILABLE_NOTE` en lugar de un reintento vacío.
+- C-c: `fetchProduction` pasa de `numeric` a `ordering` solo ante `PRODUCTION_NOT_APPLICABLE`. Una respuesta malformada devuelve falso sin marcar el tema como sin práctica.
+- Sigue vigente la regla de ejemplo: un enunciado independiente que copia o casi copia el ejemplo se registra como práctica (`supports_independence` falso, `example_overlap` verdadero). Lo cubre `IndependentNotCopiedFromExample` en `tests/evidence_hardening_backend.test.py`.
+- Ver `docs/delayed_mastery_v1.md` para el dominio diferido.

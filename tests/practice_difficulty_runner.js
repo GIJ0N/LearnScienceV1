@@ -32,6 +32,12 @@ function goalFor(text, sufficient) {
     direct.evidence.push(event);
   }
   if (sufficient) for (const i of [1, 2]) goal.coverage[0].dimensions[1].evidence.push({ evidence_id: 'k' + i, attempt_id: 'k' + i, type: 'EVIDENCE', result: 'CORRECT', status: 'CORRECT', is_independent: true, observed_dimensions: ['conceptual'], question: { prompt: 'Concepto ' + i }, phase: 'CONFIRMATION', timestamp: T0 + i });
+  // L2a: dominio completo = suficiencia + acierto escrito local de otro día tras una exposición de enseñanza.
+  if (sufficient) {
+    goal.events.push({ type: 'TEACHING_EXPOSURE', node_id: 'n1', at: T0 - 3 * 86400000 });
+    const delayed = { evidence_id: 'kd', attempt_id: 'kd', type: 'EVIDENCE', node_id: 'n1', result: 'CORRECT', status: 'CORRECT', is_independent: true, independent: true, phase: 'INDEPENDENT', evidence_role: 'learning', evaluator_trust: 'deterministic', evaluator_version: 'local-production-v1', production_kind: 'numeric', observed_dimensions: ['conceptual'], question: { prompt: 'Concepto diferido' }, timestamp: T0 + 2 * 86400000, at: T0 + 2 * 86400000 };
+    goal.events.push(delayed); goal.coverage[0].dimensions[1].evidence.push(delayed);
+  }
   return goal;
 }
 const input = JSON.parse(fs.readFileSync(0, 'utf8')), out = {};
@@ -41,7 +47,7 @@ for (const s of input.scenarios) {
   const state = p.practiceBandState(goal, 'n1');
   out[s.name] = {
     replayed: state.band, band: p.practiceBand(goal, 'n1', 'confirmation').band, evidences: state.evidences,
-    direct_sufficient: p.sufficient(goal.coverage[0].dimensions[0]), mastered: p.deriveCoverage(goal.coverage[0]).mastered,
+    direct_sufficient: p.sufficient(goal.coverage[0].dimensions[0]), mastered: p.deriveCoverage(goal.coverage[0], { events: goal.events }).mastered,
     independent: p.independentSuccesses(goal.coverage[0].dimensions[0]).length
   };
 }

@@ -37,7 +37,17 @@ function record(g, id, status = 'CORRECT', help = 0) {
   const question = { prompt: 'Pregunta ' + (++serial), reference: 'Criterio', kind: p.CONFIRMATION_KINDS.units, observable_dimensions: ['units'] };
   return p.record(g, id, 'CONFIRMATION', 'Respuesta', { status, evaluator_version: 'local-fixture', error_type: status === 'MISCONCEPTION' ? 'units' : 'none' }, help, p.activityContract(question, id, 'evidence_confirmation'), 'attempt-' + serial);
 }
-const verifyNode = (g, id) => { record(g, id); record(g, id); assert.equal(p.verified(g, id), true, 'preparación: ' + id + ' verificado'); };
+// L2a: el dominio exige un acierto escrito local de otro día; la preparación inyecta dos aciertos escritos y una exposición previa.
+let priorSerial = 0;
+const verifyNode = (g, id) => { priorEvidence(g, id); assert.equal(p.verified(g, id), true, 'preparación: ' + id + ' verificado'); };
+function priorEvidence(g, id) {
+  const base = Date.now(), dayMs = 86400000, cov = g.coverage.find(c => c.id === id);
+  g.events.push({ type: 'TEACHING_EXPOSURE', node_id: id, at: base - 3 * dayMs });
+  for (const at of [base - 2 * dayMs, base]) {
+    const e = { type: 'EVIDENCE', evidence_id: 'prior-' + (++priorSerial), attempt_id: 'prior-att-' + priorSerial, activity_id: 'prior-act-' + priorSerial, node_id: id, phase: 'INDEPENDENT', result: 'CORRECT', status: 'CORRECT', is_independent: true, help_used: 0, observed_dimensions: ['units'], question: { prompt: 'Problema escrito ' + priorSerial }, timestamp: at, evidence_role: 'learning', evaluator_trust: 'deterministic', evaluator_version: 'local-production-v1', production_kind: 'numeric', purpose: 'practice' };
+    g.events.push(e); cov.dimensions.find(d => d.id === 'units').evidence.push(e);
+  }
+}
 const topics = plan => plan.groups.flatMap(x => x.topics);
 const t = (plan, id) => topics(plan).find(x => x.node_id === id);
 

@@ -11,12 +11,14 @@ const NOW = Date.UTC(2026, 10, 10, 12);
 p.setClockForTests(() => NOW);
 const ago = d => NOW - d * DAY;
 
-const goal = events => ({ id: 'g1', goal: 'M', nodes: [{ id: 'a', name: 'A', outcome: 'o', prerequisites: [] }], learner: {}, events, reviews: [], lessons: {}, coverage: [],
+// L2a: la independencia lee la cobertura; el fixture refleja los eventos de la tema a en la dimensión de aplicación.
+const goal = events => ({ id: 'g1', goal: 'M', nodes: [{ id: 'a', name: 'A', outcome: 'o', prerequisites: [] }], learner: {}, events, reviews: [], lessons: {}, coverage: [{ id: 'a', name: 'A', dimensions: [{ id: 'direct_application', required: true, evidence: events.filter(e => e.node_id === 'a' && e.type === 'EVIDENCE') }] }],
   session: { mode: 'DIAGNOSTIC', node: null, stack: [], tries: 0, hints: 0 } });
 let n = 0;
 const ev = extra => ({ type: 'EVIDENCE', node_id: 'a', evidence_role: 'learning', result: 'CORRECT', status: 'CORRECT', help_used: 0, activity_id: 'act' + (++n), ...extra });
 const layers = events => p.expertLayers(goal(events), 'a');
-const independent = days => [ev({ is_independent: true, timestamp: ago(days) }), ev({ is_independent: true, timestamp: ago(days) })];
+// L2a: la independencia exige además un acierto escrito local de otro día: dos independientes antiguos y uno escrito posterior.
+const independent = days => [...[1, 2].map(i => ev({ is_independent: true, timestamp: ago(days + 1), observed_dimensions: ['direct_application'], attempt_id: 'i' + days + '-' + i, question: { prompt: 'Problema independiente ' + days + '-' + i } })), { type: 'EVIDENCE', node_id: 'a', evidence_id: 'w' + days, attempt_id: 'w' + days, activity_id: 'wa' + days, phase: 'INDEPENDENT', evidence_role: 'learning', result: 'CORRECT', status: 'CORRECT', is_independent: true, help_used: 0, observed_dimensions: ['direct_application'], question: { prompt: 'Problema escrito ' + days }, timestamp: ago(days), evaluator_trust: 'deterministic', evaluator_version: 'local-production-v1', production_kind: 'numeric', purpose: 'practice' }];
 
 assert.equal(p.EXPERT_VERSION, 'expert_panel_v1.1');
 assert.equal(p.EXPERT_STALE_DAYS, 60);
@@ -59,9 +61,10 @@ r = layers([]);
 assert.ok(Object.values(r.layers).every(v => v === 'none'));
 assert.equal(r.label, 'Sin medir');
 
-// Eventos legacy sin fecha no caducan (no se inventa antigüedad).
+// Eventos legacy sin fecha no caducan (no se inventa antigüedad). L2a: sin fecha no hay confirmación de otro día, así que quedan en parcial.
 r = layers([ev({ is_independent: true }), ev({ is_independent: true })]);
-assert.equal(r.layers.independence, 'met');
+assert.equal(r.layers.independence, 'partial');
+assert.notEqual(r.layers.independence, 'stale', 'sin fecha no caduca');
 
 // Otras capas con fecha: discriminación caduca igual.
 const disc = days => [{ type: 'DISCRIMINATION', node_id: 'a', status: 'CORRECT', at: ago(days) }, { type: 'DISCRIMINATION', node_id: 'a', status: 'CORRECT', at: ago(days) }];

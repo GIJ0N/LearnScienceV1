@@ -59,8 +59,8 @@ assert.equal(p.activityEvidence({ prompt: 'p' }, { status: 'CORRECT' }, 0, { cor
 
 // createTrustAnchor: evento + marcador en todas las dimensiones; idempotente; otro tema no se ve afectado.
 const goal = { id: 'g', nodes: [{ id: 'a', name: 'A', outcome: 'o', prerequisites: [] }, { id: 'b', name: 'B', outcome: 'o', prerequisites: [] }], events: [], reviews: [], coverage: [] };
-assert.equal(p.createTrustAnchor(goal, 'a', 'PRODUCTION', 'att1', NOW, { basis: 'numeric' }), true);
-assert.equal(p.createTrustAnchor(goal, 'a', 'PRODUCTION', 'att1', NOW, { basis: 'numeric' }), false);
+assert.equal(p.createTrustAnchor(goal, 'a', 'PRODUCTION', 'att1', NOW, { basis: 'numeric', purpose: 'anchor' }), true);
+assert.equal(p.createTrustAnchor(goal, 'a', 'PRODUCTION', 'att1', NOW, { basis: 'numeric', purpose: 'anchor' }), false);
 const anchors = goal.events.filter(e => e.type === 'TRUST_ANCHOR');
 assert.equal(anchors.length, 1);
 assert.equal(anchors[0].source, 'PRODUCTION');

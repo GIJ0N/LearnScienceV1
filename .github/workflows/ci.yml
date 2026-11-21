@@ -250,6 +250,15 @@ jobs:
           python tests/evidence_hardening_backend.test.py
           python tests/evidence_hardening_store.test.py
 
+      - name: Run delayed mastery tests (L2a)
+        env:
+          TZ: America/Mexico_City
+        run: |
+          node tests/delayed_mastery.test.js
+          node tests/evidence_l2_fixes.test.js
+          python tests/delayed_mastery_store.test.py
+          node tests/delayed_mastery_settled.test.js
+
       - name: Run the legacy app self-test
         run: python app_legacy.py --self-test
 

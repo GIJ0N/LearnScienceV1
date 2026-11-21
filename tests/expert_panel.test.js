@@ -7,7 +7,8 @@ global.localStorage = { getItem: () => null, setItem: () => {} };
 global.confirm = () => true;
 const p = require('../app.js');
 const DAY = 86400000;
-const goal = events => ({ id: 'g1', goal: 'M', nodes: [{ id: 'a', name: 'A', outcome: 'o', prerequisites: [] }, { id: 'b', name: 'B', outcome: 'o', prerequisites: [] }], learner: {}, coverage: [], reviews: [], lessons: {}, events,
+// L2a: la independencia lee la cobertura; el fixture refleja los eventos del tema a en la dimensión de aplicación.
+const goal = events => ({ id: 'g1', goal: 'M', nodes: [{ id: 'a', name: 'A', outcome: 'o', prerequisites: [] }, { id: 'b', name: 'B', outcome: 'o', prerequisites: [] }], learner: {}, coverage: [{ id: 'a', name: 'A', dimensions: [{ id: 'direct_application', required: true, evidence: events.filter(e => e.node_id === 'a' && e.type === 'EVIDENCE') }] }], reviews: [], lessons: {}, events,
   session: { mode: 'DIAGNOSTIC', node: null, stack: [], tries: 0, hints: 0 } });
 let n = 0;
 const ev = (extra) => ({ type: 'EVIDENCE', node_id: 'a', evidence_role: 'learning', result: 'CORRECT', status: 'CORRECT', help_used: 0, activity_id: 'act' + (++n), ...extra });
@@ -32,7 +33,12 @@ assert.equal(layers([ev({ phase: 'COMPREHENSION', node_id: 'b' })]).layers.compr
 
 // 2 Independencia: dos actividades distintas; la misma actividad dos veces no basta.
 assert.equal(layers([ev({ is_independent: true })]).layers.independence, 'partial');
-assert.equal(layers([ev({ is_independent: true }), ev({ is_independent: true })]).layers.independence, 'met');
+// L2a: dos aciertos seguidos no bastan; hace falta además un acierto escrito local de otro día.
+const T0 = Date.UTC(2026, 10, 10, 12), DAYT = 86400000;
+const indep = (at, n) => ev({ is_independent: true, timestamp: at, observed_dimensions: ['direct_application'], attempt_id: 'i' + n, question: { prompt: 'Problema independiente ' + n } });
+const written = (at, n) => ({ ...indep(at, n), evaluator_trust: 'deterministic', evaluator_version: 'local-production-v1', production_kind: 'numeric', purpose: 'practice' });
+assert.equal(layers([indep(T0, 1), indep(T0, 2)]).layers.independence, 'partial', 'mismo día: parcial');
+assert.equal(layers([indep(T0 - DAYT, 1), indep(T0 - DAYT, 2), written(T0, 3)]).layers.independence, 'met', 'con confirmación de otro día: cumplida');
 assert.equal(layers([ev({ is_independent: true, activity_id: 'x' }), ev({ is_independent: true, activity_id: 'x' })]).layers.independence, 'partial');
 assert.equal(layers([ev({ is_independent: false }), ev({ is_independent: false })]).layers.independence, 'none');
 
@@ -79,15 +85,18 @@ assert.equal(p.calibrationSummary(goal([diag])).answered, 1);
 assert.equal(p.calibrationSummary(goal([{ ...diag, evidence_role: 'evaluation' }])).answered, 0, 'las auditorías no cuentan');
 
 // Etiquetas por cantidad de capas y siguiente paso.
-const full = [ev({ phase: 'COMPREHENSION' }), ev({ is_independent: true }), ev({ is_independent: true }), ev({ phase: 'REVIEW', delay_ms_from_last_exposure: 31 * DAY }),
+// L2a: la independencia exige una confirmación escrita local de otro día: dos independientes antiguos y uno escrito posterior.
+const fullInd = (at, n) => ev({ is_independent: true, timestamp: at, observed_dimensions: ['direct_application'], attempt_id: 'f' + n, question: { prompt: 'Completo ' + n } });
+const full = [ev({ phase: 'COMPREHENSION' }), fullInd(T0 - DAYT, 1), fullInd(T0 - DAYT, 2), { ...fullInd(T0, 3), evaluator_trust: 'deterministic', evaluator_version: 'local-production-v1', production_kind: 'numeric', purpose: 'practice' }, ev({ phase: 'REVIEW', delay_ms_from_last_exposure: 31 * DAY }),
   d('CORRECT'), d('CORRECT'), d('CORRECT', 'COMPOSITION'), d('CORRECT', 'COMPOSITION'), ev({ is_novel_variant: true, is_independent: true }),
   c('CORRECT', 90), c('CORRECT', 95), c('MISCONCEPTION', 10), c('MISCONCEPTION', 5)];
 r = layers(full);
 assert.equal(r.met, 7);
 assert.match(r.label, /^Experto/);
 assert.equal(r.next, null);
-assert.equal(layers(full.slice(0, 3)).label, 'Base');
-assert.equal(layers(full.slice(0, 4)).next.layer, 'discrimination', 'la primera capa sin cumplir es el siguiente paso');
+// L2a: el acierto escrito de otro día ocupa la cuarta posición; los cortes se ajustan para conservar cada escenario.
+assert.equal(layers(full.slice(0, 4)).label, 'Base');
+assert.equal(layers(full.slice(0, 5)).next.layer, 'discrimination', 'la primera capa sin cumplir es el siguiente paso');
 
 // Solo lectura: no muta ni agrega eventos.
 const g = goal(full);
