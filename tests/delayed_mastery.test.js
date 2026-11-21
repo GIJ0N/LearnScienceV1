@@ -73,6 +73,25 @@ for (const [name, teachAt, sameDayAt, candidateAt, expected] of [
   } finally { process.env.TZ = previous; }
 }
 
+// L2a (mutación M3): la suficiencia cuenta solo aciertos independientes. Un acierto con ayuda, corregido o de banda base
+// de otro día no confirma el diferido, aunque sea escrito local y la suficiencia ya esté completa.
+{
+  const base = { difficulty_band: 'base', difficulty_policy_version: p.PRACTICE_DIFFICULTY_VERSION };
+  const defects = { 'banda base': base, 'con ayuda': { help_used: 1, is_independent: false }, 'corregido por el usuario': { corrected: true } };
+  for (const [name, defect] of Object.entries(defects)) {
+    assert.equal(verifiedOf([teach(mx(10, 9)), ev(mx(10, 10)), ev(mx(10, 10)), ev(mx(11, 10), defect)]), false, 'el defecto no confirma el diferido: ' + name);
+    assert.equal(verifiedOf([teach(mx(10, 9)), ev(mx(10, 10)), ev(mx(10, 10)), ev(mx(11, 10))]), true, 'control sin defecto confirma: ' + name);
+  }
+}
+// L2a (mutación M10): al cerrar una práctica, un tema que espera confirmación de otro día no vuelve a enseñarse.
+{
+  const g = goalOf([teach(mx(10, 9), 'a'), ev(mx(10, 10)), ev(mx(10, 10))]);
+  g.session = { mode: 'INTEGRATE', node: 'b', stack: ['a'], tries: 0, hints: 0 };
+  p.finishAwaitingDelayed(g, 'b');
+  assert.notEqual(g.session.mode, 'TEACH', 'un tema que espera confirmación no se reenseña');
+  assert.equal(g.session.node, null, 'la práctica termina sin tema activo');
+}
+
 // (5) Negativos, cada uno con su control: el acierto candidato con el defecto no confirma; sin él, sí.
 {
   const base = { difficulty_band: 'base', difficulty_policy_version: p.PRACTICE_DIFFICULTY_VERSION };
