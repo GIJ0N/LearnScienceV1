@@ -524,3 +524,19 @@ Pruebas existentes ajustadas a la regla nueva (ver el historial de `feat/delayed
 Mutaciones comprobadas (se rompe, falla, se restaura, hash de `app.js` igual): sin mínimo de 8 h; fecha UTC; evidencia cruda; primera enseñanza en vez de la última; sin `awaitingDelayed` en `readyToAdvance`; sin filtro de versión en el reconocimiento; acierto de modelo que confirma; sin `purpose === 'anchor'` (C-a); bucle antiguo (C-c); sin `settled` en `nextAfterLesson`.
 
 Sin validar: aceptación con Gemini real (las pruebas usan respuestas controladas), navegador real, rechazo de timestamps futuros (C6 parcial), saneo de timestamps en `normalizeGoal` y restauración (C6 parcial). Ver `docs/delayed_mastery_v1.md`.
+
+## transfer_probe_v1 (L2b: sondeo de transferencia)
+
+- `node tests/transfer_probe.test.js` (cliente, TZ `America/Mexico_City`): suficiencia (solo sondeos deterministas; `legacyTransfer` para el impacto), rol y evidencia sin ancla, fallo que solo enfría la transferencia, cuándo se ofrece (`TRANSFER_BUSY`, `TRANSFER_NOT_DUE`, `TRANSFER_TODAY`, `TRANSFER_COOLING`, `TRANSFER_LIMIT`), emisión y reutilización sin duplicar, banda `standard` en cliente, D5 con reintento único y «Seguir con la ruta» sin evidencia, aviso L3 tras L2 e idempotente, capa del panel y oferta visible.
+- `python tests/transfer_probe_backend.test.py` (servidor, SQLite temporal, proveedor controlado): `purpose:'transfer'` rechazado por `/api/practice/produce`, `expected_unit` y cuatro pasos, ruta registrada, banda forzada, prompt aislado sin ejemplo ni preguntas previas, reintento sin texto previo, reutilización de sondeos sin responder, respuestas que liberan el tope, tope por tema desde `placement_items`, válvulas (enseñanza nueva y siete días), tope diario, candado en vuelo con dos solicitudes simultáneas, `TRANSFER_UNAVAILABLE`, distancia frente a la misma meta y frente a otra meta, y persistencia de los eventos en guardar, cargar, exportar y restaurar.
+- `tests/judge_model.test.py`: registra `_transfer_attempts` como sitio de generación (no se tocó el juez).
+- Pruebas existentes actualizadas por la nueva regla de transferencia: `evidence_sufficiency.test.js`, `expert_panel.test.js`, `expert_profile.test.js`. Ver `docs/transfer_probe_v1.md`.
+- Sin validar: Gemini real, navegador real, y el efecto de «Seguir con la ruta» sobre el orden de la ruta.
+
+## transfer_probe_v1: correcciones del supervisor (PR #67)
+
+- `node tests/transfer_probe.test.js`, bloque 13: un fallo de sondeo no dispara `REPAIR` ni `PREREQUISITE` (tema propio y prerrequisito) y `chooseNext` no borra `goal.lessons`.
+- Bloque 14: un acierto del sondeo de otro día confirma `delayedConfirmed` (numeric; ordering de 4 pasos); ordering de 3 pasos y el mismo día no confirman. Este bloque ya pasaba con la regla de confirmación existente; sirve de regresión.
+- Bloque 15: el acuse L3 escribe un `CURRICULUM_CONTINUED` por tema afectado, sin duplicar, y el selector no vuelve a elegir ese tema (R1).
+- Bloque 16: la línea de transferencia del tablero solo aparece si el sondeo es ofrecible, está topado o no hay práctica escrita posible.
+- Mutaciones de estas correcciones: quitar la exclusión, acuse L3 sin continuación y línea en cada tema; cada una falla y se restaura.

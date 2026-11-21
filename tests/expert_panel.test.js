@@ -60,8 +60,11 @@ assert.equal(layers([d('CORRECT', 'COMPOSITION'), d('CORRECT', 'COMPOSITION')]).
 assert.equal(layers([d('CORRECT', 'COMPOSITION'), d('CORRECT', 'COMPOSITION')]).layers.discrimination, 'none', 'no se mezclan');
 
 // 6 Transferencia
-assert.equal(layers([ev({ is_novel_variant: true, is_independent: true })]).layers.transfer, 'met');
-assert.equal(layers([ev({ is_novel_variant: true, is_independent: false, help_used: 1 })]).layers.transfer, 'partial');
+// transfer_probe_v1 (L2b): la capa de transferencia exige un sondeo determinista; la novedad de integración sola no la cubre.
+const probe = { transfer_probe_version: 'transfer_probe_v1', evaluator_trust: 'deterministic' };
+assert.equal(layers([ev({ is_novel_variant: true, is_independent: true, ...probe })]).layers.transfer, 'met');
+assert.equal(layers([ev({ is_novel_variant: true, is_independent: true })]).layers.transfer, 'none', 'la novedad sin sondeo no cubre la capa');
+assert.equal(layers([ev({ is_novel_variant: true, is_independent: false, help_used: 1, ...probe })]).layers.transfer, 'partial');
 assert.equal(layers([ev({ is_independent: true })]).layers.transfer, 'none');
 
 // 7 Calibración
@@ -88,7 +91,7 @@ assert.equal(p.calibrationSummary(goal([{ ...diag, evidence_role: 'evaluation' }
 // L2a: la independencia exige una confirmación escrita local de otro día: dos independientes antiguos y uno escrito posterior.
 const fullInd = (at, n) => ev({ is_independent: true, timestamp: at, observed_dimensions: ['direct_application'], attempt_id: 'f' + n, question: { prompt: 'Completo ' + n } });
 const full = [ev({ phase: 'COMPREHENSION' }), fullInd(T0 - DAYT, 1), fullInd(T0 - DAYT, 2), { ...fullInd(T0, 3), evaluator_trust: 'deterministic', evaluator_version: 'local-production-v1', production_kind: 'numeric', purpose: 'practice' }, ev({ phase: 'REVIEW', delay_ms_from_last_exposure: 31 * DAY }),
-  d('CORRECT'), d('CORRECT'), d('CORRECT', 'COMPOSITION'), d('CORRECT', 'COMPOSITION'), ev({ is_novel_variant: true, is_independent: true }),
+  d('CORRECT'), d('CORRECT'), d('CORRECT', 'COMPOSITION'), d('CORRECT', 'COMPOSITION'), ev({ is_novel_variant: true, is_independent: true, transfer_probe_version: 'transfer_probe_v1', evaluator_trust: 'deterministic' }),
   c('CORRECT', 90), c('CORRECT', 95), c('MISCONCEPTION', 10), c('MISCONCEPTION', 5)];
 r = layers(full);
 assert.equal(r.met, 7);

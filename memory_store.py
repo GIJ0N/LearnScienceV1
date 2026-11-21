@@ -1175,6 +1175,26 @@ class DurableMemory:
                 continue
         return out
 
+    def transfer_probe_items(self, profile_id, goal_id):
+        """transfer_probe_v1 (solo lectura, sin cambio de esquema): sondeos emitidos de una meta y si ya tienen respuesta.
+        Lee placement_items y placement_answers; el tope y la reutilización del servidor cuentan desde aquí, no desde el cliente."""
+        profile_id = _profile_id(profile_id)
+        with self._lock, self._connect() as db:
+            rows = db.execute(
+                "SELECT p.item_id, p.node_id, p.public_json, p.created_at, "
+                "EXISTS(SELECT 1 FROM placement_answers a WHERE a.profile_id=p.profile_id AND a.item_id=p.item_id) AS answered "
+                "FROM placement_items p WHERE p.profile_id=? AND p.goal_id=? ORDER BY p.created_at, p.rowid",
+                (profile_id, str(goal_id or ""))).fetchall()
+        out = []
+        for row in rows:
+            try:
+                public = json.loads(row["public_json"])
+            except ValueError:
+                continue
+            if isinstance(public, dict) and public.get("purpose") == "transfer" and public.get("transfer_probe_version") == "transfer_probe_v1":
+                out.append({"item_id": row["item_id"], "node_id": row["node_id"], "public": public, "answered": bool(row["answered"]), "created_at": int(row["created_at"])})
+        return out
+
     def load_placement_item(self, profile_id, item_id):
         profile_id = _profile_id(profile_id)
         with self._lock, self._connect() as db:

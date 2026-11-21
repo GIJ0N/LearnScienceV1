@@ -57,3 +57,9 @@ de actividades (esta práctica aún no lo incluye). Sin foto, tabla ni cálculo 
 
 ## Actualización: evidence_hardening_v1
 Una producción calificada localmente con banda distinta de `base` crea el ancla. `purpose='anchor'` fuerza banda `standard`, exige 4 pasos en el orden, publica `expected_unit` en cálculo sin revelar el valor, y guarda `anchor_for_attempt_id` en el evento. Un fallo de ancla enfría el tema hasta una nueva enseñanza o 24 horas. Ver `docs/evidence_hardening_v1.md`.
+
+## Nota de versión L2b (`transfer_probe_v1`)
+
+- `purpose:'transfer'` lo genera solo `/api/practice/transfer`. `/api/practice/produce` sigue rechazándolo antes de llamar al modelo (prueba de regresión).
+- `_build_production_item` exige de 4 a 6 pasos y publica `expected_unit` también para `purpose:'transfer'`.
+- La corrección del sondeo es la misma (`/api/practice/produce/answer`), con el rol `transfer_probe`. Ver `docs/transfer_probe_v1.md`.

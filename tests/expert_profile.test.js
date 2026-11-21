@@ -23,7 +23,7 @@ let n = 0;
 function fullEvents(id, at = NOW - DAY) {
   const ev = (extra) => ({ type: 'EVIDENCE', node_id: id, evidence_role: 'learning', result: 'CORRECT', status: 'CORRECT', help_used: 0, timestamp: at, evidence_id: 'e' + (++n), activity_id: 'act' + n, ...extra });
   const mix = type => ({ type, node_id: id, status: 'CORRECT', at, attempt_id: 'm' + (++n) });
-  return [ev({ phase: 'COMPREHENSION' }), ev({ is_independent: true }), ev({ is_independent: true }), ev({ phase: 'REVIEW', delay_ms_from_last_exposure: 31 * DAY }), mix('DISCRIMINATION'), mix('DISCRIMINATION'), mix('COMPOSITION'), mix('COMPOSITION'), ev({ is_novel_variant: true, is_independent: true })];
+  return [ev({ phase: 'COMPREHENSION' }), ev({ is_independent: true }), ev({ is_independent: true }), ev({ phase: 'REVIEW', delay_ms_from_last_exposure: 31 * DAY }), mix('DISCRIMINATION'), mix('DISCRIMINATION'), mix('COMPOSITION'), mix('COMPOSITION'), ev({ is_novel_variant: true, is_independent: true, transfer_probe_version: 'transfer_probe_v1', evaluator_trust: 'deterministic' })];
 }
 const areas = () => [{ id: 'ar1', name: 'Superficie', outcome: 'o', status: 'expanded', node_ids: ['a', 'b'] }, { id: 'ar2', name: 'Aplicación', outcome: 'o', status: 'pending', node_ids: [] }, { id: 'ar3', name: 'Curado', outcome: 'o', status: 'expanded', node_ids: ['c'] }];
 function goal(events = [], extra = {}) {

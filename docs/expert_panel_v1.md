@@ -69,3 +69,9 @@ Rollback: revertir la vista; no hay datos nuevos. Límite: 60 días es un valor 
 - La capa de independencia pasa a `met` solo con un acierto escrito local de otro día (`delayedConfirmed`). Dos aciertos del mismo día quedan en `partial`.
 - Las pruebas de `expert_panel` y `expert_staleness` se ajustaron a esa regla.
 - Ver `docs/delayed_mastery_v1.md`.
+
+## Nota de versión L2b (`transfer_probe_v1`)
+
+- La capa de transferencia usa el predicado `transferProbeEvent` (`transfer_probe_version` y `evaluator_trust:'deterministic'`). La novedad de integración sola ya no cubre la capa.
+- Los `CHALLENGE_REPORT` confirmados siguen contando como antes en esa capa. Es una excepción documentada; no se ha ampliado.
+- Ver `docs/transfer_probe_v1.md`.

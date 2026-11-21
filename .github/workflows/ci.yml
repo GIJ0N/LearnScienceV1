@@ -259,6 +259,13 @@ jobs:
           python tests/delayed_mastery_store.test.py
           node tests/delayed_mastery_settled.test.js
 
+      - name: Run transfer probe tests (L2b)
+        env:
+          TZ: America/Mexico_City
+        run: |
+          node tests/transfer_probe.test.js
+          python tests/transfer_probe_backend.test.py
+
       - name: Run the legacy app self-test
         run: python app_legacy.py --self-test
 

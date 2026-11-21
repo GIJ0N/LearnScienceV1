@@ -30,3 +30,8 @@ duradera exige además sus propias evidencias.
 
 ## Actualización: evidence_hardening_v1
 La integración que reproduce el enunciado del ejemplo, o lo copia de check o guided, no declara novedad. La práctica independiente con el enunciado del ejemplo queda con `supports_independence=false`. La comparación con el ejemplo usa el enunciado (texto antes del primer paso), no la lección completa. Ver `docs/evidence_hardening_v1.md`.
+
+## Nota de versión L2b (`transfer_probe_v1`)
+
+- La novedad declarada en una integración sigue dando independencia para aplicación contextual e interpretación, pero **ya no da transferencia**. `sufficient(transfer)` exige un sondeo determinista con `transfer_probe_version`. Ver `docs/transfer_probe_v1.md`.
+- `legacyTransfer` conserva el cálculo anterior solo para medir el aviso L3. No se reescriben eventos.
