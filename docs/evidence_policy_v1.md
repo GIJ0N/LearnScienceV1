@@ -171,3 +171,7 @@ normalizadas, no demuestra diversidad cognitiva ni transferencia.
 
 - La pantalla «Ideas clave» y la autoexplicación de tema no crean evidencia ni exposición. `TOPIC_CLOSURE_OPENED` y `TOPIC_SELF_EXPLANATION` llevan `creates_evidence:false` y no están en `EXPOSURE_TYPES`, `TEACHING_REF_TYPES` ni `isStudyAnswer`. Ver `docs/topic_closure_v1.md`.
 - Un cierre solo se abre tras un acierto `CORRECT` en INTEGRATE, o tras «Continuar con pendientes» si la última evidencia fue correcta. Nunca tras fallo, `UNKNOWN` o `PARTIAL`.
+
+## Nota de versión L4a (`worked_examples_v1`)
+
+- La inversión por pericia (`TEACHING_SUPPORT`, `lean`/`full`) es presentación. No crea `EVIDENCE`, no entra en `EXPOSURE_TYPES`, `TEACHING_REF_TYPES` ni `isStudyAnswer`, y no cambia cobertura, calendario ni suficiencia. Un acierto independiente en la dimensión objetivo solo sirve para decidir el apoyo, no para acreditar dominio. Ver `docs/worked_examples_v1.md`.
