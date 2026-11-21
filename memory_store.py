@@ -482,6 +482,11 @@ def validate_store(raw, profile_id, allow_profile_rebind=False, ctx=None):
                 raise ValueError("El ledger contiene un evento inválido.")
             event["profile_id"] = profile_id
             _sanitize_difficulty(event)
+            if event.get("type") in ("TOPIC_SELF_EXPLANATION", "TOPIC_CLOSURE_OPENED"):
+                # topic_closure_v1: estos eventos son presentación y autoexplicación; nunca crean evidencia.
+                if event.get("type") == "TOPIC_SELF_EXPLANATION":
+                    event["text"] = str(event.get("text") or "")[:600]
+                event["creates_evidence"] = False
             if "judge_model" in event and not _valid_model_name(event["judge_model"]):
                 del event["judge_model"]  # judge_model_v1: metadato; un valor inválido se descarta sin rechazar el evento
             if event.get("node_id") is not None and event.get("node_id") not in allowed_nodes:
@@ -1259,7 +1264,7 @@ class DurableMemory:
             if chain_ids is not None:
                 wanted = {str(x) for x in chain_ids}
                 chains = [c for c in chains if c["chain_id"] in wanted]
-            props = {r["prop_id"]: dict(r) for r in db.execute("SELECT * FROM knowledge_props WHERE profile_id=? AND goal_id=?", (profile_id, goal_id)).fetchall()}
+            props = {r["prop_id"]: dict(r) for r in db.execute("SELECT * FROM knowledge_props WHERE profile_id=? AND goal_id=? ORDER BY created_at, prop_id", (profile_id, goal_id)).fetchall()}
         out_chains = [{"chain_id": c["chain_id"], "node_id": c["node_id"], "premises": json.loads(c["premises_json"]), "conclusion": c["conclusion_id"],
                        "sources": json.loads(c["sources_json"])} for c in chains]
         if chain_ids is not None:

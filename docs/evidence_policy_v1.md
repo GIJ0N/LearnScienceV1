@@ -166,3 +166,8 @@ normalizadas, no demuestra diversidad cognitiva ni transferencia.
 - Esta nota **sustituye** la regla de este documento que decía «el nuevo endpoint de comprobación nunca concede transferencia» y la de «novedad autorizada por su contrato» como base de la transferencia: ya no basta la novedad declarada en INTEGRATE.
 - Los eventos anteriores con novedad no se borran; se cuentan solo para medir el aviso L3 (`legacyTransfer`).
 - `TRANSFER_PROBE_ISSUED`, `TRANSFER_UNAVAILABLE` y el enfriamiento tras un fallo de transferencia no son evidencia. Un fallo solo contradice la dimensión `transfer`.
+
+## Nota de versión L3 (`topic_closure_v1`)
+
+- La pantalla «Ideas clave» y la autoexplicación de tema no crean evidencia ni exposición. `TOPIC_CLOSURE_OPENED` y `TOPIC_SELF_EXPLANATION` llevan `creates_evidence:false` y no están en `EXPOSURE_TYPES`, `TEACHING_REF_TYPES` ni `isStudyAnswer`. Ver `docs/topic_closure_v1.md`.
+- Un cierre solo se abre tras un acierto `CORRECT` en INTEGRATE, o tras «Continuar con pendientes» si la última evidencia fue correcta. Nunca tras fallo, `UNKNOWN` o `PARTIAL`.
