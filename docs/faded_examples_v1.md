@@ -46,3 +46,9 @@ No se ofrece dos veces en la misma lección: si el ejemplo ya se vio (hecho, sal
 
 - Cuando la lección por pasos falla la revisión de contenido y se muestra la explicación completa, el ejemplo ya no se pierde: se ofrece con las mismas reglas (modos `initial` y `scaffold`; `faded===null` es no disponible y no se reintenta; «Saltar ejemplo» siempre visible; un fallo de la ruta continúa sin aviso).
 - Sigue siendo formativo: sin `EVIDENCE`, cobertura ni calendario.
+
+## Nota L4b (`worked_examples_v1`): lecciones nuevas usan `/api/lesson/worked`
+
+- Las lecciones nuevas (sin `faded` ni `worked`) piden el conjunto de `worked_examples_v1`: problema resuelto, porqués, gemelos y escalera de huecos. Ver `docs/worked_examples_v1.md`.
+- `/api/lesson/faded` se mantiene en el servidor y su flujo queda para las lecciones que ya traen `faded` (objeto o `null`). La interfaz ya no lo llama para lecciones nuevas; por eso `tests/faded_examples.test.js` (bloque F) lo comprueba y la prueba del fallo de red pasa a `tests/worked_examples.test.js`.
+- `fadedAllowed` es falso cuando `worked` está definido. Las reglas de racha y evidencia de este documento no cambian.

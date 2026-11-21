@@ -42,6 +42,11 @@ Se reutilizan las tablas `placement_items` y `placement_answers` (almacén priva
 
 En una lección `lean` (ver `docs/worked_examples_v1.md`) no se piden pasos. `POST /api/lesson/steps` responde `STEPS_NOT_NEEDED` en `consolidate` salvo `learner_requested=true`. La lección por pasos sigue igual para las lecciones `full` y no cambia el ciclo de cada paso.
 
+## Nota L4b (`worked_examples_v1`): ejemplos tras la lección por pasos
+
+- Tras terminar los pasos, la lección ofrece el ejemplo resuelto con gemelos (`workedStage`) antes de la comprobación. Si el aprendiz falla dos veces seguidas en el peldaño 1 de ese ejemplo, la lección vuelve a pasos con `learner_requested` (`workedNeedsTeaching`).
+- `POST /api/lesson/steps` no cambia: `STEPS_NOT_NEEDED` solo aplica a `consolidate` sin petición. Ver `docs/worked_examples_v1.md`.
+
 ## Fuera de alcance
 
 Que `relevant_memory` use los resultados de paso para adaptar la siguiente lección, predicciones graduadas por el servidor y pasos Socráticos con respuesta abierta.

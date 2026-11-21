@@ -161,7 +161,7 @@ class Roles(Base):
         GENERATE = {'make_criterion_activity', 'make_coverage_map', 'expand_area', 'make_area_map', 'make_lesson', 'make_hint.ask', 'evidence_confirmation', 'review_question',
                     'micro_start', 'micro_repair', 'make_micro_context_legacy', 'repair_diagnosis', 'repair_teaching', 'micro_zoom', 'make_placement_items', 'app_model_steps',
                     'make_step_repair', 'make_error_hunt_items', 'beto_start.attempt', '_challenge_attempt', 'make_discrimination_items', '_confirmation_attempt', 'make_production_item',
-                    'make_faded_example', 'make_direct_teaching', '_make_commented_answer', 'make_expert_profile', 'extract_graph', 'make_composition_items', 'make_explore', 'make_case', 'make_placement_production_items', '_transfer_attempts'}
+                    'make_faded_example', 'make_worked_set', 'make_direct_teaching', '_make_commented_answer', 'make_expert_profile', 'extract_graph', 'make_composition_items', 'make_explore', 'make_case', 'make_placement_production_items', '_transfer_attempts'}  # make_worked_set (worked_examples_v1, L4b): genera el conjunto; el porqué y el hueco se califican sin modelo
         self.assertEqual(found.get('judge_gemini', set()), JUDGE)
         self.assertEqual(found.get('audit_gemini', set()), AUDIT)
         self.assertEqual(found.get('gemini', set()), GENERATE | WRAPPERS)
