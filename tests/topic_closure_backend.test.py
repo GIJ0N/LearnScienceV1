@@ -51,6 +51,16 @@ class TopicClosureBackend(unittest.TestCase):
         self.assertEqual(dens['node_ids'], ['n1'])
         self.assertEqual(dens['lesson_refs'], ['l1'])
 
+    def test_node_ids_keep_all_sources_when_filtered_by_topic(self):
+        # Una proposición fusionada entre n1 y n2 debe seguir listando ambos temas al pedir solo n1.
+        self.memory.save_graph(self.profile, 'g1', 'n2', [{'statement': 'La densidad es masa entre volumen.', 'norm': 'la densidad es masa entre volumen'}],
+                               [], {'node_id': 'n2', 'kind': 'lesson', 'lesson_ref': 'l3'})
+        out = self.payload(node_id='n1')
+        dens = next(p for p in out['propositions'] if p['statement'].startswith('La densidad'))
+        self.assertEqual(dens['node_ids'], ['n1', 'n2'])
+        self.assertEqual(dens['lesson_refs'], ['l1'], 'lesson_refs sí va acotado al tema')
+        self.assertFalse(any(x in ('None', 'null', '') for p in out['propositions'] for x in p['node_ids']))
+
     def test_node_payload_order_is_deterministic_by_created_at_then_prop_id(self):
         # Fuerza created_at: la densidad es la más reciente; las otras dos empatan y desempatan por prop_id.
         with sqlite3.connect(str(self.memory.path)) as db:
