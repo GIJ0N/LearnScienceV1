@@ -16,12 +16,12 @@ let NOW = mx(20, 12); // posterior a todos los fixtures: un evento futuro no cue
 p.setClockForTests(() => NOW);
 
 let seq = 0;
-const ev = (at, extra = {}) => { seq++; return { type: 'EVIDENCE', evidence_id: 'e' + seq, attempt_id: 'att' + seq, activity_id: 'act' + seq, node_id: 'a', phase: 'INDEPENDENT', result: 'CORRECT', status: 'CORRECT', is_independent: true, help_used: 0, observed_dimensions: ['direct_application'], question: { prompt: 'Problema distinto ' + seq }, timestamp: at, evidence_role: 'learning', evaluator_trust: 'deterministic', evaluator_version: 'local-production-v1', purpose: 'practice', ...extra }; };
+const ev = (at, extra = {}) => { seq++; return { type: 'EVIDENCE', evidence_id: 'e' + seq, attempt_id: 'att' + seq, activity_id: 'act' + seq, node_id: 'a', phase: 'INDEPENDENT', result: 'CORRECT', status: 'CORRECT', is_independent: true, help_used: 0, observed_dimensions: ['direct_application'], question: { prompt: 'Problema distinto ' + seq }, timestamp: at, evidence_role: 'learning', evaluator_trust: 'deterministic', evaluator_version: 'local-production-v1', production_kind: 'numeric', purpose: 'practice', ...extra }; };
 const model = (at, extra = {}) => ev(at, { evaluator_trust: 'model_single', trust_policy_version: p.TRUST_POLICY_VERSION, evaluator_version: 'gemini-eval-v1', ...extra });
 const teach = (at, node = 'a') => ({ type: 'TEACHING_EXPOSURE', node_id: node, at, policy_version: 'retrieval_gap_v1' });
 const hardAnchor = at => ({ type: 'TRUST', status: 'CORRECT', source: 'PRODUCTION', anchor_policy_version: p.HARDENING_VERSION, timestamp: at });
 const legacyAnchor = at => ({ type: 'TRUST', status: 'CORRECT', source_attempt_id: 'old-' + at, timestamp: at });
-const failure = at => ({ type: 'EVIDENCE', evidence_id: 'fail' + at, attempt_id: 'fail-' + at, node_id: 'a', phase: 'INDEPENDENT', result: 'MISCONCEPTION', status: 'MISCONCEPTION', is_independent: false, help_used: 0, observed_dimensions: ['direct_application'], question: { prompt: 'Fallo ' + at }, timestamp: at, evidence_role: 'learning', evaluator_trust: 'deterministic', evaluator_version: 'local-production-v1', purpose: 'practice' });
+const failure = at => ({ type: 'EVIDENCE', evidence_id: 'fail' + at, attempt_id: 'fail-' + at, node_id: 'a', phase: 'INDEPENDENT', result: 'MISCONCEPTION', status: 'MISCONCEPTION', is_independent: false, help_used: 0, observed_dimensions: ['direct_application'], question: { prompt: 'Fallo ' + at }, timestamp: at, evidence_role: 'learning', evaluator_trust: 'deterministic', evaluator_version: 'local-production-v1', production_kind: 'numeric', purpose: 'practice' });
 const nodes = () => [{ id: 'a', name: 'Tema A', level: 0, prerequisites: [], outcome: 'Resolver' }, { id: 'b', name: 'Tema B', level: 1, prerequisites: [], outcome: 'Resolver' }];
 // extraDim: entradas de dimensión que no son eventos del ledger (anclas TRUST).
 function goalOf(events, extraDim = [], opts = {}) {

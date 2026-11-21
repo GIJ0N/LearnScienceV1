@@ -44,7 +44,7 @@ function priorEvidence(g, id) {
   const base = Date.now(), dayMs = 86400000, cov = g.coverage.find(c => c.id === id);
   g.events.push({ type: 'TEACHING_EXPOSURE', node_id: id, at: base - 3 * dayMs });
   for (const at of [base - 2 * dayMs, base]) {
-    const e = { type: 'EVIDENCE', evidence_id: 'prior-' + (++priorSerial), attempt_id: 'prior-att-' + priorSerial, activity_id: 'prior-act-' + priorSerial, node_id: id, phase: 'INDEPENDENT', result: 'CORRECT', status: 'CORRECT', is_independent: true, help_used: 0, observed_dimensions: ['units'], question: { prompt: 'Problema escrito ' + priorSerial }, timestamp: at, evidence_role: 'learning', evaluator_trust: 'deterministic', evaluator_version: 'local-production-v1', purpose: 'practice' };
+    const e = { type: 'EVIDENCE', evidence_id: 'prior-' + (++priorSerial), attempt_id: 'prior-att-' + priorSerial, activity_id: 'prior-act-' + priorSerial, node_id: id, phase: 'INDEPENDENT', result: 'CORRECT', status: 'CORRECT', is_independent: true, help_used: 0, observed_dimensions: ['units'], question: { prompt: 'Problema escrito ' + priorSerial }, timestamp: at, evidence_role: 'learning', evaluator_trust: 'deterministic', evaluator_version: 'local-production-v1', production_kind: 'numeric', purpose: 'practice' };
     g.events.push(e); cov.dimensions.find(d => d.id === 'units').evidence.push(e);
   }
 }

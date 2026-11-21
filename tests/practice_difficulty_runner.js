@@ -35,7 +35,7 @@ function goalFor(text, sufficient) {
   // L2a: dominio completo = suficiencia + acierto escrito local de otro día tras una exposición de enseñanza.
   if (sufficient) {
     goal.events.push({ type: 'TEACHING_EXPOSURE', node_id: 'n1', at: T0 - 3 * 86400000 });
-    const delayed = { evidence_id: 'kd', attempt_id: 'kd', type: 'EVIDENCE', node_id: 'n1', result: 'CORRECT', status: 'CORRECT', is_independent: true, independent: true, phase: 'INDEPENDENT', evidence_role: 'learning', evaluator_trust: 'deterministic', evaluator_version: 'local-production-v1', observed_dimensions: ['conceptual'], question: { prompt: 'Concepto diferido' }, timestamp: T0 + 2 * 86400000, at: T0 + 2 * 86400000 };
+    const delayed = { evidence_id: 'kd', attempt_id: 'kd', type: 'EVIDENCE', node_id: 'n1', result: 'CORRECT', status: 'CORRECT', is_independent: true, independent: true, phase: 'INDEPENDENT', evidence_role: 'learning', evaluator_trust: 'deterministic', evaluator_version: 'local-production-v1', production_kind: 'numeric', observed_dimensions: ['conceptual'], question: { prompt: 'Concepto diferido' }, timestamp: T0 + 2 * 86400000, at: T0 + 2 * 86400000 };
     goal.events.push(delayed); goal.coverage[0].dimensions[1].evidence.push(delayed);
   }
   return goal;

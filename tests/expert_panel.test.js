@@ -36,7 +36,7 @@ assert.equal(layers([ev({ is_independent: true })]).layers.independence, 'partia
 // L2a: dos aciertos seguidos no bastan; hace falta además un acierto escrito local de otro día.
 const T0 = Date.UTC(2026, 10, 10, 12), DAYT = 86400000;
 const indep = (at, n) => ev({ is_independent: true, timestamp: at, observed_dimensions: ['direct_application'], attempt_id: 'i' + n, question: { prompt: 'Problema independiente ' + n } });
-const written = (at, n) => ({ ...indep(at, n), evaluator_trust: 'deterministic', evaluator_version: 'local-production-v1', purpose: 'practice' });
+const written = (at, n) => ({ ...indep(at, n), evaluator_trust: 'deterministic', evaluator_version: 'local-production-v1', production_kind: 'numeric', purpose: 'practice' });
 assert.equal(layers([indep(T0, 1), indep(T0, 2)]).layers.independence, 'partial', 'mismo día: parcial');
 assert.equal(layers([indep(T0 - DAYT, 1), indep(T0 - DAYT, 2), written(T0, 3)]).layers.independence, 'met', 'con confirmación de otro día: cumplida');
 assert.equal(layers([ev({ is_independent: true, activity_id: 'x' }), ev({ is_independent: true, activity_id: 'x' })]).layers.independence, 'partial');
@@ -87,7 +87,7 @@ assert.equal(p.calibrationSummary(goal([{ ...diag, evidence_role: 'evaluation' }
 // Etiquetas por cantidad de capas y siguiente paso.
 // L2a: la independencia exige una confirmación escrita local de otro día: dos independientes antiguos y uno escrito posterior.
 const fullInd = (at, n) => ev({ is_independent: true, timestamp: at, observed_dimensions: ['direct_application'], attempt_id: 'f' + n, question: { prompt: 'Completo ' + n } });
-const full = [ev({ phase: 'COMPREHENSION' }), fullInd(T0 - DAYT, 1), fullInd(T0 - DAYT, 2), { ...fullInd(T0, 3), evaluator_trust: 'deterministic', evaluator_version: 'local-production-v1', purpose: 'practice' }, ev({ phase: 'REVIEW', delay_ms_from_last_exposure: 31 * DAY }),
+const full = [ev({ phase: 'COMPREHENSION' }), fullInd(T0 - DAYT, 1), fullInd(T0 - DAYT, 2), { ...fullInd(T0, 3), evaluator_trust: 'deterministic', evaluator_version: 'local-production-v1', production_kind: 'numeric', purpose: 'practice' }, ev({ phase: 'REVIEW', delay_ms_from_last_exposure: 31 * DAY }),
   d('CORRECT'), d('CORRECT'), d('CORRECT', 'COMPOSITION'), d('CORRECT', 'COMPOSITION'), ev({ is_novel_variant: true, is_independent: true }),
   c('CORRECT', 90), c('CORRECT', 95), c('MISCONCEPTION', 10), c('MISCONCEPTION', 5)];
 r = layers(full);

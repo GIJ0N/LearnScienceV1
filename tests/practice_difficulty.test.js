@@ -34,7 +34,7 @@ const baseGoal = () => ({
 function masteredHistory(text) {
   const goal = history(text, { sufficient: true });
   goal.events.push({ type: 'TEACHING_EXPOSURE', node_id: 'n1', at: T0 - 3 * 86400000 });
-  const delayed = { evidence_id: 'kd', attempt_id: 'kd', type: 'EVIDENCE', node_id: 'n1', result: 'CORRECT', status: 'CORRECT', is_independent: true, independent: true, phase: 'INDEPENDENT', evidence_role: 'learning', evaluator_trust: 'deterministic', evaluator_version: 'local-production-v1', observed_dimensions: ['conceptual'], question: { prompt: 'Concepto diferido' }, timestamp: T0 + 2 * 86400000, at: T0 + 2 * 86400000 };
+  const delayed = { evidence_id: 'kd', attempt_id: 'kd', type: 'EVIDENCE', node_id: 'n1', result: 'CORRECT', status: 'CORRECT', is_independent: true, independent: true, phase: 'INDEPENDENT', evidence_role: 'learning', evaluator_trust: 'deterministic', evaluator_version: 'local-production-v1', production_kind: 'numeric', observed_dimensions: ['conceptual'], question: { prompt: 'Concepto diferido' }, timestamp: T0 + 2 * 86400000, at: T0 + 2 * 86400000 };
   goal.events.push(delayed); dim(goal, 'conceptual').evidence.push(delayed);
   return goal;
 }

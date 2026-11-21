@@ -17,7 +17,7 @@ const textOf = el => el ? [el.textContent || '', ...(el.children || []).map(text
 
 let seq = 0;
 // Práctica escrita local, sin ayuda, de otro día o del mismo según el instante.
-const ok = (node, at, extra = {}) => { seq++; return { type: 'EVIDENCE', evidence_id: 'e' + seq, attempt_id: 'att' + seq, activity_id: 'act' + seq, node_id: node, phase: 'INDEPENDENT', result: 'CORRECT', status: 'CORRECT', is_independent: true, help_used: 0, observed_dimensions: ['direct_application'], question: { prompt: 'Problema ' + seq }, timestamp: at, evidence_role: 'learning', evaluator_trust: 'deterministic', evaluator_version: 'local-production-v1', purpose: 'practice', ...extra }; };
+const ok = (node, at, extra = {}) => { seq++; return { type: 'EVIDENCE', evidence_id: 'e' + seq, attempt_id: 'att' + seq, activity_id: 'act' + seq, node_id: node, phase: 'INDEPENDENT', result: 'CORRECT', status: 'CORRECT', is_independent: true, help_used: 0, observed_dimensions: ['direct_application'], question: { prompt: 'Problema ' + seq }, timestamp: at, evidence_role: 'learning', evaluator_trust: 'deterministic', evaluator_version: 'local-production-v1', production_kind: 'numeric', purpose: 'practice', ...extra }; };
 const teach = (node, at) => ({ type: 'TEACHING_EXPOSURE', node_id: node, at, policy_version: 'retrieval_gap_v1' });
 // nodes: [{id, prerequisites?}]. Cada tema tiene una dimensión requerida con sus eventos.
 function mkGoal({ nodes, events = [], areas = [] }) {
@@ -93,6 +93,43 @@ const verifiedEvents = id => [teach(id, mx(10, 9)), ok(id, mx(10, 10)), ok(id, m
   // Un acierto con fecha futura no puede confirmar el dominio diferido.
   const future = mkGoal({ nodes: [{ id: 'a' }], events: [teach('a', mx(10, 9)), ok('a', mx(10, 10)), ok('a', mx(10, 11)), ok('a', mx(20, 15))] });
   assert.equal(p.verified(future, 'a'), false, 'un acierto futuro no confirma');
+}
+
+// (7) R1: un aviso de política acusado no tapa un tema que aún no tiene dimensiones suficientes; sí tapa uno que espera lo diferido.
+{
+  const nodes = [{ id: 'a' }, { id: 'b' }];
+  const notice = { type: 'CURRICULUM_CONTINUED', node_id: 'a', at: mx(10, 9), source: 'POLICY_NOTICE', policy_version: p.HARDENING_VERSION };
+  const sel = mkGoal({ nodes, events: [teach('a', mx(10, 9)), notice] });
+  const d = p.selectTutorAction(sel, NOW, { reselect: true });
+  assert.equal(d.node_id, 'b', 'el aviso acusado sin dimensiones suficientes no repite el tema: avanza a b');
+  assert.equal(d.action, 'INTRODUCE');
+  const waiting = mkGoal({ nodes, events: [...awaitingEvents('a'), { ...notice, at: mx(10, 12) }] });
+  assert.equal(p.selectTutorAction(waiting, NOW, { reselect: true }).node_id, 'a', 'un tema que espera lo diferido no se salta por el aviso');
+}
+
+// (8) R2: la producción que confirma lo diferido es numeric, u ordering con al menos 4 pasos. Eventos sin esos campos no confirman.
+{
+  const cases = [
+    ['ordering de 3 pasos', { production_kind: 'ordering', ordering_steps: 3 }, false],
+    ['ordering de 4 pasos', { production_kind: 'ordering', ordering_steps: 4 }, true],
+    ['numeric', { production_kind: 'numeric' }, true],
+    ['legado sin tipo', { production_kind: undefined, ordering_steps: undefined }, false],
+  ];
+  for (const [name, extra, expected] of cases) {
+    const g = mkGoal({ nodes: [{ id: 'a' }], events: [...awaitingEvents('a').slice(0, 1), ok('a', mx(10, 10)), ok('a', mx(10, 11)), ok('a', mx(11, 10), extra)] });
+    assert.equal(p.verified(g, 'a'), expected, 'confirmación diferida con ' + name);
+  }
+}
+
+// (9) R2: la corrección de una producción guarda el tipo y el número de pasos en el propio evento.
+{
+  const g = mkGoal({ nodes: [{ id: 'a' }], events: [] });
+  p.setStoreForTests({ goals: [g], active: g.id });
+  g.production = { version: p.PROD_VERSION, id: 'prod-1', node_id: 'a', kind: 'ordering', purpose: 'practice', status: 'active', result: null, unavailable: false,
+    item: { item_id: 'it-1', kind: 'ordering', prompt: 'Ordena los pasos', difficulty_band: 'standard', steps: [1, 2, 3, 4].map(i => ({ id: 's' + i, text: 'Paso ' + i })) } };
+  p.applyProductionResult(g, { schema_version: p.PROD_VERSION, item_id: 'it-1', node_id: 'a', status: 'CORRECT', error_type: 'none', solution: 'orden' }, 'att-ord-4', 'orden');
+  const ev = g.events.filter(e => e.type === 'EVIDENCE').at(-1);
+  assert.equal(ev.production_kind, 'ordering'); assert.equal(ev.ordering_steps, 4);
 }
 
 console.log('delayed_mastery_settled.test.js OK');
