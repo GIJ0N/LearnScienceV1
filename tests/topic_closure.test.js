@@ -69,7 +69,8 @@ const PAYLOAD_EXAMPLE = { propositions: GRAPH.propositions.slice(0, 2).map(x => 
   // 1. Fuente grafo: solo proposiciones del tema, tope de 7, cadenas con referencias desconocidas descartadas, prioridad de lesson_ref.
   {
     const g = goal('COMPREHENSION', { graph: { chains: [], extracted: { a: 'L1' } } });
-    const payload = { propositions: GRAPH.propositions.filter(x => x.node_ids.includes('a')), chains: GRAPH.chains.filter(c => c.node_id === 'a') };
+    // El servidor puede devolver más de un tema: el cliente filtra por tema aunque reciba todo.
+    const payload = { propositions: GRAPH.propositions, chains: GRAPH.chains };
     const out = p.closureIdeas(g, 'a', payload, g.lessons.a);
     assert.equal(out.source, 'graph');
     assert.ok(out.ideas.length <= 7, 'tope de 7 ideas');
@@ -81,6 +82,10 @@ const PAYLOAD_EXAMPLE = { propositions: GRAPH.propositions.slice(0, 2).map(x => 
     assert.equal(out.chains[0].conclusion_text, 'Un curado parejo evita el desprendimiento.');
     assert.equal(new Set(out.ideas.map(i => i.prop_id)).size, out.ideas.length, 'sin duplicados');
     assert.ok(out.ideas.length >= 2, 'entre 2 y 7 ideas');
+    // Sin lesson_ref actual el orden cae al índice: el vecino (p6) debe quedar fuera igualmente.
+    const noRef = goal('COMPREHENSION');
+    const out2 = p.closureIdeas(noRef, 'a', payload, noRef.lessons.a);
+    assert.ok(!out2.ideas.some(i => i.prop_id === 'p6'), 'una idea de otro tema nunca entra');
   }
 
   // 2. Respaldo: lección por pasos (primera oración por paso, máx 5); clásica sin partir $…$ (máx 3); caso none.
@@ -122,7 +127,7 @@ const PAYLOAD_EXAMPLE = { propositions: GRAPH.propositions.slice(0, 2).map(x => 
   {
     const g = attach(goal('INTEGRATE'));
     p.setClosureForTests(null);
-    p.closureFromPractice(g, 'a', 'awaiting_delayed', 'att-1');
+    p.closureFromPractice(g, 'a', 'awaiting_delayed', { attempt_id: 'att-1', result: 'CORRECT' });
     assert.equal(p.closureActive(g), false, 'sin último EVIDENCE con ese attempt_id no está activa');
     g.events.push({ type: 'EVIDENCE', attempt_id: 'att-1', node_id: 'a', result: 'CORRECT' });
     assert.equal(p.closureActive(g), true);
@@ -140,8 +145,17 @@ const PAYLOAD_EXAMPLE = { propositions: GRAPH.propositions.slice(0, 2).map(x => 
   {
     const g = attach(goal('INTEGRATE'));
     p.setClosureForTests(null);
-    await p.applyResult(g, 'a', 'INTEGRATE', 'respuesta', { status: 'PARTIAL', feedback: 'Falta una parte', error_type: 'units', _activity: p.activityContract(g, 'a', 'integration'), _attempt_id: 'att-partial' }).catch(() => {});
+    try { p.applyResult(g, 'a', 'INTEGRATE', 'respuesta', { status: 'PARTIAL', feedback: 'Falta una parte', error_type: 'units', _activity: p.activityContract(g, 'a', 'integration'), _attempt_id: 'att-partial' }); } catch (e) { /* un resultado parcial puede exigir otra ruta */ }
     assert.equal(p.closureActive(g), false, 'PARTIAL no muestra el cierre');
+  }
+
+  // 6b. Solo un acierto abre el cierre: PARTIAL, MISCONCEPTION, UNKNOWN o sin evidencia no crean estado.
+  {
+    const g = attach(goal('INTEGRATE'));
+    p.setClosureForTests(null);
+    for (const result of ['PARTIAL', 'MISCONCEPTION', 'UNKNOWN']) assert.equal(p.closureFromPractice(g, 'a', 'completed', { attempt_id: 'x-' + result, result }), null, result);
+    assert.equal(p.closureFromPractice(g, 'a', 'completed', null), null, 'sin evidencia no hay cierre');
+    assert.equal(p.closureActive(g), false);
   }
 
   // 7. Lectura del grafo falla: respaldo con lección, sin bucle ni mensaje de error.
@@ -161,6 +175,7 @@ const PAYLOAD_EXAMPLE = { propositions: GRAPH.propositions.slice(0, 2).map(x => 
     calls.length = 0;
     const g = attach(goal());
     const snap = () => JSON.stringify({ c: g.coverage, r: g.reviews, l: g.lessons, s: g.session, n: g.events.length });
+    assert.equal(p.lastExposure(g, 'a'), 0);
     const before = snap();
     const bodies = [];
     const orig = global.fetch;
@@ -174,6 +189,7 @@ const PAYLOAD_EXAMPLE = { propositions: GRAPH.propositions.slice(0, 2).map(x => 
     const after = JSON.parse(snap()); const prev = JSON.parse(before);
     assert.equal(after.n, prev.n + 1, 'exactamente un evento nuevo');
     assert.deepEqual({ c: after.c, r: after.r, l: after.l, s: after.s }, { c: prev.c, r: prev.r, l: prev.l, s: prev.s }, 'cobertura, repasos, lecciones y sesión sin cambios');
+    assert.equal(p.lastExposure(g, 'a'), 0, 'la autoexplicación no mueve la última exposición');
     assert.ok(!bodies.some(b => b.route !== '/api/profile/save' && b.body.includes('Mi explicación')), 'el texto no sale a otra ruta');
   }
 
