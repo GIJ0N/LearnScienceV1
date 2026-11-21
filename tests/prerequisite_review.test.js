@@ -276,7 +276,7 @@ function okBand(g, id, attempt, b) { tick(); return policy.record(g, id, 'INDEPE
 {
   const g = goal();
   const dim = g.coverage.find(c => c.id === 'p').dimensions[0];
-  for (let i = 0; i < 6; i++) dim.evidence.push({ type: 'EVIDENCE', attempt_id: 'pm' + i, evidence_id: 'pe' + i, activity_id: 'pa' + i, node_id: 'p', question: { prompt: 'Pregunta distinta ' + i }, result: 'CORRECT', status: 'CORRECT', is_independent: true, observed_dimensions: ['conceptual'], evidence_role: 'learning', timestamp: clockValue + i });
+  for (let i = 0; i < 6; i++) dim.evidence.push({ type: 'EVIDENCE', attempt_id: 'pm' + i, evidence_id: 'pe' + i, activity_id: 'pa' + i, node_id: 'p', question: { prompt: 'Pregunta distinta ' + i }, result: 'CORRECT', status: 'CORRECT', is_independent: true, observed_dimensions: ['conceptual'], evidence_role: 'learning', timestamp: i === 5 ? clockValue : clockValue - 3 * 86400000 + i, ...(i === 5 ? { evaluator_trust: 'deterministic', evaluator_version: 'local-production-v1' } : {}) });
   assert.equal(policy.verified(g, 'p'), true, 'P con dominio');
   fail(g, 'x', 'v1'); fail(g, 'x', 'v2');
   assert.equal(proposals(g).length, 0, 'P con dominio no recibe propuesta');

@@ -132,8 +132,15 @@ const evidence = g => g.events.filter(e => e.type === 'EVIDENCE');
   }
   for (const [help, title] of [[0, 'Tema completado'], [1, 'Completado con apoyo']]) {
     p.clearMilestone(); const g = attach(goal('INTEGRATE', unitsCoverage()));
-    record(g); record(g); assert.equal(p.verified(g, 'a'), true, 'preparación: verificado');
-    g.events.push({ type: 'TEACHING_EXPOSURE', node_id: 'a', at: 1 });
+    // L2a: el dominio exige un acierto escrito calificado localmente de otro día (la confirmación de opción múltiple ya no basta).
+    // Se inyecta esa evidencia previa; la regla completa se prueba en tests/delayed_mastery.test.js.
+    const nowPrev = Date.now(), DAY_MS = 86400000;
+    g.events.push({ type: 'TEACHING_EXPOSURE', node_id: 'a', at: nowPrev - 3 * DAY_MS });
+    for (const [k, at] of [[1, nowPrev - 2 * DAY_MS], [2, nowPrev]]) {
+      const prior = { type: 'EVIDENCE', evidence_id: 'prev-' + k, attempt_id: 'prev-att-' + k, activity_id: 'prev-act-' + k, node_id: 'a', phase: 'INDEPENDENT', result: 'CORRECT', status: 'CORRECT', is_independent: true, help_used: 0, observed_dimensions: ['units'], question: { prompt: 'Problema escrito ' + k }, timestamp: at, evidence_role: 'learning', evaluator_trust: 'deterministic', evaluator_version: 'local-production-v1', purpose: 'practice' };
+      g.events.push(prior); g.coverage[0].dimensions[0].evidence.push(prior);
+    }
+    assert.equal(p.verified(g, 'a'), true, 'preparación: verificado');
     const before = evidence(g).length; integrate(g, 'CORRECT', help, 'ok-' + help); await settle();
     assert.equal(evidence(g).length, before + 1, 'la transición registra su evidencia como antes');
     assert.ok(p.getMilestone(), 'hay hito'); assert.equal(p.getMilestone().supported, help > 0);

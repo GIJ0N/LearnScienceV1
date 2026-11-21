@@ -11,6 +11,8 @@ function goal(){return {id:'g',goal:'Aprender medidas',nodes:['a','b'].map((id,i
 function attach(g){p.setProfileForTests({profile_id:'profile-test',name:'Perfil sintético',preferences:{}},1);p.setStoreForTests({goals:[g],active:g.id});return g}
 function find(label,root=roots.app){if(root?.textContent===label)return root;for(const c of root?.children||[]){const f=find(label,c);if(f)return f}return null}
 const settle=()=>new Promise(r=>setImmediate(r));
+// L2a: un acierto escrito local de otro día (tras una exposición de enseñanza) es el único que confirma dominio diferido.
+function writtenAt(g,daysAgo,id='a'){const old=Date.now()-daysAgo*DAY;if(!g.events.some(e=>e.type==='TEACHING_EXPOSURE'&&e.node_id===id))g.events.push({type:'TEACHING_EXPOSURE',node_id:id,at:old-DAY});const e=record(g,'CORRECT',0,'units',id);const pa=g.events.find(x=>x.attempt_id===e.attempt_id)||e;e.evaluator_version=pa.evaluator_version='local-production-v1';e.evaluator_trust=pa.evaluator_trust='deterministic';e.timestamp=e.at=pa.timestamp=pa.at=old;g.coverage.forEach(c=>c.dimensions.forEach(d=>d.evidence.forEach(x=>{if(x.attempt_id===e.attempt_id){x.timestamp=x.at=old;x.evaluator_version='local-production-v1';x.evaluator_trust='deterministic'}})));return e}
 async function waitFor(label,predicate,limit=40){for(let i=0;i<limit;i++){if(predicate())return;await settle()}throw new Error(`Timeout esperando ${label}`)}
 function record(g,status='CORRECT',help=0,dimension='units',id='a'){
  const question=q('Pregunta registrada '+(++serial),dimension),activity=p.activityContract(question,id,'evidence_confirmation');
@@ -39,7 +41,8 @@ async function submit(g,answer='Respuesta'){const phase=g.session.mode,question=
  const decision=p.selectTutorAction(g,123456,{reselect:true});assert.deepEqual(decision,p.selectTutorAction(g,123456,{reselect:true}));assert.equal(JSON.stringify(g),before,'selector is read-only');
  assert.equal(decision.action,'CONFIRM');p.chooseNext(g);await settle();assert.equal(g.session.mode,'CONFIRMATION');assert.ok(find('Por qué: '+decision.reason));
  assert.equal(calls.filter(c=>c.route==='/api/lesson').length,0);assert.equal(p.verified(g,'a'),false);assert.equal(g.session.confirmation.target_dimension,'units');
- await submit(g);assert.equal(p.verified(g,'a'),true);p.finishPractice(g,'a');await settle();assert.equal(g.session.node,'b');assert.equal(g.session.tutor_decision.action,'INTRODUCE');
+ // L2a: un acierto de evaluación del mismo día queda pendiente de confirmar otro día; no certifica dominio diferido.
+ await submit(g);assert.equal(p.verified(g,'a'),false);assert.equal(p.readyToAdvance(g,'a'),true);p.finishPractice(g,'a');await settle();assert.equal(g.session.node,'b');assert.equal(g.session.tutor_decision.action,'INTRODUCE');
  // Help never becomes independent success; support is removed only via practice.
  const assisted=attach(goal());record(assisted,'CORRECT',1);assert.equal(p.learningState(assisted,'a',Date.now()).dimensions[0].state,'ASSISTED_PERFORMANCE');
  p.chooseNext(assisted);await settle();assert.equal(assisted.session.mode,'GUIDED');assert.equal(p.verified(assisted,'a'),false);
@@ -66,7 +69,7 @@ async function submit(g,answer='Respuesta'){const phase=g.session.mode,question=
  assert.equal(episode.stage,'PARENT_RETEST');assert.equal(p.verified(repairing,'a'),false);assert.equal(repairing.coverage[0].dimensions[0].evidence.filter(e=>e.evidence_scope==='repair_episode').length,0);
  const paused=p.normalizeGoal(JSON.parse(JSON.stringify(repairing)));assert.equal(p.selectTutorAction(paused,Date.now()).action,'RESUME_REPAIR');assert.equal(p.episodeActivity(paused.repairEpisodes[0]).phase,'PARENT_RETEST');global.fetch=normalFetch;
  // Sufficient evidence permits a harder task; it cannot grant transfer permission.
- const advanced=attach(goal());record(advanced);record(advanced);p.chooseNext(advanced,{focus:'a',reselect:true});await waitFor('desafío',()=>Boolean(advanced.session.confirmation?.question));
+ const advanced=attach(goal());writtenAt(advanced,3);writtenAt(advanced,1);p.chooseNext(advanced,{focus:'a',reselect:true});await waitFor('desafío',()=>Boolean(advanced.session.confirmation?.question));
  assert.equal(advanced.session.confirmation.purpose,'challenge');assert.equal(calls.some(c=>c.route==='/api/confirmation'&&c.body.difficulty==='challenge'),true);assert.equal(p.activityContract(advanced.session.confirmation.question,'a','evidence_confirmation').supports_transfer,false);
  await submit(advanced);assert.ok(find('Desafío terminado. Puedes continuar; este intento no certifica transferencia ni expertise.'));
  // Revisitable pending evidence and a persistent six-attempt cap, not an automatic reset on reload.

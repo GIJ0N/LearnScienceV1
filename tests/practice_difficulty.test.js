@@ -29,6 +29,15 @@ const baseGoal = () => ({
   coverage: [{ id: 'n1', name: 'n1', status: 'UNKNOWN', confidence: 0, dimensions: ['direct_application', 'conceptual'].map(d => ({ id: d, name: d, required: true, status: 'UNKNOWN', evidence: [] })) }],
   session: { mode: 'DIAGNOSTIC', node: 'n1', stack: [], tries: 0, hints: 0 }
 });
+// L2a: dominio completo = suficiencia + acierto escrito local de otro día tras una exposición de enseñanza.
+// El acierto diferido también entra en la muestra de dificultad, así que solo se usa donde se afirma dominio completo.
+function masteredHistory(text) {
+  const goal = history(text, { sufficient: true });
+  goal.events.push({ type: 'TEACHING_EXPOSURE', node_id: 'n1', at: T0 - 3 * 86400000 });
+  const delayed = { evidence_id: 'kd', attempt_id: 'kd', type: 'EVIDENCE', node_id: 'n1', result: 'CORRECT', status: 'CORRECT', is_independent: true, independent: true, phase: 'INDEPENDENT', evidence_role: 'learning', evaluator_trust: 'deterministic', evaluator_version: 'local-production-v1', observed_dimensions: ['conceptual'], question: { prompt: 'Concepto diferido' }, timestamp: T0 + 2 * 86400000, at: T0 + 2 * 86400000 };
+  goal.events.push(delayed); dim(goal, 'conceptual').evidence.push(delayed);
+  return goal;
+}
 const attach = goal => { p.setStoreForTests({ goals: [goal], active: goal.id }); return goal; };
 const dim = (goal, id) => goal.coverage[0].dimensions.find(d => d.id === id);
 
@@ -51,9 +60,11 @@ function history(text, { sufficient = false } = {}) {
     evidence(goal, o);
   }
   if (sufficient) for (const i of [1, 2]) dim(goal, 'conceptual').evidence.push({ evidence_id: 'k' + i, attempt_id: 'k' + i, type: 'EVIDENCE', result: 'CORRECT', status: 'CORRECT', is_independent: true, observed_dimensions: ['conceptual'], question: { prompt: 'Concepto ' + i }, phase: 'CONFIRMATION', timestamp: T0 + i });
+
   return attach(goal);
 }
-const coversAll = goal => p.deriveCoverage(goal.coverage[0]).mastered === true;
+// L2a: deriveCoverage exige los eventos del objetivo (sin ellos no concede dominio); el dominio completo también necesita confirmación diferida.
+const coversAll = goal => p.deriveCoverage(goal.coverage[0], { events: goal.events }).mastered === true;
 
 (async () => {
   assert.equal(p.PRACTICE_DIFFICULTY_VERSION, 'practice_difficulty_v1');
@@ -154,7 +165,7 @@ const coversAll = goal => p.deriveCoverage(goal.coverage[0]).mastered === true;
     const okPrepared = p.prepareRecord(noSuff, 'n1', 'INDEPENDENT', 'x', { status: 'CORRECT', evaluator_version: 'local-fixture' }, 0, p.activityContract({ ...q, prompt: 'Otro desafío' }, 'n1', 'independent_practice'), 'att-guard-2');
     assert.equal(okPrepared.event.difficulty_band, 'standard');
 
-    const g = history('SS', { sufficient: true }); assert.equal(coversAll(g), true);
+    const g = masteredHistory('SS'); assert.equal(coversAll(g), true);
     const before = p.independentSuccesses(dim(g, 'direct_application')).map(e => e.attempt_id);
     const failActivity = p.activityContract({ ...q, prompt: 'Desafío con base' }, 'n1', 'independent_practice');
     const event = p.record(g, 'n1', 'INDEPENDENT', 'x', { status: 'MISCONCEPTION', error_type: 'conceptual' }, 0, failActivity, 'att-challenge-fail');
@@ -164,14 +175,14 @@ const coversAll = goal => p.deriveCoverage(goal.coverage[0]).mastered === true;
     assert.equal(coversAll(g), true, 'sufficient() no cambia tras fallar en desafío');
     assert.deepEqual(p.independentSuccesses(dim(g, 'direct_application')).map(e => e.attempt_id), before, 'los aciertos previos siguen');
     assert.equal(p.learningState(g, 'n1', Date.now()).dimensions.find(d => d.id === 'direct_application').difficulty, false, 'no abre reparación');
-    assert.equal(p.practiceBandState(g, 'n1').evidences, 3, 'el fallo sí queda como dato para la banda');
+    assert.equal(p.practiceBandState(g, 'n1').evidences, 4, 'el fallo sí queda como dato para la banda (dos aciertos, el acierto diferido de L2a y el fallo)');
 
     // Contraste: el mismo fallo en estándar sí rompe la suficiencia.
     const h = history('SS', { sufficient: true });
     p.record(h, 'n1', 'INDEPENDENT', 'x', { status: 'MISCONCEPTION', error_type: 'conceptual' }, 0, p.activityContract({ ...q, difficulty_band: 'standard', prompt: 'Estándar con fallo' }, 'n1', 'independent_practice'), 'att-standard-fail');
     assert.equal(coversAll(h), false);
     // Un fallo en desafío tampoco dispara el aviso de seguridad por confianza alta (calibración) sobre el tema.
-    const sure = history('SS', { sufficient: true });
+    const sure = masteredHistory('SS'); // L2a: el desafío necesita dominio completo (con confirmación diferida) para registrarse como desafío.
     p.record(sure, 'n1', 'INDEPENDENT', 'x', { status: 'MISCONCEPTION', error_type: 'conceptual', _learner_confidence: 95 }, 0, p.activityContract({ ...q, prompt: 'Desafío seguro' }, 'n1', 'independent_practice'), 'att-sure');
     assert.equal(p.learningState(sure, 'n1', Date.now()).committed_misconception, false);
   }
@@ -180,12 +191,12 @@ const coversAll = goal => p.deriveCoverage(goal.coverage[0]).mastered === true;
   {
     const g = history('SSS'); // 3/3 pero sin suficiencia
     assert.equal(p.practiceBand(g, 'n1', 'challenge').band, 'standard', 'challenge como propósito sin suficiencia: estándar');
-    const s = history('SSS', { sufficient: true });
+    const s = masteredHistory('SSS'); // el desafío exige dominio completo (L2a)
     assert.equal(p.practiceBand(s, 'n1', 'challenge').band, 'challenge');
     assert.equal(p.practiceBand(s, 'n1', 'production').band, 'challenge');
     assert.equal(p.practiceBand(s, 'n1', 'lesson').band, 'standard', 'una lección nunca es desafío');
     assert.match(p.practiceBand(s, 'n1', 'lesson').reason, /práctica aparte/);
-    const low = history('SS cF cF cF', { sufficient: true }); assert.equal(coversAll(low), true);
+    const low = masteredHistory('SS cF cF cF'); assert.equal(coversAll(low), true);
     assert.equal(p.practiceBandState(low, 'n1').band, 'base');
     assert.equal(p.practiceBand(low, 'n1', 'challenge').band, 'standard', 'desempeño reciente bajo: el desafío espera');
     assert.equal(p.practiceBand(low, 'n1', 'confirmation').band, 'base');
@@ -247,7 +258,7 @@ const coversAll = goal => p.deriveCoverage(goal.coverage[0]).mastered === true;
     assert.equal(event.difficulty_band, 'base'); assert.equal(event.difficulty_policy_version, 'practice_difficulty_v1');
 
     // Propósito challenge con suficiencia: se envía challenge.
-    const c = history('SSS', { sufficient: true }); c.session = { mode: 'CONFIRMATION', node: 'n1', stack: [], tries: 0, hints: 0, confirmation: { node_id: 'n1', attempts: 0, question: null, target_dimension: 'direct_application', purpose: 'challenge' } };
+    const c = masteredHistory('SSS'); c.session = { mode: 'CONFIRMATION', node: 'n1', stack: [], tries: 0, hints: 0, confirmation: { node_id: 'n1', attempts: 0, question: null, target_dimension: 'direct_application', purpose: 'challenge' } };
     sent.length = 0; await p.confirmationView(element(), c, c.nodes[0]); await settle();
     assert.equal(sent[0][1].difficulty, 'challenge');
 
@@ -267,16 +278,17 @@ const coversAll = goal => p.deriveCoverage(goal.coverage[0]).mastered === true;
   // 9. Revisión del supervisor.
   {
     // (1) Una producción base correcta no crea ancla local; una estándar sí.
-    const produce = async (goal, id) => {
-      goal.production = { version: p.PROD_VERSION, id: 'prod-' + id, node_id: 'n1', kind: null, item: null, status: 'active', result: null, unavailable: false };
+    const produce = async (goal, id, purpose = null) => {
+      // C-a: solo una práctica de propósito 'anchor' puede crear ancla local; la práctica normal no.
+      goal.production = { version: p.PROD_VERSION, id: 'prod-' + id, node_id: 'n1', kind: null, item: null, status: 'active', result: null, unavailable: false, ...(purpose ? { purpose } : {}) };
       global.fetch = async (route, options) => { const body = JSON.parse(options.body); if (route !== '/api/practice/produce') return { ok: true, json: async () => ({ ok: true, revision: 1 }) }; return { ok: true, json: async () => ({ item_id: 'item-' + id, node_id: 'n1', kind: 'numeric', prompt: 'Calcula 2 + 3 en unidades', difficulty_band: body.difficulty_band }) }; };
       assert.equal(await p.fetchProduction(goal), true);
       p.applyProductionResult(goal, { schema_version: p.PROD_VERSION, item_id: 'item-' + id, node_id: 'n1', status: 'CORRECT', error_type: 'none', solution: 's' }, 'att-' + id, '5 u');
     };
-    const lowGoal = history('FFF'); await produce(lowGoal, 'base');
+    const lowGoal = history('FFF'); await produce(lowGoal, 'base'); // práctica normal, banda base
     assert.equal(lowGoal.events.filter(e => e.type === 'EVIDENCE').at(-1).difficulty_band, 'base');
     assert.equal(p.trustAnchored(lowGoal, 'n1'), false, 'producción base correcta: sin ancla local');
-    const okGoal = attach(baseGoal()); await produce(okGoal, 'std');
+    const okGoal = attach(baseGoal()); await produce(okGoal, 'std', 'anchor'); // ancla: banda estándar pedida por el servidor
     assert.equal(okGoal.events.filter(e => e.type === 'EVIDENCE').at(-1).difficulty_band, 'standard');
     assert.equal(p.trustAnchored(okGoal, 'n1'), true, 'contraste: la estándar sí ancla');
 
@@ -284,7 +296,8 @@ const coversAll = goal => p.deriveCoverage(goal.coverage[0]).mastered === true;
     const twoBase = baseGoal(); evidence(twoBase, { band: 'base' }); evidence(twoBase, { band: 'base' }); attach(twoBase);
     assert.notEqual(p.expertLayers(twoBase, 'n1').layers.independence, 'met');
     const twoStd = baseGoal(); evidence(twoStd, { band: 'standard' }); evidence(twoStd, { band: 'standard' }); attach(twoStd);
-    assert.equal(p.expertLayers(twoStd, 'n1').layers.independence, 'met', 'contraste: dos estándar sí');
+    // L2a: dos estándar del mismo día son independencia parcial; 'met' exige confirmación diferida.
+    assert.equal(p.expertLayers(twoStd, 'n1').layers.independence, 'partial', 'contraste: dos estándar del mismo día quedan parciales');
     const modelBase = baseGoal(); evidence(modelBase, { band: 'base', model: true }); attach(modelBase);
     assert.equal(p.anchorSuggest(modelBase, 'n1'), null, 'no se sugiere ancla tras un acierto base');
     assert.equal(p.anchorOffer(modelBase, 'n1'), null);
@@ -297,7 +310,7 @@ const coversAll = goal => p.deriveCoverage(goal.coverage[0]).mastered === true;
     // (4) Un fallo en base contradice, reinicia lastFailure y abre reparación; el desafío solo exime con suficiencia previa.
     const q = band => ({ prompt: 'Fallo en ' + band, reference: 'c', kind: 'application', observable_dimensions: ['direct_application'], difficulty_band: band });
     for (const band of ['base', 'standard', null]) {
-      const g = history('SS', { sufficient: true }); assert.equal(coversAll(g), true);
+      const g = masteredHistory('SS'); assert.equal(coversAll(g), true);
       const question = q(band); if (!band) delete question.difficulty_band;
       const event = p.record(g, 'n1', 'INDEPENDENT', 'x', { status: 'MISCONCEPTION', error_type: 'conceptual' }, 0, p.activityContract(question, 'n1', 'independent_practice'), 'att-fail-' + band);
       assert.equal(event.contradicts_sufficiency, true, 'fallo ' + band); assert.equal(event.counts_as_learning_failure, true);
@@ -317,8 +330,8 @@ const coversAll = goal => p.deriveCoverage(goal.coverage[0]).mastered === true;
     const neutral = 'Se mantiene porque tus respuestas recientes están en un punto medio.';
     assert.equal(p.practiceBand(history('SSSFFF'), 'n1', 'confirmation').reason, neutral, 'sin suficiencia el desafío nunca fue efectivo: no hay «bajaste»');
     assert.match(p.practiceBand(history('SSSFF'), 'n1', 'confirmation').reason, /se abre cuando tu evidencia inicial esté completa/);
-    assert.equal(p.practiceBand(history('SSS cF cF cF', { sufficient: true }), 'n1', 'confirmation').reason, 'Bajaste de nivel porque acertaste solo 2 de 5 sin pistas', 'con suficiencia el desafío sí era efectivo');
-    assert.equal(p.practiceBand(history('SSS cF cF', { sufficient: true }), 'n1', 'confirmation').reason, 'Subiste porque acertaste 3 de 3 sin pistas');
+    assert.equal(p.practiceBand(masteredHistory('SSS cF cF cF'), 'n1', 'confirmation').reason, 'Bajaste de nivel porque acertaste solo 2 de 5 sin pistas', 'con suficiencia el desafío sí era efectivo');
+    assert.equal(p.practiceBand(masteredHistory('SSS cF cF'), 'n1', 'confirmation').reason, 'Subiste porque acertaste 3 de 3 sin pistas');
     const old = history('FFFSSSSSFSSF'); const state = p.practiceBandState(old, 'n1');
     assert.equal(state.band, 'standard'); assert.ok(state.change.index < state.evidences - p.DIFFICULTY_WINDOW, 'el cambio quedó fuera de la ventana');
     assert.equal(p.practiceBand(old, 'n1', 'confirmation').reason, neutral, 'un cambio antiguo no se presenta como reciente');

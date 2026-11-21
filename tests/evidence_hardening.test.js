@@ -67,9 +67,9 @@ for (const legacy of ['DISCRIMINATION', 'COMPOSITION', 'CONFIRMATION', 'ERROR_FI
 {
   const g = freshGoal();
   assert.equal(p.createTrustAnchor(g, 'a', 'PRODUCTION', 'o3', NOW, { basis: 'ordering', steps: 3 }), false, 'ordering de 3 pasos no ancla');
-  assert.equal(p.createTrustAnchor(g, 'a', 'PRODUCTION', 'o4', NOW, { basis: 'ordering', steps: 4 }), true, 'ordering de 4 pasos ancla');
+  assert.equal(p.createTrustAnchor(g, 'a', 'PRODUCTION', 'o4', NOW, { basis: 'ordering', steps: 4, purpose: 'anchor' }), true, 'ordering de 4 pasos ancla');
   const h = freshGoal();
-  assert.equal(p.createTrustAnchor(h, 'a', 'PRODUCTION', 'n1', NOW, { basis: 'numeric' }), true, 'numeric ancla');
+  assert.equal(p.createTrustAnchor(h, 'a', 'PRODUCTION', 'n1', NOW, { basis: 'numeric', purpose: 'anchor' }), true, 'numeric ancla');
   const marker = h.events.find(e => e.type === 'TRUST_ANCHOR');
   assert.equal(marker.anchor_basis, 'numeric');
   assert.equal(marker.anchor_policy_version, 'evidence_hardening_v1');

@@ -173,7 +173,9 @@ async function submitThroughUI(goal, question, phase, role, response) {
     const complete = goalWithDimensions(['conceptual']);
     complete.learner.n1 = { level: 0, confidence: 'unverified', evidence: [], errors: [], last: null };
     policy.record(complete, 'n1', 'COMPREHENSION', 'x', assessment(), 0, conceptual, 'complete-low-level');
-    policy.record(complete, 'n1', 'CONFIRMATION', 'x', assessment(), 0, confirmation, 'complete-confirmation');
+    // L2a: el dominio exige un acierto escrito local de otro día (ref = exposición de hace dos días).
+    complete.events.push({ type: 'TEACHING_EXPOSURE', node_id: 'n1', at: Date.now() - 2 * 86400000 });
+    policy.record(complete, 'n1', 'CONFIRMATION', 'x', assessment('CORRECT', { evaluator_version: 'local-production-v1' }), 0, confirmation, 'complete-confirmation');
     assert.equal(policy.derivedStartMode(complete, 'n1'), 'DIAGNOSTIC');
     assert.equal(policy.verified(complete, 'n1'), true);
     assert.equal(policy.progressDiscrepancy(complete, 'n1').inconsistent, true);

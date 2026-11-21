@@ -152,13 +152,16 @@ for (const [name, teachAt, sameDayAt, candidateAt, expected] of [
   const g = goalOf([teach(mx(10, 9)), ev(mx(10, 10)), ev(mx(10, 11))], [], { nodes: [nodes()[0]] });
   p.setProfileForTests({ profile_id: 'profile-test', name: 'Sintético', preferences: {} }, 1);
   p.setStoreForTests({ goals: [g], active: g.id });
-  NOW = mx(10, 20); p.chooseNext(g);
-  assert.equal(g.events.filter(e => e.type === 'CURRICULUM_CONTINUED').length, 0, 'la espera no escribe decisión curricular');
-  assert.notEqual(g.session.mode, 'CONFIRMATION');
-  NOW = mx(11, 10); p.chooseNext(g);
-  assert.equal(g.session.mode, 'CONFIRMATION');
-  assert.equal(g.session.confirmation.purpose, 'delayed');
-  NOW = mx(10, 20);
+  // chooseNext lee Date.now() (no el reloj de pruebas): se fija solo durante la llamada.
+  const realNow = Date.now;
+  try {
+    NOW = mx(10, 20); Date.now = () => NOW; p.chooseNext(g);
+    assert.equal(g.events.filter(e => e.type === 'CURRICULUM_CONTINUED').length, 0, 'la espera no escribe decisión curricular');
+    assert.notEqual(g.session.mode, 'CONFIRMATION');
+    NOW = mx(11, 10); p.chooseNext(g);
+    assert.equal(g.session.mode, 'CONFIRMATION');
+    assert.equal(g.session.confirmation.purpose, 'delayed');
+  } finally { Date.now = realNow; NOW = mx(10, 20); }
 }
 
 // (11) Desafío: exige la confirmación diferida; el mismo día no basta.

@@ -225,7 +225,7 @@ const answer = 'Creo que la causa es el espesor excesivo porque retrasa el curad
     assert.equal(h.coverage.find(c => c.id === 'a').dimensions.find(d => d.id === 'contextual_application').status !== 'MASTERED', true);
     assert.equal(p.verified(h, 'a'), false, 'dos casos con el modelo no bastan para suficiente');
     assert.ok(p.anchorNeed(h, 'a'), 'se pide la confirmación rápida');
-    p.createTrustAnchor(h, 'a', 'PRODUCTION', 'ancla-1', NOW, { basis: 'numeric' });
+    p.createTrustAnchor(h, 'a', 'PRODUCTION', 'ancla-1', NOW, { basis: 'numeric', purpose: 'anchor' });
     assert.equal(p.independentSuccesses(dim).length, 2, 'con ancla local los dos casos cuentan');
     assert.equal(dim.status === 'MASTERED' || p.verified(h, 'a') === false || true, true);
     // la capa de independencia del panel tampoco cuenta etapas de un mismo caso como actividades distintas
@@ -234,11 +234,12 @@ const answer = 'Creo que la causa es el espesor excesivo porque retrasa el curad
     assert.equal(p.expertLayers(h2, 'a').layers.independence, 'none', 'calificado solo por el modelo sin ancla local: el panel tampoco lo cuenta');
     p.caseStageEvidence(h2, 'case-W', mk(1, 'CORRECT'));
     assert.equal(p.expertLayers(h2, 'a').layers.independence, 'none', 'dos casos sin ancla: tampoco');
-    p.createTrustAnchor(h2, 'a', 'PRODUCTION', 'ancla-2', NOW, { basis: 'numeric' });
-    assert.equal(p.expertLayers(h2, 'a').layers.independence, 'met', 'con ancla local, dos casos distintos');
+    p.createTrustAnchor(h2, 'a', 'PRODUCTION', 'ancla-2', NOW, { basis: 'numeric', purpose: 'anchor' });
+    // L2a: el panel exige además un acierto escrito local de otro día; dos casos calificados por el modelo, aunque con ancla, dejan la capa en parcial.
+    assert.equal(p.expertLayers(h2, 'a').layers.independence, 'partial', 'con ancla local, dos casos distintos, sin confirmación de otro día: parcial');
     const h3 = attach(goal([], {}));
     p.caseStageEvidence(h3, 'case-V', mk(1, 'CORRECT')); p.caseStageEvidence(h3, 'case-V', mk(2, 'CORRECT'));
-    p.createTrustAnchor(h3, 'a', 'PRODUCTION', 'ancla-3', NOW, { basis: 'numeric' });
+    p.createTrustAnchor(h3, 'a', 'PRODUCTION', 'ancla-3', NOW, { basis: 'numeric', purpose: 'anchor' });
     assert.equal(p.expertLayers(h3, 'a').layers.independence, 'partial', 'un caso = un solo indicio');
   }
 

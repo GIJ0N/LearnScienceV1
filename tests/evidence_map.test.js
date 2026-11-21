@@ -49,8 +49,9 @@ const second = observation('attempt-2', 'Por qué cambia una parte al cambiar la
 const frozen = freeze(goal([first, second]));
 const before = JSON.stringify(frozen);
 const map = policy.evidenceMapSnapshot(frozen);
-assert.equal(map.nodes[0].status, policy.deriveCoverage(frozen.coverage[0]).status);
-assert.equal(map.nodes[0].status, 'MASTERED');
+// L2a: dos aciertos de opción múltiple del mismo instante son suficientes por dimensión, pero el dominio queda por confirmar otro día.
+assert.equal(map.nodes[0].status, policy.deriveCoverage(frozen.coverage[0], { events: frozen.events }).status);
+assert.equal(map.nodes[0].status, 'PARTIALLY_UNDERSTOOD');
 assert.deepEqual(map.nodes[0].dimensions[0].independent_attempt_ids, ['attempt-1', 'attempt-2']);
 assert.equal(map.nodes[1].status, 'UNKNOWN', 'mastery does not propagate through prerequisites');
 assert.equal(map.nodes[2].has_contract, false, 'legacy gets no invented coverage');

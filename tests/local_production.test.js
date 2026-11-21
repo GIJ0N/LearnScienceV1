@@ -80,8 +80,9 @@ const verdict = (status, extra = {}) => ({ schema_version: 'local_production_v1'
   assert.equal(ev[0].learner_confidence, 85);
   assert.deepEqual(ev[0].observed_dimensions, ['direct_application']);
   assert.equal(g.coverage[0].dimensions.find(d => d.id === 'direct_application').evidence.filter(x => x.type !== 'TRUST').length, 1);
-  assert.equal(g.coverage[0].dimensions.every(d => d.evidence.some(x => x.type === 'TRUST')), true, 'ancla creada por producción correcta');
-  assert.equal(g.events.filter(e => e.type === 'TRUST_ANCHOR' && e.source === 'PRODUCTION').length, 1);
+  // L2a (C-a): una práctica normal correcta no ancla; solo la producción de ancla lo hace (tests/evidence_l2_fixes.test.js).
+  assert.equal(g.coverage[0].dimensions.some(d => d.evidence.some(x => x.type === 'TRUST')), false, 'práctica normal no ancla');
+  assert.equal(g.events.filter(e => e.type === 'TRUST_ANCHOR' && e.source === 'PRODUCTION').length, 0);
   assert.equal(g.production.status, 'done');
   // Idempotente: aplicar de nuevo no duplica evidencia.
   assert.equal(p.applyProductionResult(g, verdict('CORRECT'), 'att-1', '60 g/m²', 85), false);
