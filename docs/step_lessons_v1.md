@@ -38,6 +38,10 @@ El dominio sigue saliendo solo de las actividades posteriores con su contrato ac
 
 Se reutilizan las tablas `placement_items` y `placement_answers` (almacén privado de preguntas con clave); no hay tablas nuevas. `lesson.steps` y `session.step` son campos opcionales: una lección sin `steps` se muestra como antes. Revertir deja eventos `PREDICTION`/`STEP_CHECK` que nada más lee.
 
+## Nota de versión L4a (`worked_examples_v1`)
+
+En una lección `lean` (ver `docs/worked_examples_v1.md`) no se piden pasos. `POST /api/lesson/steps` responde `STEPS_NOT_NEEDED` en `consolidate` salvo `learner_requested=true`. La lección por pasos sigue igual para las lecciones `full` y no cambia el ciclo de cada paso.
+
 ## Fuera de alcance
 
 Que `relevant_memory` use los resultados de paso para adaptar la siguiente lección, predicciones graduadas por el servidor y pasos Socráticos con respuesta abierta.
