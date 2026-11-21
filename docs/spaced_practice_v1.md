@@ -36,6 +36,8 @@ Opción múltiple con corrección inmediata no es independiente ni demuestra rec
 
 Un acierto no sube el peldaño: discriminar no es recuperar.
 
+El conteo diario de aciertos (`dailySummary`) no incluye `DISCRIMINATION`: distinguir ideas no es recordarlas.
+
 ## Contratos
 
 `POST /api/practice/discriminate` → `{profile_id, goal_id, goal, nodes:[{id,name,outcome}]}` (2–4) → `{items:[{item_id,node_id,prompt,options:[{id,text}]}]}`.

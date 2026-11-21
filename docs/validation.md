@@ -101,6 +101,7 @@ python tests/worked_examples_backend.test.py
 node tests/worked_examples.test.js
 node tests/open_answer_trust.test.js
 node tests/daily_session.test.js
+node tests/discrimination_daily.test.js
 python tests/expert_profile_backend.test.py
 node tests/expert_profile.test.js
 python tests/practice_difficulty.test.py
@@ -351,6 +352,8 @@ La respuesta correcta se descarta si es claramente la opción más larga: al men
 `node tests/open_answer_trust.test.js` comprueba que los aciertos calificados solo por el modelo exigen un ancla local (sin ancla no es suficiente; con ancla sí; una contradicción posterior la invalida), que los eventos anteriores y los deterministas cuentan como hoy, y que el marcador `TRUST` no es intento, acierto ni contradicción.
 
 `node tests/daily_session.test.js` comprueba que el plan diario es determinista, que respeta reparación abierta y poca cuota, que un tema sin enseñanza no entra en práctica mixta ni de cálculo, que cambiar de fecha crea un plan nuevo conservando el anterior en eventos, y que construir o saltar el plan no cambia cobertura, `verified()` ni calendario.
+
+`node tests/discrimination_daily.test.js` comprueba que un acierto de discriminación (`DISCRIMINATION`) no suma al conteo diario de aciertos, que sí lo hacen `EVIDENCE` de aprendizaje y `COMPOSITION`, que eventos anteriores al inicio de la sesión no cuentan, y que el panel del día no muestra discriminación como acierto de dominio.
 
 ## Perfil de experto por dominio
 
