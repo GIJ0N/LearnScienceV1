@@ -688,7 +688,7 @@ function renderWorkedNumeric(b,goal,item,apply){
   for(const x of [submit,unknown,value,unit])x.disabled=true;apply(goal,item,result,attemptId,answered&&value.value!==''?value.value:null,null);
   feedback.replaceChildren(E('p',({CORRECT:'Correcto.',MISCONCEPTION:'No coincidió.',UNKNOWN:'Sin respuesta.'})[result.status]||''),E('p','Resultado: '+result.correct_value+' '+result.correct_unit),X('p',String(result.step_text||'')),B('Siguiente',()=>render()))});
  const submit=B('Responder',()=>send(true)),unknown=B('No sé',()=>send(false),true);
- slot.append(E('p',item.prompt),value,unit,submit,unknown);b.append(slot,feedback);
+ slot.append(X('p',item.prompt),value,unit,submit,unknown);b.append(slot,feedback);
 }
 function renderWorkedOrdering(b,goal,item,apply){
  const attemptId=newId('attempt'),picked=[],feedback=E('div'),slot=E('div'),shown=E('p','Orden: 0 de '+item.steps.length);slot.className='wex-slot';feedback.setAttribute?.('aria-live','polite');
@@ -697,7 +697,7 @@ function renderWorkedOrdering(b,goal,item,apply){
   for(const x of [...cards,submit,unknown])x.disabled=true;apply(goal,item,result,attemptId,order,null);
   feedback.replaceChildren(E('p',({CORRECT:'Orden correcto.',MISCONCEPTION:'El orden no coincide.',UNKNOWN:'Sin respuesta.'})[result.status]||''),X('p',(result.correct_order||[]).map(x=>x.text).join(' → ')),B('Siguiente',()=>render()))});
  const submit=B('Responder',()=>send(picked.length===item.steps.length?picked.slice():null)),unknown=B('No sé',()=>send(null),true);
- slot.append(E('p',item.prompt),...cards,shown,submit,unknown);b.append(slot,feedback);
+ slot.append(X('p',item.prompt),...cards,shown,submit,unknown);b.append(slot,feedback);
 }
 function whyBlock(goal,nodeId,step,setId,index){
  const box=E('div');box.className='wex-why';const why=step.why;
@@ -726,7 +726,7 @@ function workedSolutions(b,sw){
 }
 async function workedStage(b,goal,n,l,force=false){
  if(l.worked===undefined&&l.faded===undefined){b.append(E('p','Preparando un ejemplo resuelto…'));await task('Preparando un ejemplo resuelto…',async()=>{await fetchWorked(goal,n,l)});if(l.worked===undefined&&goal===g()){l.worked=null;save()}render();return true}
- if(!l.worked||(!force&&(l.worked_skipped||l.worked_done)))return false;
+ if(!(force?Boolean(l.worked)&&!l.worked_skipped&&!l.worked_done:workedAllowed(l))||!l.worked)return false;
  const set=l.worked,today=dailyDate();
  if(!l.worked_exposed){l.worked_exposed=true;noteTeachingExposure(goal,n.id,Date.now())}
  else if(l.worked_day&&l.worked_day!==today)recordFormativeExposure(goal,n.id,'worked_example',set.set_id+':'+today);

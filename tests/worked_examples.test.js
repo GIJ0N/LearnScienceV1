@@ -49,6 +49,8 @@ function attach(g) { p.setProfileForTests({ profile_id: 'profile-test', name: 'S
 const find = (label, root = roots.app) => { if (root && root.textContent === label) return root; for (const c of (root && root.children) || []) { const f = find(label, c); if (f) return f; } return null; };
 const has = (needle, root = roots.app) => { if (root && String(root.textContent || '').includes(needle)) return true; return ((root && root.children) || []).some(c => has(needle, c)); };
 const routeCalls = r => calls.filter(c => c.route === r);
+// Botón con manejador onclick cuyo texto contiene el fragmento (los botones de opción llevan «a) …»).
+const clickable = (needle, root = roots.app) => { if (root && typeof root.onclick === 'function' && String(root.textContent || '').includes(needle)) return root; for (const c of (root && root.children) || []) { const f = clickable(needle, c); if (f) return f; } return null; };
 const settle = async () => { for (let i = 0; i < 4; i++) await new Promise(r => setImmediate(r)); };
 const exposureEvents = g => g.events.filter(e => e.type === 'EVIDENCE');
 
@@ -206,6 +208,56 @@ const exposureEvents = g => g.events.filter(e => e.type === 'EVIDENCE');
     assert.equal(end.creates_evidence, false);
     assert.equal(routeCalls('/api/lesson/worked/open').length, 1);
     assert.equal(routeCalls('/api/lesson/worked/open')[0].body.rung, 3, 'salta al problema solo');
+  }
+
+  // 8b. La UI revela un gemelo y registra UNA exposición formativa por gemelo; repintar no la duplica.
+  {
+    const clickable = (needle, root = roots.app) => { if (root && typeof root.onclick === 'function' && String(root.textContent || '').includes(needle)) return root; for (const c of (root && root.children) || []) { const f = clickable(needle, c); if (f) return f; } return null; };
+    const g = attach(goal()); calls = []; setResponse = workedSet(); setError = null; roots.app.children = [];
+    await p.session(); find('Ahora lo intento').onclick(); await settle(); await p.session(); await settle(); await p.session(); await settle();
+    clickable('Probar un gemelo').onclick(); await settle(); await p.session(); await settle();
+    clickable('Calcular la masa total').onclick(); find('Responder').onclick(); await settle(); await settle();
+    roots.app.children = []; await p.session(); await settle(); roots.app.children = []; await p.session(); await settle();
+    const fe = g.events.filter(e => e.type === 'FORMATIVE_EXPOSURE' && e.source === 'worked_examples');
+    assert.equal(fe.length, 1, 'una exposición por gemelo revelado, sin duplicar al repintar');
+    assert.equal(fe[0].ref_id, SET_ID + ':0');
+    assert.equal(routeCalls('/api/lesson/worked/answer').length, 1, 'el hueco se corrige una vez');
+  }
+
+  // 14. Peldaño 2 con ejemplo forzado (fade_open): ejemplo terminado o saltado no se reabre; «needs_teaching» no entra en bucle.
+  const directPkg = () => ({ schema_version: 'direct_teaching_v1', needs: ['Qué es'], steps: [{ body: 'Paso directo 1' }, { body: 'Paso directo 2' }],
+    worked: { prompt: 'Ejemplo directo', steps: ['a1', 'a2'] }, check: { schema_version: 'direct_teaching_v1', item_id: 'direct-x14', node_id: 'a', prompt: '¿Pregunta directa?', options: [{ id: 'a', text: 'Correcta' }, { id: 'b', text: 'Otra' }, { id: 'c', text: 'Tercera' }] } });
+  const directState = g => { g.session.mode = 'INDEPENDENT'; g.session.direct = { version: 'direct_teaching_v1', node_id: 'a', phase: 'INDEPENDENT', rung: 2, status: 'ready', package: directPkg(), stage: 4, fade_open: true, question: { prompt: 'Pregunta', reference: 'r', kind: 'application' }, question_prompt: 'Pregunta', source_attempt_id: null, trigger: 'no_se', avoid: [], misconception: '' }; };
+  {
+    // 14a: ejemplo terminado (exhausted) → Continuar → comprobación; tras acertarla aparece «Volver a la pregunta».
+    const g = attach(goal()); calls = []; roots.app.children = []; directState(g); g.lessons.a.worked = workedSet();
+    g.events.push({ type: 'WORKED_LADDER_END', node_id: 'a', set_id: SET_ID, reason: 'exhausted', final_rung: 1, creates_evidence: false, at: 1 });
+    await p.session(); await settle();
+    assert.ok(find('Continuar'), 'el ejemplo terminado ofrece Continuar');
+    find('Continuar').onclick(); await settle(); roots.app.children = []; await p.session(); await settle();
+    assert.equal(g.lessons.a.worked_done, true);
+    assert.equal(has('Terminamos este ejemplo'), false, 'no reabre el ejemplo terminado');
+    assert.ok(has('¿Pregunta directa?'), 'pasa a la comprobación');
+    g.events.push({ type: 'DIRECT_CHECK', node_id: 'a', item_id: 'direct-x14', status: 'CORRECT', at: 2 });
+    roots.app.children = []; await p.session(); await settle();
+    assert.ok(find('Volver a la pregunta'), 'tras acertar la comprobación aparece «Volver a la pregunta»');
+  }
+  {
+    // 14b: saltar el ejemplo forzado lleva a la comprobación.
+    const g = attach(goal()); calls = []; roots.app.children = []; directState(g); g.lessons.a.worked = workedSet();
+    await p.session(); await settle();
+    clickable('Saltar ejemplos').onclick(); await settle(); roots.app.children = []; await p.session(); await settle();
+    assert.equal(g.lessons.a.worked_skipped, true);
+    assert.ok(has('¿Pregunta directa?'), 'tras saltar, la comprobación');
+  }
+  {
+    // 14c: dos fallos seguidos en peldaño 1 → un solo cierre y la lección vuelve a pasos, sin bucle de render.
+    const h = attach(goal()); calls = []; roots.app.children = []; directState(h); h.lessons.a.worked = workedSet();
+    for (const twin of [0, 1]) h.events.push({ type: 'FADED_STEP', node_id: 'a', item_id: 'wex-f' + twin, attempt_id: 'f' + twin, status: 'MISCONCEPTION', worked_version: WEX, set_id: SET_ID, twin_index: twin, rung: 1, blank_kind: 'choice', step_index: 1, at: twin + 1 });
+    await p.session(); await settle(); await p.session(); await settle();
+    assert.equal(h.events.filter(e => e.type === 'WORKED_LADDER_END').length, 1, 'un solo cierre, sin repetir');
+    assert.equal(h.lessons.a.worked_done, true);
+    assert.equal(h.lessons.a.support, 'full', 'vuelve a la lección por pasos');
   }
 
   console.log('worked_examples: OK');

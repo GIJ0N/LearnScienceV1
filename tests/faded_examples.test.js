@@ -55,27 +55,32 @@ async function openDone(g) { await p.session(); g.session.step.stage = 'done'; g
     const g = attach(goal(mode)); calls = []; fadedError = null; fadedResponse = goodPackage(); workedError = 'no';
     g.lessons.a.faded = goodPackage(); g.lessons.a.created_at = 1; g.lessons.a.worked = undefined;
     assert.equal(p.fadedAllowed(g.lessons.a), true, 'el flujo antiguo sigue vivo para lecciones con faded');
-    await openFull(g); find('Ahora lo intento').onclick(); await settle(); roots.app.children = []; await p.session(); await settle();
+    g.reviews = [{ id: 'a', step: 0, due: Date.now() + 864e5, question: null }];
+    await openDone(g); await settle();
     assert.equal(routeCount('/api/lesson/faded'), 0, 'no vuelve a pedir: ya estaba guardado (' + mode + ')');
     assert.equal(routeCount('/api/lesson/worked'), 0, 'no mezcla el flujo nuevo');
     assert.ok(has('Un ejemplo resuelto') && has('Problema resuelto') && has('Problema con huecos'));
     assert.ok(find('Saltar ejemplo'), 'saltar siempre visible');
     assert.ok(has('¿Qué paso falta 1?'));
+    assert.equal(g.events.filter(e => e.type === 'TEACHING_EXPOSURE').length, 1, 'ver el ejemplo es exposición');
     const item = g.lessons.a.faded.faded.steps[1].check;
     const before = evidenceCount(g);
     assert.equal(p.applyFadedStep(g, 'a', item, { status: 'CORRECT', item_id: item.item_id, node_id: 'a' }, 'att-f1', 'a', 90), true);
     const fs = g.events.filter(e => e.type === 'FADED_STEP');
     assert.equal(fs.length, 1);
     assert.deepEqual(Object.keys(fs[0]).sort(), ['at', 'attempt_id', 'item_id', 'learner_confidence', 'node_id', 'policy_version', 'status', 'type']);
+    assert.equal(fs[0].learner_confidence, 90, 'la confianza del aprendiz se guarda con el hueco');
+    assert.equal(typeof g.reviews[0].last_exposure_at, 'number', 'el hueco cuenta como exposición de repaso, no como evidencia');
     assert.equal(p.applyFadedStep(g, 'a', item, { status: 'CORRECT', item_id: item.item_id, node_id: 'a' }, 'att-f1', 'a', 90), false, 'idempotente');
     assert.throws(() => p.applyFadedStep(g, 'a', item, { status: 'CORRECT', item_id: 'otro', node_id: 'a' }, 'att-f2', 'a', 90), e => e.code === 'INVALID_FADED_RESULT');
     assert.equal(evidenceCount(g), before, 'sin EVIDENCE');
-    assert.equal(g.reviews.length, 0);
+    assert.ok(g.coverage[0].dimensions.every(d => d.evidence.length === 0), 'sin cobertura');
     assert.equal(p.verified(g, 'a'), false);
     roots.app.children = []; await p.session();
     assert.ok(has('Completaste el ejemplo con huecos'));
     find('Continuar').onclick(); roots.app.children = []; await p.session(); await settle();
-    assert.equal(g.lessons.a.faded_done, true); assert.equal(g.session.mode, 'COMPREHENSION');
+    assert.equal(g.lessons.a.faded_done, true);
+    assert.ok(find('Ahora lo intento'));
   }
 
   // B. Lección con faded: los modos consolidate, repair y sin modo nunca ofrecen el ejemplo (flujo antiguo intacto).

@@ -166,6 +166,30 @@ class Rejections(Base):
                 self.assertEqual(self.calls, 2, 'un reintento con motivo, y después error')
                 self.assertEqual(self.rows(), before, 'nada parcial')
 
+    def test_hidden_value_in_a_visible_ask_is_rejected(self):
+        # shown también cubre las preguntas de los huecos: el valor 333 del hueco 3 aparece en la pregunta del hueco 2.
+        raw = numeric_raw()
+        raw['twins'][0]['steps'][3]['value'] = 333
+        raw['twins'][0]['steps'][2]['ask'] = 'Con 2.5 min calculados, ¿cuántos 333 L/h salen?'
+        before = self.rows()
+        with self.assertRaises(ValueError):
+            self.make(raw)
+        self.assertEqual(self.calls, 2)
+        self.assertEqual(self.rows(), before)
+
+    def test_non_dict_steps_are_contract_errors_not_crashes(self):
+        for where in ('worked', 'twin'):
+            raw = procedure_raw()
+            if where == 'worked':
+                raw['worked']['steps'][1] = 'paso suelto sin estructura'
+            else:
+                raw['twins'][0]['steps'][1] = 'paso suelto sin estructura'
+            with self.subTest(where=where):
+                before = self.rows()
+                with self.assertRaises(ValueError):
+                    self.make(raw)
+                self.assertEqual(self.rows(), before)
+
     def test_twin_too_close_to_lesson_prompt_is_rejected(self):
         raw = procedure_raw()
         with self.assertRaises(ValueError):
@@ -279,6 +303,15 @@ class Answers(Base):
 
 
 class Ordering(Base):
+    def test_choice_blank_is_graded_with_worked_evaluator(self):
+        out = self.make(procedure_raw())
+        blank = self.open(out['set_id'], 0, 1)['blanks'][0]
+        self.assertEqual(blank['blank_kind'], 'choice')
+        key = self.stored(blank['item_id'])['private']['correct_option_id']
+        ok = app.answer_worked_item({'profile_id': self.pid, 'goal_id': 'g1', 'item_id': blank['item_id'], 'attempt_id': 'c1', 'selected_option_id': key})
+        self.assertEqual((ok['status'], ok['evaluator_version']), ('CORRECT', 'worked-local-v1'))
+        self.assertNotIn('placement-key-v1', json.dumps(ok))
+
     def test_procedure_problem_solo_orders_steps(self):
         out = self.make(procedure_raw())
         view = self.open(out['set_id'], 0, 3)
