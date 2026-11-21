@@ -11,6 +11,7 @@ Un acierto del mismo día no basta para dar un tema por dominado. Para marcar un
 Un acierto confirma lo diferido solo si cumple todo lo siguiente:
 
 - Es una producción escrita calificada localmente (`evaluator_trust` `deterministic` y `evaluator_version` que empieza por `local-production`). Ni la opción múltiple, ni la clave de colocación, ni el modelo confirman.
+- Es una producción numérica, o de ordenar con al menos 4 pasos (`production_kind` y `ordering_steps` se guardan en el evento de producción). Un ordenar de 3 pasos no confirma; un evento sin esos campos (legado) tampoco.
 - Es un acierto independiente: sin ayuda, sin corrección del usuario, sin pista y fuera de banda `base`.
 - Su referencia es la última `TEACHING_EXPOSURE` o `FORMATIVE_EXPOSURE` del tema anterior a ese acierto. Si no hay ninguna, la referencia es la evidencia más antigua del tema, sin contar `TRUST`.
 - Cae en otro día civil local y al menos `DELAYED_MIN_GAP_MS` (8 h) después de la referencia.
@@ -22,7 +23,7 @@ La referencia se deriva del ledger de eventos al leer. No se guarda ningún camp
 | Id | Decisión | Estado |
 |----|----------|--------|
 | D1 | «Otro día» = fecha local distinta y al menos 8 h. | Cumplido (`otherLocalDay`). |
-| D2 | El acierto que confirma es determinista y escrito; el modelo y la colocación no confirman. | Cumplido (`writtenDeterministic`). Prueba: `delayed_mastery.test.js`. |
+| D2 | El acierto que confirma es determinista, escrito, numérico o de ordenar con al menos 4 pasos; el modelo y la colocación no confirman. | Cumplido (`writtenDeterministic`). Pruebas: `delayed_mastery.test.js` y `delayed_mastery_settled.test.js` (R2). |
 | D3 | Para temas afectados por el aviso L2, la confirmación se ofrece al día siguiente. | Cumplido en el selector (propósito `delayed`). Prueba: confirmación programada para el tema b. |
 | D4 | No aparece en la especificación recibida (L2a lista D1, D2, D3 y D5). | No implementado ni inventado. Pendiente de confirmación del dueño. |
 | D5 | Temas sin producción escrita posible quedan «por confirmar» con la salida «Seguir con la ruta» (`CURRICULUM_CONTINUED`). | Cumplido. El texto `ANCHOR_UNAVAILABLE_NOTE` lo explica en el aviso. |
@@ -83,3 +84,8 @@ Mutaciones comprobadas (se rompe, falla, se restaura, y el hash de `app.js` coin
 - Navegador real. Las pruebas usan un DOM simulado.
 - Saneo de timestamps en `normalizeGoal` y restauración (C6 parcial: solo al leer).
 - Botón del tablero (`dashboard`) sin prueba de DOM: su condición está en `canOfferEvidenceCheck`, que sí se prueba.
+
+## Revisión del supervisor
+
+- R1: un `CURRICULUM_CONTINUED` de aviso de política solo deja de contar como pendiente cuando el tema no espera lo diferido (`dims_sufficient` y no `delayed_confirmed`). Un tema acusado sin dimensiones suficientes no se repite y el selector avanza. Prueba: `delayed_mastery_settled.test.js` (bloque 7).
+- R2: `writtenDeterministic` exige `production_kind` numeric o ordering con `ordering_steps` de al menos 4. `applyProductionResult` guarda ambos campos en el evento. Prueba: `delayed_mastery_settled.test.js` (bloques 8 y 9).
