@@ -140,6 +140,8 @@ jobs:
         run: |
           node tests/rich_content.test.js
           python tests/rich_content_backend.test.py
+      - name: Run bare LaTeX render tests
+        run: node tests/bare_latex_render.test.js
       - name: Run authentic performance tests
         run: |
           python tests/authentic_performance_backend.test.py
