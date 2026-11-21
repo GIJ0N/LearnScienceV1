@@ -12,7 +12,7 @@ const p = require('../app.js');
 const DAY = 86400000;
 // America/Mexico_City no usa horario de verano desde 2022: UTC-6 fijo.
 const mx = (d, h = 0, mi = 0) => Date.UTC(2026, 10, d, h + 6, mi);
-let NOW = mx(10, 20);
+let NOW = mx(20, 12); // posterior a todos los fixtures: un evento futuro no cuenta (C6)
 p.setClockForTests(() => NOW);
 
 let seq = 0;
@@ -180,7 +180,7 @@ for (const [name, teachAt, sameDayAt, candidateAt, expected] of [
     NOW = mx(11, 10); p.chooseNext(g);
     assert.equal(g.session.mode, 'CONFIRMATION');
     assert.equal(g.session.confirmation.purpose, 'delayed');
-  } finally { Date.now = realNow; NOW = mx(10, 20); }
+  } finally { Date.now = realNow; NOW = mx(20, 12); }
 }
 
 // (11) Desafío: exige la confirmación diferida; el mismo día no basta.

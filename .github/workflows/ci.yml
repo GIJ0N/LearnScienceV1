@@ -257,6 +257,7 @@ jobs:
           node tests/delayed_mastery.test.js
           node tests/evidence_l2_fixes.test.js
           python tests/delayed_mastery_store.test.py
+          node tests/delayed_mastery_settled.test.js
 
       - name: Run the legacy app self-test
         run: python app_legacy.py --self-test
