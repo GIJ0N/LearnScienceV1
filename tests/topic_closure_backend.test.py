@@ -85,7 +85,7 @@ class TopicClosureBackend(unittest.TestCase):
             {'type': 'TOPIC_SELF_EXPLANATION', 'node_id': 'n1', 'closure_id': 'c', 'source': 'closure', 'text': 'x' * 900, 'at': 1700000000000, 'creates_evidence': True},
             {'type': 'TOPIC_CLOSURE_OPENED', 'node_id': 'n1', 'source': 'map', 'at': 1700000000100, 'creates_evidence': True},
         ]
-        out = validate_store(self.store(copy.deepcopy(events)), self.profile)
+        out, _counts = validate_store(self.store(copy.deepcopy(events)), self.profile)
         saved = [e for e in out['goals'][0]['events'] if e['type'].startswith('TOPIC_')]
         self.assertEqual(len(saved), 2)
         self.assertEqual(len(saved[0]['text']), 600)

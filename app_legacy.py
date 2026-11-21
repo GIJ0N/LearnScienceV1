@@ -2782,9 +2782,18 @@ def validated_graph(raw):
     return props,chains
 
 def _graph_payload(graph,node_id=None):
+    # topic_closure_v1: con node_id, solo el tema; cada proposición lleva sus node_ids y lesson_refs (de sources, sin duplicados).
     chains=[c for c in graph['chains'] if node_id is None or c['node_id']==node_id]
     used={i for c in chains for i in c['premises']+[c['conclusion']]}
-    return {'schema_version':GRAPH_VERSION,'propositions':[{'prop_id':p['prop_id'],'statement':p['statement']} for p in graph['propositions'] if node_id is None or p['prop_id'] in used or any(s.get('node_id')==node_id for s in p['sources'])],
+    def refs(p):
+        scoped=[s for s in p['sources'] if node_id is None or s.get('node_id')==node_id]
+        return list(dict.fromkeys(str(s.get('node_id')) for s in p['sources'] if node_id is None or s.get('node_id')==node_id)),list(dict.fromkeys(str(s.get('lesson_ref')) for s in scoped if s.get('lesson_ref')))
+    props=[]
+    for p in graph['propositions']:
+        if node_id is not None and not (p['prop_id'] in used or any(s.get('node_id')==node_id for s in p['sources'])):continue
+        node_ids,lesson_refs=refs(p)
+        props.append({'prop_id':p['prop_id'],'statement':p['statement'],'node_ids':node_ids,'lesson_refs':lesson_refs})
+    return {'schema_version':GRAPH_VERSION,'propositions':props,
             'chains':[{'chain_id':c['chain_id'],'node_id':c['node_id'],'premises':c['premises'],'conclusion':c['conclusion']} for c in chains]}
 
 def extract_graph(data):
@@ -2801,9 +2810,9 @@ def extract_graph(data):
     return _graph_payload(memory().load_graph(profile_id,goal_id),node_id)
 
 def get_graph(data):
-    profile_id=compact(data.get('profile_id'),80);goal_id=compact(data.get('goal_id'),100)
+    profile_id=compact(data.get('profile_id'),80);goal_id=compact(data.get('goal_id'),100);node_id=compact(data.get('node_id'),100) or None
     if not profile_id or not goal_id:raise ValueError('Falta perfil o meta.')
-    return _graph_payload(memory().load_graph(profile_id,goal_id))
+    return _graph_payload(memory().load_graph(profile_id,goal_id),node_id)
 
 def make_composition_items(data):
     profile_id=compact(data.get('profile_id'),80);goal_id=compact(data.get('goal_id'),100);goal=compact(data.get('goal'),160)
